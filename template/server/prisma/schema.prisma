@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  avatarUrl     String?   // SEO-friendly path: /uploads/avatars/{userId}/{firstName-lastName}-avatar.webp
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  deletedAt     DateTime?
+
+  // Account lockout
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+  sessions      Session[]
+
+  // Performance indexes for high-traffic scenarios (10K-100K users/day)
+  @@index([role])           // For role-based authorization queries
+  @@index([isActive])       // For filtering active/inactive users
+  @@index([deletedAt])      // For soft delete filtering
+  @@index([email, isActive]) // Compound index for login queries
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique @db.VarChar(500)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Performance indexes for token operations and cleanup
+  @@index([userId])
+  @@index([token])
+  @@index([userId, expiresAt]) // Compound index for efficient token cleanup queries
+  @@index([expiresAt])         // For expired token cleanup cron jobs
+  @@map("refresh_tokens")
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String
+  deviceInfo   String?   @db.VarChar(500) // User agent, device type
+  ipAddress    String?   @db.VarChar(45)  // IPv4 or IPv6
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Performance indexes for session queries
+  @@index([userId])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])         // For expired session cleanup
+  @@map("sessions")
+}

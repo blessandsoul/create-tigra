@@ -1,0 +1,66 @@
+# Node modules (will be installed fresh in Docker)
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output (will be built fresh in Docker)
+dist
+build
+*.tsbuildinfo
+
+# Environment files (use Docker env vars instead)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+vitest.config.ts
+
+# Documentation
+*.md
+!README.md
+docs
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+phpmyadmin-config.php
+
+# Postman
+postman_collection.json
+postman/
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.circleci
+
+# Misc
+.prettierrc
+.eslintrc
+.eslintignore
+.editorconfig
+tsconfig.json

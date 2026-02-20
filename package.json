@@ -1,0 +1,49 @@
+{
+  "name": "create-tigra",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Create a production-ready full-stack app with Next.js 16 + Fastify 5 + Prisma + Redis",
+  "bin": {
+    "create-tigra": "bin/create-tigra.js"
+  },
+  "files": [
+    "bin",
+    "template"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "create",
+    "generator",
+    "scaffold",
+    "fullstack",
+    "nextjs",
+    "fastify",
+    "typescript",
+    "prisma",
+    "redis",
+    "boilerplate",
+    "starter",
+    "react",
+    "tailwind",
+    "shadcn"
+  ],
+  "author": "seed977",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blessandsoul/create-tigra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blessandsoul/create-tigra/issues"
+  },
+  "homepage": "https://github.com/blessandsoul/create-tigra#readme",
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "fs-extra": "^11.3.0",
+    "ora": "^8.2.0",
+    "prompts": "^2.4.2"
+  }
+}

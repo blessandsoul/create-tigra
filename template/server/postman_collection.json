@@ -1,0 +1,666 @@
+{
+  "info": {
+    "name": "Tigra API - Complete Collection",
+    "description": "**Comprehensive API collection with automatic token management**\n\n## 🚀 Quick Start\n\n1. **Start the server**: `npm run dev` (runs on port 8000)\n2. **Register or Login**: Run either endpoint - tokens are auto-saved\n3. **Test protected endpoints**: Tokens are automatically injected\n\n## 🔐 Authentication Flow\n\n- All auth tokens are **automatically managed**\n- Login/Register → Tokens saved to collection variables\n- Protected endpoints → Access token auto-injected\n- Token expired → Use Refresh Token endpoint\n\n## 📝 Variables Used\n\n- `base_url`: http://localhost:8000/api/v1\n- `access_token`: Auto-saved from login/register\n- `refresh_token`: Auto-saved from login/register\n- `user_id`: Auto-saved from login/register\n\n## 🎯 Features\n\n✅ Pre-filled request bodies with valid examples\n✅ Automatic token extraction and injection\n✅ Clear descriptions and requirements\n✅ Response validation tests\n✅ Organized folder structure",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "tigra-api"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_email",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "description": "Authentication endpoints - tokens are automatically saved and managed",
+      "item": [
+        {
+          "name": "Register New User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Automatically save tokens and user info on successful registration",
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    if (response.success && response.data) {",
+                  "        // Save tokens to collection variables",
+                  "        pm.collectionVariables.set('access_token', response.data.tokens.accessToken);",
+                  "        pm.collectionVariables.set('refresh_token', response.data.tokens.refreshToken);",
+                  "        ",
+                  "        // Save user info",
+                  "        pm.collectionVariables.set('user_id', response.data.user.id);",
+                  "        pm.collectionVariables.set('user_email', response.data.user.email);",
+                  "        ",
+                  "        console.log('✅ Registration successful!');",
+                  "        console.log('📧 Email:', response.data.user.email);",
+                  "        console.log('🔑 Access token saved to collection variables');",
+                  "        console.log('🔄 Refresh token saved to collection variables');",
+                  "        ",
+                  "        // Validation tests",
+                  "        pm.test('Status code is 201', () => pm.response.to.have.status(201));",
+                  "        pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "        pm.test('Response contains user data', () => pm.expect(response.data.user).to.exist);",
+                  "        pm.test('Response contains tokens', () => pm.expect(response.data.tokens).to.exist);",
+                  "        pm.test('User has valid email', () => pm.expect(response.data.user.email).to.match(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/));",
+                  "    }",
+                  "} else {",
+                  "    console.log('❌ Registration failed');",
+                  "    const error = pm.response.json();",
+                  "    if (error.error) {",
+                  "        console.log('Error:', error.error.message);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass123\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "**Register a new user account**\n\n## 📋 Requirements\n\n### Email\n- Valid email format\n- Will be converted to lowercase\n- Must be unique (no duplicates)\n\n### Password\n- Minimum 8 characters\n- At least 1 uppercase letter (A-Z)\n- At least 1 lowercase letter (a-z)\n- At least 1 number (0-9)\n\n### First Name\n- Minimum 2 characters\n- Maximum 100 characters\n\n### Last Name\n- Minimum 2 characters\n- Maximum 100 characters\n\n## ⚡ Rate Limit\n5 requests per hour per IP\n\n## ✅ Success Response (201)\nTokens and user info automatically saved to collection variables"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Automatically save tokens and user info on successful login",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    if (response.success && response.data) {",
+                  "        // Save tokens to collection variables",
+                  "        pm.collectionVariables.set('access_token', response.data.tokens.accessToken);",
+                  "        pm.collectionVariables.set('refresh_token', response.data.tokens.refreshToken);",
+                  "        ",
+                  "        // Save user info",
+                  "        pm.collectionVariables.set('user_id', response.data.user.id);",
+                  "        pm.collectionVariables.set('user_email', response.data.user.email);",
+                  "        ",
+                  "        console.log('✅ Login successful!');",
+                  "        console.log('👤 User:', response.data.user.firstName, response.data.user.lastName);",
+                  "        console.log('📧 Email:', response.data.user.email);",
+                  "        console.log('🎭 Role:', response.data.user.role);",
+                  "        console.log('🔑 Access token saved to collection variables');",
+                  "        console.log('🔄 Refresh token saved to collection variables');",
+                  "        ",
+                  "        // Validation tests",
+                  "        pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "        pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "        pm.test('Response contains user data', () => pm.expect(response.data.user).to.exist);",
+                  "        pm.test('Response contains tokens', () => pm.expect(response.data.tokens).to.exist);",
+                  "    }",
+                  "} else {",
+                  "    console.log('❌ Login failed');",
+                  "    const error = pm.response.json();",
+                  "    if (error.error) {",
+                  "        console.log('Error:', error.error.message);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePass123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "**Login with email and password**\n\n## 📋 Requirements\n\n### Email\n- Valid email format\n- Will be converted to lowercase\n\n### Password\n- Cannot be empty\n\n## ⚡ Rate Limit\n10 requests per 15 minutes per IP\n\n## ✅ Success Response (200)\nTokens and user info automatically saved to collection variables\n\n## ❌ Error Responses\n- **401**: Invalid credentials\n- **422**: Validation failed"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Validate current user response",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    console.log('✅ User info retrieved successfully!');",
+                  "    console.log('👤 User:', response.data.firstName, response.data.lastName);",
+                  "    console.log('📧 Email:', response.data.email);",
+                  "    console.log('🎭 Role:', response.data.role);",
+                  "    console.log('✅ Active:', response.data.isActive);",
+                  "    ",
+                  "    // Validation tests",
+                  "    pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "    pm.test('Response contains user data', () => pm.expect(response.data).to.exist);",
+                  "    pm.test('User has valid ID', () => pm.expect(response.data.id).to.be.a('string'));",
+                  "    pm.test('User has email', () => pm.expect(response.data.email).to.exist);",
+                  "} else if (pm.response.code === 401) {",
+                  "    console.log('❌ Unauthorized - Access token may be expired');",
+                  "    console.log('💡 Try refreshing the token using the Refresh Token endpoint');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Check if access token exists",
+                  "const accessToken = pm.collectionVariables.get('access_token');",
+                  "",
+                  "if (!accessToken) {",
+                  "    console.log('⚠️ No access token found!');",
+                  "    console.log('💡 Please login first to get an access token');",
+                  "} else {",
+                  "    console.log('🔑 Using access token from collection variables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "**Get current authenticated user details**\n\n## 🔐 Authentication Required\nThis endpoint requires a valid access token in the Authorization header.\n\n## ✅ Auto-Token Injection\nThe access token is automatically injected from collection variables.\n\n## 📋 Response Includes\n- User ID\n- Email\n- First Name\n- Last Name\n- Role (USER, COMPANY, ADMIN, GUIDE, DRIVER)\n- Active status\n- Email verification status\n- Created/Updated timestamps\n\n## ❌ Error Responses\n- **401**: Unauthorized (missing or invalid token)"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Automatically update tokens on successful refresh",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    if (response.success && response.data) {",
+                  "        // Update tokens in collection variables",
+                  "        pm.collectionVariables.set('access_token', response.data.accessToken);",
+                  "        pm.collectionVariables.set('refresh_token', response.data.refreshToken);",
+                  "        ",
+                  "        console.log('✅ Tokens refreshed successfully!');",
+                  "        console.log('🔑 New access token saved');",
+                  "        console.log('🔄 New refresh token saved');",
+                  "        ",
+                  "        // Validation tests",
+                  "        pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "        pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "        pm.test('Response contains new access token', () => pm.expect(response.data.accessToken).to.exist);",
+                  "        pm.test('Response contains new refresh token', () => pm.expect(response.data.refreshToken).to.exist);",
+                  "    }",
+                  "} else {",
+                  "    console.log('❌ Token refresh failed');",
+                  "    const error = pm.response.json();",
+                  "    if (error.error) {",
+                  "        console.log('Error:', error.error.message);",
+                  "        if (pm.response.code === 401) {",
+                  "            console.log('💡 Refresh token expired - please login again');",
+                  "        }",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Auto-populate refresh token from collection variables",
+                  "const refreshToken = pm.collectionVariables.get('refresh_token');",
+                  "",
+                  "if (refreshToken) {",
+                  "    console.log('🔄 Using refresh token from collection variables');",
+                  "} else {",
+                  "    console.log('⚠️ No refresh token found!');",
+                  "    console.log('💡 Please login first to get a refresh token');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "**Refresh access token using refresh token**\n\n## 🔄 Usage\n\nWhen your access token expires (default: 15 minutes), use this endpoint to get a new pair of tokens without requiring login.\n\n## 📋 Requirements\n\n### Refresh Token\n- Must be valid and not expired (default: 7 days)\n- Automatically populated from collection variables\n\n## ⚡ Rate Limit\n20 requests per 15 minutes per IP\n\n## ✅ Success Response (200)\nNew tokens automatically saved to collection variables\n\n## ❌ Error Responses\n- **401**: Refresh token invalid or expired (login required)\n- **422**: Validation failed"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Clear tokens on successful logout",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    // Clear all auth-related variables",
+                  "    pm.collectionVariables.set('access_token', '');",
+                  "    pm.collectionVariables.set('refresh_token', '');",
+                  "    pm.collectionVariables.set('user_id', '');",
+                  "    pm.collectionVariables.set('user_email', '');",
+                  "    ",
+                  "    console.log('✅ Logout successful!');",
+                  "    console.log('🧹 All tokens cleared from collection variables');",
+                  "    ",
+                  "    // Validation tests",
+                  "    pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "} else {",
+                  "    console.log('❌ Logout failed');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Auto-populate refresh token from collection variables",
+                  "const refreshToken = pm.collectionVariables.get('refresh_token');",
+                  "",
+                  "if (refreshToken) {",
+                  "    console.log('🔄 Using refresh token from collection variables');",
+                  "} else {",
+                  "    console.log('⚠️ No refresh token found - you may already be logged out');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "**Logout and invalidate refresh token**\n\n## 🔒 Security\n\nThis endpoint invalidates the refresh token on the server, preventing it from being used again.\n\n## 📋 Requirements\n\n### Refresh Token\n- Must be valid\n- Automatically populated from collection variables\n\n## ⚡ Rate Limit\n50 requests per 15 minutes per IP\n\n## ✅ Success Response (200)\nAll tokens automatically cleared from collection variables\n\n## ❌ Error Responses\n- **422**: Validation failed"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Validate sessions response",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    console.log('✅ Sessions retrieved successfully!');",
+                  "    console.log('📱 Active sessions:', response.data.length);",
+                  "    ",
+                  "    if (response.data.length > 0) {",
+                  "        response.data.forEach((session, index) => {",
+                  "            console.log(`Session ${index + 1}:`, {",
+                  "                device: session.deviceInfo || 'Unknown',",
+                  "                ip: session.ipAddress || 'Unknown',",
+                  "                lastActive: session.lastActiveAt",
+                  "            });",
+                  "        });",
+                  "    }",
+                  "    ",
+                  "    // Validation tests",
+                  "    pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "    pm.test('Response contains sessions array', () => pm.expect(response.data).to.be.an('array'));",
+                  "} else if (pm.response.code === 401) {",
+                  "    console.log('❌ Unauthorized - Access token may be expired');",
+                  "    console.log('💡 Try refreshing the token using the Refresh Token endpoint');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Check if access token exists",
+                  "const accessToken = pm.collectionVariables.get('access_token');",
+                  "",
+                  "if (!accessToken) {",
+                  "    console.log('⚠️ No access token found!');",
+                  "    console.log('💡 Please login first to get an access token');",
+                  "} else {",
+                  "    console.log('🔑 Using access token from collection variables');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "sessions"]
+            },
+            "description": "**Get all active sessions for the current user**\n\n## 🔐 Authentication Required\nThis endpoint requires a valid access token in the Authorization header.\n\n## ✅ Auto-Token Injection\nThe access token is automatically injected from collection variables.\n\n## 📋 Response Includes\nFor each active session:\n- Session ID\n- Device information (user agent)\n- IP address\n- Last active timestamp\n- Expiration timestamp\n- Created timestamp\n\n## 💡 Use Cases\n- View all devices/locations where you're logged in\n- Monitor session activity\n- Check for unauthorized access\n- Review session details before logging out all sessions\n\n## ❌ Error Responses\n- **401**: Unauthorized (missing or invalid token)"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout All Sessions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Clear tokens on successful logout from all sessions",
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    ",
+                  "    // Clear all auth-related variables",
+                  "    pm.collectionVariables.set('access_token', '');",
+                  "    pm.collectionVariables.set('refresh_token', '');",
+                  "    pm.collectionVariables.set('user_id', '');",
+                  "    pm.collectionVariables.set('user_email', '');",
+                  "    ",
+                  "    console.log('✅ Logged out from all sessions successfully!');",
+                  "    console.log('📱 Sessions terminated:', response.data.count);",
+                  "    console.log('🧹 All tokens cleared from collection variables');",
+                  "    console.log('💡 All devices have been logged out');",
+                  "    console.log('🔒 Please login again to continue');",
+                  "    ",
+                  "    // Validation tests",
+                  "    pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "    pm.test('Response has success true', () => pm.expect(response.success).to.be.true);",
+                  "    pm.test('Response contains count', () => pm.expect(response.data.count).to.exist);",
+                  "} else if (pm.response.code === 401) {",
+                  "    console.log('❌ Unauthorized - Access token may be expired');",
+                  "    console.log('💡 Try refreshing the token first');",
+                  "} else {",
+                  "    console.log('❌ Logout from all sessions failed');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Check if access token exists",
+                  "const accessToken = pm.collectionVariables.get('access_token');",
+                  "",
+                  "if (accessToken) {",
+                  "    console.log('🔑 Using access token from collection variables');",
+                  "    console.log('⚠️ This will log you out from ALL devices');",
+                  "} else {",
+                  "    console.log('⚠️ No access token found - you may already be logged out');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout-all",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout-all"]
+            },
+            "description": "**Logout from all active sessions on all devices**\n\n## 🔐 Authentication Required\nThis endpoint requires a valid access token in the Authorization header.\n\n## 🔒 Security\n\nThis endpoint performs a complete security logout:\n- Deletes ALL refresh tokens for the user\n- Terminates ALL active sessions across all devices\n- Invalidates all current access tokens\n- Forces re-authentication on all devices\n\n## ⚡ Rate Limit\n10 requests per 15 minutes per IP\n\n## 💡 Use Cases\n\n### Security Breach\n- Suspect unauthorized access\n- Lost or stolen device\n- Compromised credentials\n- Want to revoke all access immediately\n\n### Password Reset\n- Automatically called after password reset\n- Ensures old sessions can't be used\n\n### Device Management\n- Clear all sessions before selling/giving away device\n- Remove access from forgotten logins\n\n## ✅ Success Response (200)\n- All sessions terminated\n- All tokens invalidated\n- Tokens automatically cleared from collection variables\n- Must login again on ALL devices\n\n## 📋 Response Includes\n- Count of sessions terminated\n- Success message\n\n## ❌ Error Responses\n- **401**: Unauthorized (missing or invalid token)\n\n## 🔄 After Logout\n1. All devices will be logged out\n2. Any active requests will fail with 401\n3. Must login again to get new tokens\n4. Previous refresh tokens cannot be used"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📋 Example Flows",
+      "description": "Common workflow examples for testing",
+      "item": [
+        {
+          "name": "Complete Auth Flow",
+          "item": [],
+          "description": "**Complete Authentication Workflow**\n\n## 🔄 Flow Steps\n\n1. **Register** → Auto-saves tokens\n2. **Get Current User** → Uses saved access token\n3. **Logout** → Clears all tokens\n4. **Login** → Get new tokens\n5. **Refresh Token** → Get new access token when expired\n\n## 💡 Tips\n\n- All endpoints in Authentication folder are already configured\n- Just run them in order to test the complete flow\n- Watch the Postman console for detailed logs"
+        },
+        {
+          "name": "Token Expiry Handling",
+          "item": [],
+          "description": "**Handling Expired Access Tokens**\n\n## 🔄 Flow Steps\n\n1. **Login** → Get tokens (access token expires in 15 min by default)\n2. **Wait for expiration** (or manually clear access token)\n3. **Get Current User** → Will fail with 401\n4. **Refresh Token** → Get new access token\n5. **Get Current User** → Success with new token\n\n## 💡 Tips\n\n- Access tokens are short-lived (15 minutes default)\n- Refresh tokens are long-lived (7 days default)\n- The Refresh Token endpoint gives you both new tokens"
+        }
+      ]
+    },
+    {
+      "name": "🔧 Utilities",
+      "description": "Utility endpoints and helpers",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["health"]
+            },
+            "description": "**Check if the server is running**\n\n## ✅ Expected Response\n```json\n{\n  \"status\": \"ok\",\n  \"timestamp\": \"2024-01-01T00:00:00.000Z\"\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "API Documentation (Swagger)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/docs",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["docs"]
+            },
+            "description": "**Open API documentation in browser**\n\n## 📚 Swagger UI\n\nOpens the interactive Swagger UI documentation where you can:\n- Browse all available endpoints\n- See request/response schemas\n- Test endpoints directly from the browser"
+          },
+          "response": []
+        },
+        {
+          "name": "Clear All Tokens (Manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Manually clear all tokens and user info",
+                  "pm.collectionVariables.set('access_token', '');",
+                  "pm.collectionVariables.set('refresh_token', '');",
+                  "pm.collectionVariables.set('user_id', '');",
+                  "pm.collectionVariables.set('user_email', '');",
+                  "",
+                  "console.log('🧹 All tokens and user info cleared from collection variables');",
+                  "console.log('💡 You can now test registration/login as a fresh user');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "**Utility to manually clear all stored tokens**\n\n## 🧹 Usage\n\nRun this request to clear:\n- Access token\n- Refresh token\n- User ID\n- User email\n\n## 💡 When to Use\n\n- Testing with a fresh start\n- Switching between different test users\n- After logout to ensure clean state\n\n**Note**: This request will fail (401) since tokens are cleared, but that's expected!"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📖 README",
+      "item": [],
+      "description": "# 🎯 Tigra API - Postman Collection\n\n## 🚀 Quick Start Guide\n\n### 1. Prerequisites\n- Server must be running on port 8000\n- Run: `npm run dev` in the server directory\n\n### 2. First Time Setup\n\n**Option A: Register New User**\n1. Go to **Authentication** → **Register New User**\n2. Modify the email if needed (must be unique)\n3. Click **Send**\n4. ✅ Tokens automatically saved!\n\n**Option B: Login Existing User**\n1. Go to **Authentication** → **Login**\n2. Enter your credentials\n3. Click **Send**\n4. ✅ Tokens automatically saved!\n\n### 3. Testing Protected Endpoints\n\nAfter login/register, all protected endpoints will work automatically:\n- Go to **Authentication** → **Get Current User**\n- Click **Send**\n- ✅ Access token automatically injected!\n\n---\n\n## 🎨 Collection Features\n\n### ✅ Automatic Token Management\n- **Login/Register** → Tokens saved automatically\n- **Protected endpoints** → Access token auto-injected\n- **Logout** → Tokens cleared automatically\n- **Refresh** → Tokens updated automatically\n\n### ✅ Smart Request Bodies\n- All requests have pre-filled example data\n- Easy to modify for your test cases\n- Follows validation requirements\n\n### ✅ Console Logging\n- Open Postman Console (View → Show Postman Console)\n- See detailed logs for each request\n- Helpful tips and error messages\n\n### ✅ Response Validation\n- Automatic tests for status codes\n- Validates response structure\n- Checks data integrity\n\n---\n\n## 🔐 How Token Management Works\n\n### Collection Variables\nThe collection uses these variables (auto-managed):\n\n| Variable | Description | Set By |\n|----------|-------------|--------|\n| `base_url` | API base URL | Manual |\n| `access_token` | JWT access token (15 min) | Login/Register/Refresh |\n| `refresh_token` | JWT refresh token (7 days) | Login/Register/Refresh |\n| `user_id` | Current user ID | Login/Register |\n| `user_email` | Current user email | Login/Register |\n\n### Automatic Token Injection\nProtected endpoints use this auth configuration:\n```\nAuthorization: Bearer {{access_token}}\n```\n\nNo manual token copying needed! 🎉\n\n---\n\n## 🔄 Common Workflows\n\n### New User Registration Flow\n1. **Register New User**\n2. **Get Current User** (verify registration)\n3. Use other endpoints as needed\n\n### Returning User Flow\n1. **Login**\n2. **Get Current User** (verify login)\n3. Use other endpoints as needed\n\n### Token Refresh Flow\n1. Wait for access token to expire (15 min)\n2. OR manually clear access token\n3. Try **Get Current User** → Will fail with 401\n4. **Refresh Token** → Get new tokens\n5. **Get Current User** → Success!\n\n### Logout Flow\n1. **Logout**\n2. All tokens automatically cleared\n3. Protected endpoints will fail (expected)\n4. Login again when needed\n\n---\n\n## 🐛 Troubleshooting\n\n### \"Server not responding\"\n- ✅ Check server is running: `npm run dev`\n- ✅ Verify port 8000 is not in use\n- ✅ Check `base_url` variable is correct\n\n### \"401 Unauthorized\"\n- ✅ Run Login or Register first\n- ✅ Check access token exists in variables\n- ✅ Try Refresh Token if expired\n\n### \"422 Validation Failed\"\n- ✅ Check request body format\n- ✅ Verify all required fields are present\n- ✅ Check password meets requirements\n\n### \"409 Conflict (Email Already Exists)\"\n- ✅ Change the email in Register request\n- ✅ Or use Login instead\n\n---\n\n## 💡 Pro Tips\n\n### 1. Use Postman Console\n```\nView → Show Postman Console\n```\nSee detailed logs for every request!\n\n### 2. Check Variables\n```\nClick collection → Variables tab\n```\nSee current token values!\n\n### 3. Run Requests in Sequence\nUse Postman's Collection Runner:\n1. Right-click collection\n2. \"Run collection\"\n3. Watch automated flow!\n\n### 4. Environment Variables (Optional)\nFor multiple environments (dev/staging/prod):\n1. Create environments\n2. Override `base_url` in each\n3. Switch environments easily\n\n---\n\n## 📋 Password Requirements\n\nWhen registering, password must have:\n- ✅ Minimum 8 characters\n- ✅ At least 1 uppercase letter (A-Z)\n- ✅ At least 1 lowercase letter (a-z)\n- ✅ At least 1 number (0-9)\n\n**Example valid passwords:**\n- `SecurePass123`\n- `MyPassword1`\n- `Test1234Pass`\n\n---\n\n## 🎯 Rate Limits\n\n| Endpoint | Limit |\n|----------|-------|\n| Register | 5 req/hour |\n| Login | 10 req/15min |\n| Logout | 50 req/15min |\n| Refresh | 20 req/15min |\n\n---\n\n## 🆘 Need Help?\n\n1. Check the **Utilities** folder for helper endpoints\n2. Open Postman Console for detailed logs\n3. Review endpoint descriptions (click info icon)\n4. Check server logs: `npm run dev`\n\n---\n\n**Happy Testing! 🚀**"
+    }
+  ]
+}
