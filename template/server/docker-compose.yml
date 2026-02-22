@@ -1,6 +1,8 @@
 # WARNING: These credentials are for LOCAL DEVELOPMENT ONLY.
 # Change all passwords and secrets before using in any shared or production environment.
 
+name: {{PROJECT_NAME}}
+
 services:
   mysql:
     image: mysql:8.0

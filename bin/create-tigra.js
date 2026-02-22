@@ -124,11 +124,11 @@ async function main() {
   program
     .name('create-tigra')
     .description('Create a production-ready full-stack app with Next.js + Fastify + Prisma + Redis')
-    .version('2.0.0')
+    .version('2.0.1')
     .argument('[project-name]', 'Name for your new project')
     .action(async (projectNameArg) => {
       console.log();
-      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.0.0'));
+      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.0.1'));
       console.log();
 
       let projectName = projectNameArg;
@@ -205,34 +205,52 @@ async function main() {
       }
 
       // Print next steps
+      const dim = chalk.dim;
+      const bold = chalk.bold;
+      const cyan = chalk.cyan;
+      const green = chalk.green;
+      const line = dim('  ─────────────────────────────────────────');
+
       console.log();
-      console.log(chalk.green.bold(`  Success!`) + ` Created ${chalk.cyan(projectName)} at ${chalk.dim(targetDir)}`);
+      console.log(green.bold('  ✓ Created ') + cyan.bold(projectName) + dim(` at ${targetDir}`));
       console.log();
-      console.log(chalk.bold('  Next steps:'));
+      console.log('  ┌─────────────────────────────────────────┐');
+      console.log('  │' + bold('            Getting Started              ') + '│');
+      console.log('  └─────────────────────────────────────────┘');
       console.log();
-      console.log(chalk.cyan('  1.') + ' Start infrastructure:');
-      console.log(chalk.dim(`     cd ${projectName}/server`));
-      console.log(chalk.dim('     docker compose up -d'));
+      console.log(bold('  SERVER') + dim('                    cd ') + cyan(`${projectName}/server`));
       console.log();
-      console.log(chalk.cyan('  2.') + ' Install server dependencies & set up database:');
-      console.log(chalk.dim('     npm install'));
-      console.log(chalk.dim('     cp .env.example .env'));
-      console.log(chalk.dim('     npm run prisma:generate'));
-      console.log(chalk.dim('     npm run prisma:migrate:dev -- --name init'));
+      console.log(cyan('    1 ') + 'Install & start infrastructure');
+      console.log(dim('      npm install'));
+      console.log(dim('      cp .env.example .env'));
+      console.log(dim('      npm run docker:up'));
       console.log();
-      console.log(chalk.cyan('  3.') + ' Start the server:');
-      console.log(chalk.dim('     npm run dev'));
+      console.log(cyan('    2 ') + 'Set up database');
+      console.log(dim('      npm run prisma:generate'));
+      console.log(dim('      npm run prisma:migrate:dev -- --name init'));
       console.log();
-      console.log(chalk.cyan('  4.') + ` In a ${chalk.bold('new terminal')}, set up the client:`);
-      console.log(chalk.dim(`     cd ${projectName}/client`));
-      console.log(chalk.dim('     npm install'));
-      console.log(chalk.dim('     cp .env.example .env'));
-      console.log(chalk.dim('     npm run dev'));
+      console.log(cyan('    3 ') + 'Start the server');
+      console.log(dim('      npm run dev'));
       console.log();
-      console.log(chalk.dim('  Server running at: ') + chalk.cyan('http://localhost:8000'));
-      console.log(chalk.dim('  Client running at: ') + chalk.cyan('http://localhost:3000'));
+      console.log(bold('  CLIENT') + dim('  (new terminal)    cd ') + cyan(`${projectName}/client`));
       console.log();
-      console.log(chalk.dim('  Happy coding!'));
+      console.log(cyan('    4 ') + 'Start the client');
+      console.log(dim('      npm install'));
+      console.log(dim('      cp .env.example .env'));
+      console.log(dim('      npm run dev'));
+      console.log();
+      console.log(line);
+      console.log();
+      console.log(dim('  App           ') + cyan('http://localhost:3000'));
+      console.log(dim('  API           ') + cyan('http://localhost:8000'));
+      console.log(dim('  phpMyAdmin    ') + cyan('http://localhost:8080'));
+      console.log(dim('  Redis CMD     ') + cyan('http://localhost:8081'));
+      console.log();
+      console.log(line);
+      console.log();
+      console.log(dim('  Tip: ') + 'npm run docker:down' + dim(' to stop infrastructure'));
+      console.log();
+      console.log(dim('  Happy coding! 🚀'));
       console.log();
     });
 
