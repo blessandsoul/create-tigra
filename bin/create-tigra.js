@@ -124,11 +124,11 @@ async function main() {
   program
     .name('create-tigra')
     .description('Create a production-ready full-stack app with Next.js + Fastify + Prisma + Redis')
-    .version('2.0.2')
+    .version('2.1.0')
     .argument('[project-name]', 'Name for your new project')
     .action(async (projectNameArg) => {
       console.log();
-      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.0.2'));
+      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.1.0'));
       console.log();
 
       let projectName = projectNameArg;
@@ -212,6 +212,9 @@ async function main() {
             await fs.copy(examplePath, envPath);
           }
         }
+
+        // Create .developer-role file (default: fullstack = no restrictions)
+        await fs.writeFile(path.join(targetDir, '.developer-role'), 'fullstack\n', 'utf-8');
 
         spinner.succeed('Project scaffolded successfully!');
       } catch (error) {

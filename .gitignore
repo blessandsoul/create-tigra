@@ -22,6 +22,9 @@ Thumbs.db
 # Claude Code local settings
 .claude/settings.local.json
 
+# Developer role (personal per developer)
+.developer-role
+
 # Playwright MCP artifacts
 .playwright-mcp/
 
