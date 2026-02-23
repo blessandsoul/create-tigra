@@ -54,15 +54,17 @@ function sanitizeUser(user: {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  password: string;
 }): SanitizedUser {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password: _password, createdAt, updatedAt, avatarUrl, ...rest } = user;
   return {
-    ...rest,
-    avatarUrl: avatarUrl ?? null,
-    createdAt: createdAt.toISOString(),
-    updatedAt: updatedAt.toISOString(),
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    avatarUrl: user.avatarUrl ?? null,
+    role: user.role,
+    isActive: user.isActive,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
   };
 }
 
@@ -132,7 +134,7 @@ export async function login(
     throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
   }
 
-  const { valid, needsRehash } = await verifyPassword(input.password, user.password);
+  const valid = await verifyPassword(input.password, user.password);
 
   if (!valid) {
     // Increment failed attempts
@@ -151,12 +153,6 @@ export async function login(
   // Successful login — reset failed attempts
   if (user.failedLoginAttempts > 0 || user.lockedUntil) {
     await authRepo.resetFailedAttempts(user.id);
-  }
-
-  // Transparent rehash: upgrade bcrypt → argon2id
-  if (needsRehash) {
-    const newHash = await hashPassword(input.password);
-    await authRepo.updateUserPassword(user.id, newHash);
   }
 
   const accessToken = signAccessToken({

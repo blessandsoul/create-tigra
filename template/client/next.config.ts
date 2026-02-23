@@ -1,5 +1,14 @@
 import type { NextConfig } from "next";
 
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const apiOrigin = (() => {
+  try {
+    return new URL(apiBaseUrl).origin;
+  } catch {
+    return "http://localhost:8000";
+  }
+})();
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -22,7 +31,7 @@ const nextConfig: NextConfig = {
               "base-uri 'self'",
               "form-action 'self'",
               "frame-ancestors 'none'",
-              `connect-src 'self' ${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"}`,
+              `connect-src 'self' ${apiOrigin}`,
             ].join("; "),
           },
         ],

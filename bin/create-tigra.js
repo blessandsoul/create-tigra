@@ -124,11 +124,11 @@ async function main() {
   program
     .name('create-tigra')
     .description('Create a production-ready full-stack app with Next.js + Fastify + Prisma + Redis')
-    .version('2.0.1')
+    .version('2.0.2')
     .argument('[project-name]', 'Name for your new project')
     .action(async (projectNameArg) => {
       console.log();
-      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.0.1'));
+      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.0.2'));
       console.log();
 
       let projectName = projectNameArg;
@@ -171,6 +171,9 @@ async function main() {
         }
       }
 
+      // Generate random port offset (1-200) so multiple projects don't conflict
+      const portOffset = crypto.randomInt(1, 201);
+
       // Derive all variables
       const variables = {
         PROJECT_NAME: projectName,
@@ -178,6 +181,10 @@ async function main() {
         PROJECT_DISPLAY_NAME: toTitleCase(projectName),
         DATABASE_NAME: `${toSnakeCase(projectName)}_db`,
         JWT_SECRET: crypto.randomBytes(48).toString('hex'),
+        MYSQL_PORT: String(3306 + portOffset),
+        PHPMYADMIN_PORT: String(8080 + portOffset),
+        REDIS_PORT: String(6379 + portOffset),
+        REDIS_COMMANDER_PORT: String(8081 + portOffset),
       };
 
       // Copy template
@@ -194,6 +201,15 @@ async function main() {
             const content = await fs.readFile(fullPath, 'utf-8');
             const replaced = replaceVariables(content, variables);
             await fs.writeFile(fullPath, replaced, 'utf-8');
+          }
+        }
+
+        // Generate .env from .env.example (so users don't have to copy manually)
+        for (const envExample of ['server/.env.example', 'client/.env.example']) {
+          const examplePath = path.join(targetDir, envExample);
+          const envPath = path.join(targetDir, envExample.replace('.env.example', '.env'));
+          if (await fs.pathExists(examplePath)) {
+            await fs.copy(examplePath, envPath);
           }
         }
 
@@ -222,7 +238,6 @@ async function main() {
       console.log();
       console.log(cyan('    1 ') + 'Install & start infrastructure');
       console.log(dim('      npm install'));
-      console.log(dim('      cp .env.example .env'));
       console.log(dim('      npm run docker:up'));
       console.log();
       console.log(cyan('    2 ') + 'Set up database');
@@ -236,15 +251,14 @@ async function main() {
       console.log();
       console.log(cyan('    4 ') + 'Start the client');
       console.log(dim('      npm install'));
-      console.log(dim('      cp .env.example .env'));
       console.log(dim('      npm run dev'));
       console.log();
       console.log(line);
       console.log();
       console.log(dim('  App           ') + cyan('http://localhost:3000'));
       console.log(dim('  API           ') + cyan('http://localhost:8000'));
-      console.log(dim('  phpMyAdmin    ') + cyan('http://localhost:8080'));
-      console.log(dim('  Redis CMD     ') + cyan('http://localhost:8081'));
+      console.log(dim('  phpMyAdmin    ') + cyan(`http://localhost:${variables.PHPMYADMIN_PORT}`));
+      console.log(dim('  Redis CMD     ') + cyan(`http://localhost:${variables.REDIS_COMMANDER_PORT}`));
       console.log();
       console.log(line);
       console.log();

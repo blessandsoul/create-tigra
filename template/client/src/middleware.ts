@@ -23,10 +23,19 @@ export function middleware(request: NextRequest): NextResponse {
     path === '/' ? pathname === '/' : pathname.startsWith(path)
   );
 
-  if (isProtectedPath && (!token || isTokenExpired(token))) {
+  // No token at all — user is not logged in, redirect to login
+  if (isProtectedPath && !token) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Expired token on protected path — allow through so client-side can attempt refresh.
+  // Delete the stale access_token so AuthInitializer starts fresh: getMe() → 401 → refresh.
+  if (isProtectedPath && token && isTokenExpired(token)) {
+    const response = NextResponse.next();
+    response.cookies.delete('access_token');
+    return response;
   }
 
   const isAuthPath = authPaths.some((path) => pathname.startsWith(path));

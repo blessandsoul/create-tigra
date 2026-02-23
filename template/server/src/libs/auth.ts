@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@config/env.js';
+import { prisma } from '@libs/prisma.js';
 import { UnauthorizedError, ForbiddenError } from '@shared/errors/errors.js';
 import type { JwtPayload, UserRole } from '@shared/types/index.js';
 
@@ -57,6 +58,16 @@ export async function authenticate(
     await request.jwtVerify();
   } catch {
     throw new UnauthorizedError('Invalid or expired token');
+  }
+
+  // Verify user still exists, is active, and not soft-deleted
+  const user = await prisma.user.findUnique({
+    where: { id: request.user.userId },
+    select: { isActive: true, deletedAt: true },
+  });
+
+  if (!user || !user.isActive || user.deletedAt) {
+    throw new UnauthorizedError('Account is deactivated or deleted');
   }
 }
 

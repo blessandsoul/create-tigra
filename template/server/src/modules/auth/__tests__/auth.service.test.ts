@@ -108,7 +108,7 @@ describe('Auth Service', () => {
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
-      vi.mocked(verifyPassword).mockResolvedValue({ valid: true, needsRehash: false });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(authLib.signAccessToken).mockReturnValue(accessToken);
       vi.mocked(authLib.generateRefreshToken).mockReturnValue(refreshToken);
       vi.mocked(authLib.getRefreshTokenExpiresAt).mockReturnValue(expiresAt);
@@ -154,7 +154,7 @@ describe('Auth Service', () => {
     it('should throw UnauthorizedError if password is invalid', async () => {
       // Arrange
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
-      vi.mocked(verifyPassword).mockResolvedValue({ valid: false, needsRehash: false });
+      vi.mocked(verifyPassword).mockResolvedValue(false);
 
       // Act & Assert
       await expect(authService.login(validLoginInput)).rejects.toThrow(UnauthorizedError);

@@ -80,12 +80,22 @@ apiClient.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError);
 
-      const { logout } = await import('@/features/auth/store/authSlice');
-      const { store } = await import('@/store');
-      store.dispatch(logout());
+      // Only logout on definitive auth failures (server responded with 4xx).
+      // Network errors (server unreachable, timeout) should NOT destroy the session.
+      const isAuthFailure =
+        axios.isAxiosError(refreshError) &&
+        refreshError.response != null &&
+        refreshError.response.status >= 400 &&
+        refreshError.response.status < 500;
 
-      if (typeof window !== 'undefined') {
-        window.location.href = ROUTES.LOGIN;
+      if (isAuthFailure) {
+        const { logout } = await import('@/features/auth/store/authSlice');
+        const { store } = await import('@/store');
+        store.dispatch(logout());
+
+        if (typeof window !== 'undefined') {
+          window.location.href = ROUTES.LOGIN;
+        }
       }
 
       return Promise.reject(refreshError);

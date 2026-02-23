@@ -16,23 +16,8 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * Verify a password against a hash.
- * Supports both argon2 and legacy bcrypt hashes.
- * Returns { valid, needsRehash } so the caller can transparently upgrade bcrypt hashes.
+ * Verify a password against an argon2 hash
  */
-export async function verifyPassword(
-  password: string,
-  hash: string,
-): Promise<{ valid: boolean; needsRehash: boolean }> {
-  const isBcryptHash = hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
-
-  if (isBcryptHash) {
-    // Lazy-import bcryptjs only for legacy hash verification
-    const bcrypt = await import('bcryptjs');
-    const valid = await bcrypt.default.compare(password, hash);
-    return { valid, needsRehash: valid }; // rehash only if password is correct
-  }
-
-  const valid = await argon2.verify(hash, password);
-  return { valid, needsRehash: false };
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return argon2.verify(hash, password);
 }

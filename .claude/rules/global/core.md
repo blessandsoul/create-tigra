@@ -50,6 +50,7 @@ When the user asks to create, scaffold, or start a new server or client project,
 
 - **`.env` files are never committed.** Use `.env.example` as the template with placeholder values.
 - **Adding a new env var**: Add it to `.env.example` with a comment, and document where it's used.
+- **Keep `.env` and `.env.example` in sync**: Any change to `.env` (adding, removing, or renaming a variable) must be reflected in `.env.example`, and vice versa. They must always have the same set of variables.
 - **Secrets** (DB URLs, JWT secrets, API keys) must never be prefixed with `NEXT_PUBLIC_` and must never appear in client-side code.
 - **Public values only** (API base URL, app name) get the `NEXT_PUBLIC_` prefix.
 
