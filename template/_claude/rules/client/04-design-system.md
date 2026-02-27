@@ -2,9 +2,11 @@
 
 # Design System
 
-## Philosophy: "Neuro-Minimalism"
+## Philosophy: "Mobile-First Neuro-Minimalism"
 
-Clean, airy, "expensive" look inspired by Linear, Vercel, Stripe, Arc. Every visual decision reduces cognitive load.
+**Mobile is the default. Desktop is the enhancement.** 80%+ of traffic is mobile — design for thumbs first, cursors second.
+
+Clean, airy, "expensive" look inspired by Linear, Vercel, Stripe, Arc. Every visual decision reduces cognitive load. Every screen must feel like a native app on mobile.
 
 ---
 
@@ -67,6 +69,34 @@ This project uses **Tailwind CSS v4** with **OKLCH color space** and the `@theme
 - `@custom-variant dark` replaces `darkMode: 'class'`
 - No `@layer base { :root { } }` — variables defined directly on `:root`
 
+---
+
+## Mobile-First Responsive Strategy
+
+**All Tailwind utilities are written for mobile first.** `md:` and `lg:` are progressive enhancements, not the other way around.
+
+### Rules
+
+1. **Write mobile styles as the base.** Add `md:` / `lg:` to override for larger screens. Never use `max-*:` breakpoints.
+2. **Breakpoints**: `sm:` (640px) → `md:` (768px) → `lg:` (1024px) → `xl:` (1280px). Scale UP, never down.
+3. **Test mobile first** during development. Open DevTools at 375px before checking desktop.
+4. **Every screen must be fully usable at 375px width.** No horizontal scroll, no truncated actions, no hidden critical UI.
+
+### Viewport & Safe Areas
+
+- **Use `dvh` instead of `vh`** for full-height layouts — accounts for mobile browser chrome (URL bar, bottom bar).
+- **Viewport meta**: `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`.
+- **Respect safe areas** on notched/dynamic island devices:
+  - Bottom-fixed elements: add `pb-[env(safe-area-inset-bottom)]`
+  - Top-fixed elements: add `pt-[env(safe-area-inset-top)]`
+- **No `100vh` anywhere.** Always `100dvh` or `min-h-dvh`.
+
+### Anti-patterns
+
+- Do NOT write desktop-first classes like `w-1/3 max-md:w-full`. Write `w-full md:w-1/3`.
+- Do NOT hide mobile-critical content behind `hidden md:block`. Content strategy must work on mobile first.
+- Do NOT use fixed pixel widths. Use `w-full`, percentage-based, or `max-w-*` utilities.
+
 ## Color Usage
 
 | Token | Purpose | Example use |
@@ -109,38 +139,84 @@ This project uses **Tailwind CSS v4** with **OKLCH color space** and the `@theme
 ## Typography
 
 - **Font**: Inter v4 (variable) or Geist Sans via `next/font`.
-- **Headings**: `text-wrap: balance`, `leading-tight`. H1: `text-3xl`–`text-4xl`, H2: `text-2xl`.
+- **Headings**: `text-wrap: balance`, `leading-tight`. Mobile-first responsive sizes:
+  - H1: `text-2xl md:text-3xl lg:text-4xl`
+  - H2: `text-xl md:text-2xl`
+  - H3: `text-lg md:text-xl`
 - **Body**: `text-base`, `leading-relaxed`. Max reading width: `max-w-prose` (~65ch).
 - **Data/numbers**: Always `tabular-nums` for alignment.
 - **Captions/meta**: `text-sm text-muted-foreground`.
+- **Mobile readability**: Minimum `text-sm` (14px) for any readable text. Never go below 12px.
 
 ---
 
 ## Spacing
 
 - **Whitespace IS the divider.** Prefer spacing over visible borders/lines.
-- **Section gap = 2x internal gap**: `space-y-16` between sections, `space-y-6` within.
+- **Section gap = 2x internal gap**: Mobile: `space-y-10` between sections, `space-y-4` within. Desktop: `space-y-16` between sections, `space-y-6` within.
 - **Stick to scale**: `4, 6, 8, 12, 16, 20, 24` from Tailwind. Avoid arbitrary values.
-- **Container**: `container mx-auto px-4 md:px-6 lg:px-8`.
+- **Container**: `container mx-auto px-4 sm:px-6 lg:px-8` (mobile gets comfortable 16px padding).
 
 ---
 
 ## Motion & Interactions
 
-Every interactive element MUST have visible `:hover`, `:active`, and `:focus-visible` states.
+Every interactive element MUST have visible `:active` and `:focus-visible` states. `:hover` is a desktop enhancement — never the only feedback.
 
-### Standard Patterns
+### Standard Patterns (Mobile-First)
 ```
-Button:  transition-all duration-200 ease-out hover:brightness-110 active:scale-[0.98]
-Card:    transition-all duration-300 ease-out hover:shadow-lg hover:-translate-y-0.5
-Link:    transition-colors duration-150 hover:text-primary
+Button:  transition-all duration-200 ease-out active:scale-[0.97] md:hover:brightness-110
+Card:    transition-all duration-300 ease-out active:scale-[0.98] md:hover:shadow-lg md:hover:-translate-y-0.5
+Link:    transition-colors duration-150 active:opacity-70 md:hover:text-primary
 ```
 
 ### Rules
+- **`active:` is the primary feedback** on mobile. Tap must feel instant and responsive.
+- **`hover:` is desktop-only** — always prefix with `md:hover:` to avoid sticky hover on touch devices.
+- **No hover-gated functionality**: Anything revealed on hover (tooltips, menus) MUST have a tap/click alternative.
 - **Transform + opacity only** — never animate layout properties (`width`, `height`, `top`).
 - **Respect `prefers-reduced-motion`**: Use `motion-safe:` / `motion-reduce:` variants.
 - **Motion budget**: Max 2-3 animated elements in viewport at once.
 - **Zero CLS**: Animations must never cause layout shift.
+
+---
+
+## Touch & Interaction Design
+
+### Touch Targets
+
+- **Minimum size**: 44x44px (`min-h-11 min-w-11`). Recommended: 48x48px (`min-h-12 min-w-12`).
+- **Spacing between targets**: Minimum 8px gap to prevent mis-taps.
+- **Icon-only buttons**: Use `p-2.5` or `p-3` to ensure the tap area is large enough even if the icon is small.
+- **Inline links in text**: Add `py-1` for vertical tap padding without affecting line height visually.
+
+### Thumb Zone Design
+
+- **Primary actions in the bottom third** of the screen — thumbs naturally rest there.
+- **Avoid top corners** for critical interactive elements (hardest to reach one-handed).
+- **Sticky bottom CTAs**: Primary action buttons stick to bottom of viewport on mobile: `sticky bottom-0 pb-[env(safe-area-inset-bottom)]`.
+- **FABs (Floating Action Buttons)**: Position `bottom-6 right-4` for primary creation actions.
+
+### Gesture Support
+
+- **Swipe-to-dismiss** on bottom sheets and drawers (use Vaul / shadcn Drawer).
+- **Pull-to-refresh** where contextually appropriate (feed pages, lists).
+- **Swipe actions on list items** for quick actions (archive, delete) — use sparingly, always with undo.
+- **Pinch-to-zoom** on images and maps — never disable native zoom.
+
+### Mobile Navigation Patterns
+
+| Nav items | Mobile pattern | Desktop pattern |
+|---|---|---|
+| 2-5 core routes | **Bottom tab bar** (sticky, always visible) | Top horizontal nav |
+| 6+ routes | Bottom tab bar (4 items + "More") | Sidebar or top nav with dropdowns |
+| Contextual actions | **Bottom sheet** (Drawer component) | Dropdown menu or popover |
+| Filters/settings | Full-screen sheet or slide-over panel | Side panel or modal |
+
+- **Bottom nav is the default** on mobile. Top nav on `md:` and above.
+- **Bottom sheets over modals** for contextual actions on mobile — they're within thumb reach and feel native.
+- **Sticky action bars**: Form submit buttons, checkout CTAs — `sticky bottom-0` on mobile.
+- **No hamburger menus** for ≤5 items. Use bottom tab bar instead.
 
 ---
 
@@ -170,10 +246,12 @@ Link:    transition-colors duration-150 hover:text-primary
 
 ## Component Visual Patterns
 
-- **Cards**: `rounded-xl border border-border/50 bg-card shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5`
+- **Cards**: `rounded-xl border border-border/50 bg-card shadow-sm transition-all duration-300 active:scale-[0.98] md:hover:shadow-md md:hover:-translate-y-0.5`
 - **Empty states**: Centered, muted icon, 2-line text max, one clear CTA.
 - **Loading**: Skeleton loaders matching content shape. Show immediately, no delay.
-- **Modals**: Max `max-w-lg`. Dismissible with Escape + backdrop click. Glassmorphism backdrop.
+- **Modals (desktop)**: Max `max-w-lg`. Dismissible with Escape + backdrop click. Glassmorphism backdrop.
+- **Bottom sheets (mobile)**: Prefer over centered modals on mobile. Use shadcn Drawer (Vaul). Swipe-down to dismiss. Max 70% viewport height for partial sheets. Respect `pb-[env(safe-area-inset-bottom)]`.
+- **Lists**: Full-width on mobile (no horizontal padding on list items — let them bleed to edges for native feel). Add dividers with `border-b border-border/50`.
 
 ---
 

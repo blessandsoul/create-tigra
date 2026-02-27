@@ -33,10 +33,11 @@ State: Server data (SSR) → Server Components
 
 ## Non-negotiable rules
 
-1. **Server Components by default.** Only add `'use client'` when you need hooks, state, or event handlers.
-2. **Component limits**: Max 250 lines, max 5 props, max 3 JSX nesting levels.
-3. **No hardcoded colors**: Use Tailwind semantic tokens (`bg-primary`, `text-foreground`). Never hex/rgb.
-4. **No inline styles**: Tailwind only. Use `cn()` for conditional classes.
-5. **Import order**: React/Next → third-party → UI → local → hooks → services → types → utils.
-6. **Forms**: Validate with Zod. Always validate client-side AND server-side.
-7. **Security**: Never inject raw HTML without sanitization. Never prefix secrets with `NEXT_PUBLIC_`.
+1. **Mobile-first**: All Tailwind classes start at mobile. Desktop is the enhancement (`md:`, `lg:`). Touch targets min 44x44px. No functionality behind hover-only states.
+2. **Server Components by default.** Only add `'use client'` when you need hooks, state, or event handlers.
+3. **Component limits**: Max 250 lines, max 5 props, max 3 JSX nesting levels.
+4. **No hardcoded colors**: Use Tailwind semantic tokens (`bg-primary`, `text-foreground`). Never hex/rgb.
+5. **No inline styles**: Tailwind only. Use `cn()` for conditional classes.
+6. **Import order**: React/Next → third-party → UI → local → hooks → services → types → utils.
+7. **Forms**: Validate with Zod. Always validate client-side AND server-side.
+8. **Security**: Never inject raw HTML without sanitization. Never prefix secrets with `NEXT_PUBLIC_`.
