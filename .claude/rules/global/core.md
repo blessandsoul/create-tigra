@@ -51,6 +51,7 @@ When the user asks to create, scaffold, or start a new server or client project,
 - **`.env` files are never committed.** Use `.env.example` as the template with placeholder values.
 - **Adding a new env var**: Add it to `.env.example` with a comment, and document where it's used.
 - **Keep `.env` and `.env.example` in sync**: Any change to `.env` (adding, removing, or renaming a variable) must be reflected in `.env.example`, and vice versa. They must always have the same set of variables.
+- **Keep `.env.example.production` in sync**: Every time `.env` or `.env.example` changes (variable added, removed, or renamed), also update `.env.example.production` in the same directory. If the file does not exist, create it. This file uses the same variable names but with **production-appropriate placeholder values** and comments (e.g., secure passwords, real domain URLs, SSL-enabled connection strings, stricter timeouts). See the server template's `.env.production.example` for the expected style. This applies to both `server/` and `client/` directories.
 - **Secrets** (DB URLs, JWT secrets, API keys) must never be prefixed with `NEXT_PUBLIC_` and must never appear in client-side code.
 - **Public values only** (API base URL, app name) get the `NEXT_PUBLIC_` prefix.
 
