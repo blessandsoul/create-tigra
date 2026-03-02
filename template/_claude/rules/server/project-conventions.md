@@ -14,6 +14,7 @@
 | Redis | Caching (frequently accessed data, lookups), rate limiting, background task signaling |
 | Zod | Runtime validation and type inference |
 | JWT (HS256/RS256) | Auth — minimal token payload (id, role), role-based access control |
+| axios | Outbound HTTP client (external API calls) |
 | PM2 + Nginx | Production deployment (cluster mode) |
 | Jest / Vitest | Testing — deterministic, mock external APIs |
 
@@ -148,3 +149,66 @@ Collection Root (Bearer Token: {{accessToken}})
 - Never interpolate raw values into SQL — always use Prisma query builder
 - Rate limit public endpoints
 - Avoid N+1 queries — prefer joins or batched queries
+
+## Outbound HTTP
+
+Use `httpClient` from `src/libs/http.ts` for ALL outbound HTTP calls. Never use native `fetch`, `node:http`, or a new `axios.create()` at the call site — the singleton provides consistent logging, 30s timeout, and automatic error conversion.
+
+### Import
+
+```typescript
+import { httpClient } from '@libs/http.js';
+```
+
+### Wrapping pattern (service layer)
+
+Outbound HTTP calls belong in the **service layer**. The interceptor converts `AxiosError` to `InternalError` automatically — services only deal with `AppError` subclasses:
+
+```typescript
+class WeatherService {
+  async getCurrentWeather(city: string): Promise<WeatherData> {
+    const response = await httpClient.get<WeatherApiResponse>(
+      `https://api.weather.example.com/v1/current`,
+      { params: { q: city } },
+    );
+    return response.data.result;
+  }
+}
+export const weatherService = new WeatherService();
+```
+
+### Auth headers
+
+Do NOT add auth headers to the `httpClient` singleton — it is shared. Pass per-request headers at the call site:
+
+```typescript
+await httpClient.post(url, body, {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+### Fine-grained error mapping
+
+The interceptor always throws `InternalError`. If you need a more specific error (e.g., a 404 from an external API should surface as `NotFoundError`), catch and rethrow:
+
+```typescript
+try {
+  return await httpClient.get(url);
+} catch {
+  throw new NotFoundError('External resource not found');
+}
+```
+
+### Fixed-base-URL services
+
+If a service always calls the same external API, create a private derived instance **inside the service file only** (never exported):
+
+```typescript
+const apiClient = axios.create({ ...httpClient.defaults, baseURL: 'https://api.example.com/v2' });
+```
+
+### Rules
+
+- Always use `httpClient` — never `fetch`, `node:http`, or inline `axios.create()`.
+- Never add auth headers, cookies, or credentials to the singleton itself.
+- Never log response bodies (may contain PII or secrets).
