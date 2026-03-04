@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '@libs/auth.js';
+import { RATE_LIMITS } from '@config/rate-limit.config.js';
 import * as authController from './auth.controller.js';
 import {
   registerSchema,
@@ -7,30 +8,24 @@ import {
 } from './auth.schemas.js';
 
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
-  // Register - Strict rate limiting to prevent abuse (5 requests per hour per IP)
+  // Register - Strict rate limiting to prevent abuse
   fastify.post('/auth/register', {
     schema: {
       body: registerSchema,
     },
     config: {
-      rateLimit: {
-        max: 5,
-        timeWindow: '1 hour',
-      },
+      rateLimit: RATE_LIMITS.AUTH_REGISTER,
     },
     handler: authController.register,
   });
 
-  // Login - Strict rate limiting to prevent brute force (10 requests per 15 minutes per IP)
+  // Login - Strict rate limiting to prevent brute force
   fastify.post('/auth/login', {
     schema: {
       body: loginSchema,
     },
     config: {
-      rateLimit: {
-        max: 10,
-        timeWindow: '15 minutes',
-      },
+      rateLimit: RATE_LIMITS.AUTH_LOGIN,
     },
     handler: authController.login,
   });
@@ -38,10 +33,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // Logout - reads refresh token from cookie, no body schema needed
   fastify.post('/auth/logout', {
     config: {
-      rateLimit: {
-        max: 50,
-        timeWindow: '15 minutes',
-      },
+      rateLimit: RATE_LIMITS.AUTH_LOGOUT,
     },
     handler: authController.logout,
   });
@@ -49,10 +41,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // Refresh token - reads refresh token from cookie, no body schema needed
   fastify.post('/auth/refresh', {
     config: {
-      rateLimit: {
-        max: 20,
-        timeWindow: '15 minutes',
-      },
+      rateLimit: RATE_LIMITS.AUTH_REFRESH,
     },
     handler: authController.refresh,
   });
@@ -61,10 +50,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/auth/me', {
     preValidation: [authenticate],
     config: {
-      rateLimit: {
-        max: 60,
-        timeWindow: '1 minute',
-      },
+      rateLimit: RATE_LIMITS.AUTH_ME,
     },
     handler: authController.me,
   });
@@ -73,10 +59,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/auth/sessions', {
     preValidation: [authenticate],
     config: {
-      rateLimit: {
-        max: 30,
-        timeWindow: '1 minute',
-      },
+      rateLimit: RATE_LIMITS.AUTH_SESSIONS,
     },
     handler: authController.getSessions,
   });
@@ -85,10 +68,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/auth/logout-all', {
     preValidation: [authenticate],
     config: {
-      rateLimit: {
-        max: 10,
-        timeWindow: '15 minutes',
-      },
+      rateLimit: RATE_LIMITS.AUTH_LOGOUT_ALL,
     },
     handler: authController.logoutAllSessions,
   });

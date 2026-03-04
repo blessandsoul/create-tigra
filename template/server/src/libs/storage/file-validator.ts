@@ -6,15 +6,16 @@
 
 import type { MultipartFile } from '@fastify/multipart';
 import { ValidationError } from '@shared/errors/errors.js';
+import { env } from '@config/env.js';
 import path from 'path';
 
 /**
  * File upload constants and constraints
  */
 export const FILE_UPLOAD_CONSTANTS = {
-  MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB in bytes
-  ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp'] as const,
-  ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp'] as const,
+  MAX_FILE_SIZE: env.MAX_FILE_SIZE_MB * 1024 * 1024, // ENV-configurable (default 10MB)
+  ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const,
+  ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'] as const,
   AVATAR_MAX_DIMENSION: 512, // pixels
 } as const;
 

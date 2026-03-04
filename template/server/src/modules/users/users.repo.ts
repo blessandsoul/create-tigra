@@ -71,6 +71,33 @@ class UsersRepository {
       select: userSelect,
     });
   }
+
+  /**
+   * Updates a user's profile fields
+   */
+  async updateUserProfile(
+    userId: string,
+    data: { firstName?: string; lastName?: string }
+  ): Promise<SafeUser> {
+    return prisma.user.update({
+      where: { id: userId },
+      data,
+      select: userSelect,
+    });
+  }
+
+  /**
+   * Soft deletes a user by setting deletedAt and isActive = false
+   */
+  async softDeleteUser(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        deletedAt: new Date(),
+        isActive: false,
+      },
+    });
+  }
 }
 
 // Export singleton instance

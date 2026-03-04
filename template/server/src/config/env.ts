@@ -21,6 +21,15 @@ const envSchema = z.object({
   REDIS_MAX_RETRIES: z.coerce.number().int().min(0).default(3),
   REDIS_CONNECT_TIMEOUT: z.coerce.number().int().min(1000).default(10000), // ms
 
+  // --- Rate Limiting ---
+  RATE_LIMIT_ENABLED: z.coerce.boolean().default(true),
+  RATE_LIMIT_MULTIPLIER: z.coerce.number().min(0.1).max(100).default(1),
+  RATE_LIMIT_AUTH_LOGIN_MAX: z.coerce.number().int().min(1).optional(),
+  RATE_LIMIT_AUTH_REGISTER_MAX: z.coerce.number().int().min(1).optional(),
+
+  // --- File Upload ---
+  MAX_FILE_SIZE_MB: z.coerce.number().min(1).max(100).default(10),
+
   // --- JWT Authentication ---
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_ACCESS_EXPIRY: z.string().default('15m'),

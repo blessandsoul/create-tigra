@@ -120,7 +120,7 @@ class ImageOptimizerService {
       }
 
       // Check if format is supported
-      const supportedFormats = ['jpeg', 'png', 'webp', 'gif'];
+      const supportedFormats = ['jpeg', 'png', 'webp', 'gif', 'heif'];
       if (!supportedFormats.includes(metadata.format)) {
         throw new ValidationError(
           `Image format '${metadata.format}' is not supported`,

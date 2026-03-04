@@ -19,7 +19,8 @@
       "@modules/*": ["./src/modules/*"],
       "@libs/*": ["./src/libs/*"],
       "@config/*": ["./src/config/*"],
-      "@shared/*": ["./src/shared/*"]
+      "@shared/*": ["./src/shared/*"],
+      "@jobs/*": ["./src/jobs/*"]
     }
   },
   "include": ["src/**/*"],

@@ -1,10 +1,17 @@
+/**
+ * Cleanup Expired Auth Records Job
+ *
+ * Periodically removes expired refresh tokens and sessions from the database.
+ * Runs every hour.
+ */
+
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@libs/prisma.js';
 import { logger } from '@libs/logger.js';
 
-const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
-export async function registerCleanupJob(app: FastifyInstance): Promise<void> {
+export function startCleanupExpiredAuthJob(app: FastifyInstance): void {
   const intervalId = setInterval(async () => {
     try {
       const now = new Date();
@@ -26,9 +33,8 @@ export async function registerCleanupJob(app: FastifyInstance): Promise<void> {
     } catch (error) {
       logger.error({ err: error }, 'Failed to clean up expired auth records');
     }
-  }, CLEANUP_INTERVAL_MS);
+  }, INTERVAL_MS);
 
-  // Clear interval on server shutdown
   app.addHook('onClose', async () => {
     clearInterval(intervalId);
   });

@@ -9,7 +9,8 @@ import path from 'path';
 import { usersService } from './users.service.js';
 import { validateImageFile, validateFileSize } from '@libs/storage/file-validator.js';
 import { successResponse } from '@shared/responses/successResponse.js';
-import type { GetUserAvatarParams } from './users.schemas.js';
+import { clearAuthCookies } from '@libs/cookies.js';
+import type { GetUserAvatarParams, UpdateProfileInput, ChangePasswordInput, DeleteAccountInput } from './users.schemas.js';
 import type { AuthenticatedRequest } from '@shared/types/index.js';
 import { logger } from '@libs/logger.js';
 import { BadRequestError } from '@shared/errors/errors.js';
@@ -113,6 +114,74 @@ class UsersController {
 
     // Send file directly
     return reply.sendFile(path.basename(filePath), path.dirname(filePath));
+  }
+
+  /**
+   * Update profile handler
+   *
+   * PATCH /api/v1/users/me
+   * Auth: Required (JWT)
+   *
+   * @param request - Fastify request (authenticated)
+   * @param reply - Fastify reply
+   */
+  async updateProfile(
+    request: FastifyRequest<{ Body: UpdateProfileInput }>,
+    reply: FastifyReply
+  ): Promise<void> {
+    const userId = request.user.userId;
+
+    logger.info({ msg: 'Update profile request', userId });
+
+    const updatedUser = await usersService.updateProfile(userId, request.body);
+
+    return reply.send(successResponse('Profile updated successfully', updatedUser));
+  }
+
+  /**
+   * Change password handler
+   *
+   * PATCH /api/v1/users/me/password
+   * Auth: Required (JWT)
+   *
+   * @param request - Fastify request (authenticated)
+   * @param reply - Fastify reply
+   */
+  async changePassword(
+    request: FastifyRequest<{ Body: ChangePasswordInput }>,
+    reply: FastifyReply
+  ): Promise<void> {
+    const userId = request.user.userId;
+
+    logger.info({ msg: 'Change password request', userId });
+
+    await usersService.changePassword(userId, request.body);
+
+    return reply.send(successResponse('Password changed successfully', null));
+  }
+
+  /**
+   * Delete account handler
+   *
+   * DELETE /api/v1/users/me
+   * Auth: Required (JWT)
+   *
+   * @param request - Fastify request (authenticated)
+   * @param reply - Fastify reply
+   */
+  async deleteAccount(
+    request: FastifyRequest<{ Body: DeleteAccountInput }>,
+    reply: FastifyReply
+  ): Promise<void> {
+    const userId = request.user.userId;
+
+    logger.info({ msg: 'Delete account request', userId });
+
+    await usersService.deleteAccount(userId, request.body.password);
+
+    clearAuthCookies(reply);
+
+    return reply.send(successResponse('Account deleted successfully', null));
   }
 }
 

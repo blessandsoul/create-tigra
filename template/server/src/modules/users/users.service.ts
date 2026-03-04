@@ -6,16 +6,20 @@
 
 import { usersRepository } from './users.repo.js';
 import type { SafeUser } from './users.repo.js';
+import * as authRepo from '@modules/auth/auth.repo.js';
+import { sessionRepository } from '@modules/auth/session.repo.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { imageOptimizerService } from '@libs/storage/image-optimizer.service.js';
-import { NotFoundError, BadRequestError } from '@shared/errors/errors.js';
+import { verifyPassword, hashPassword } from '@libs/password.js';
+import { NotFoundError, BadRequestError, UnauthorizedError } from '@shared/errors/errors.js';
 import { logger } from '@libs/logger.js';
 import path from 'path';
+import type { UpdateProfileInput, ChangePasswordInput } from './users.schemas.js';
 
 /**
  * Users Service Class
  *
- * Handles business logic for user avatar operations.
+ * Handles business logic for user profile and avatar operations.
  */
 class UsersService {
   /**
@@ -162,6 +166,110 @@ class UsersService {
       path: filePath,
       url: user.avatarUrl,
     };
+  }
+
+  /**
+   * Updates a user's profile
+   *
+   * @param userId - User's unique ID
+   * @param input - Fields to update (firstName, lastName)
+   * @returns Updated user
+   * @throws NotFoundError if user not found
+   * @throws BadRequestError if no fields provided
+   */
+  async updateProfile(userId: string, input: UpdateProfileInput): Promise<SafeUser> {
+    const { firstName, lastName } = input;
+    if (!firstName && !lastName) {
+      throw new BadRequestError('At least one field must be provided', 'INVALID_INPUT');
+    }
+
+    const user = await usersRepository.getUserById(userId);
+    if (!user) {
+      throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+    }
+
+    logger.info({
+      msg: 'Updating user profile',
+      userId,
+      fields: Object.keys(input).filter(k => input[k as keyof UpdateProfileInput] !== undefined),
+    });
+
+    const updateData: { firstName?: string; lastName?: string } = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+
+    const updatedUser = await usersRepository.updateUserProfile(userId, updateData);
+
+    logger.info({ msg: 'User profile updated', userId });
+
+    return updatedUser;
+  }
+
+  /**
+   * Changes a user's password
+   *
+   * @param userId - User's unique ID
+   * @param input - Current and new password
+   * @throws NotFoundError if user not found
+   * @throws UnauthorizedError if current password is wrong
+   * @throws BadRequestError if new password same as current
+   */
+  async changePassword(userId: string, input: ChangePasswordInput): Promise<void> {
+    const user = await authRepo.findUserById(userId);
+    if (!user) {
+      throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+    }
+
+    const isValid = await verifyPassword(input.currentPassword, user.password);
+    if (!isValid) {
+      throw new UnauthorizedError('Current password is incorrect', 'INVALID_CREDENTIALS');
+    }
+
+    const isSamePassword = await verifyPassword(input.newPassword, user.password);
+    if (isSamePassword) {
+      throw new BadRequestError('New password must be different from current password', 'SAME_PASSWORD');
+    }
+
+    const hashedPassword = await hashPassword(input.newPassword);
+    await authRepo.updateUserPassword(userId, hashedPassword);
+
+    logger.info({ msg: 'User password changed', userId });
+
+    // Security: invalidate all sessions and refresh tokens
+    await sessionRepository.deleteAllUserSessions(userId);
+    await authRepo.deleteRefreshTokensByUserId(userId);
+
+    logger.info({ msg: 'All sessions invalidated after password change', userId });
+  }
+
+  /**
+   * Soft-deletes a user account
+   *
+   * @param userId - User's unique ID
+   * @param password - Password confirmation
+   * @throws NotFoundError if user not found
+   * @throws UnauthorizedError if password is wrong
+   */
+  async deleteAccount(userId: string, password: string): Promise<void> {
+    const user = await authRepo.findUserById(userId);
+    if (!user) {
+      throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+    }
+
+    const isValid = await verifyPassword(password, user.password);
+    if (!isValid) {
+      throw new UnauthorizedError('Incorrect password', 'INVALID_CREDENTIALS');
+    }
+
+    logger.info({ msg: 'Soft-deleting user account', userId });
+
+    await usersRepository.softDeleteUser(userId);
+
+    // Delete all sessions and refresh tokens
+    await sessionRepository.deleteAllUserSessions(userId);
+    await authRepo.deleteRefreshTokensByUserId(userId);
+
+    logger.info({ msg: 'User account deleted', userId });
   }
 }
 

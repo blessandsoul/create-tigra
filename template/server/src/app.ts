@@ -1,4 +1,4 @@
-import Fastify, { type FastifyError } from 'fastify';
+import Fastify, { type FastifyError, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -17,8 +17,12 @@ import { isAppError } from '@shared/errors/AppError.js';
 import { successResponse, errorResponse } from '@shared/responses/successResponse.js';
 import { authRoutes } from '@modules/auth/auth.routes.js';
 import { usersRoutes } from '@modules/users/users.routes.js';
+import { adminRoutes } from '@modules/admin/admin.routes.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
-import { registerCleanupJob } from '@libs/cleanup.js';
+import { registerJobs } from '@jobs/index.js';
+import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
+import { isIpBlocked, recordRateLimitViolation } from '@libs/ip-block.js';
+import { ForbiddenError } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -71,11 +75,29 @@ export async function buildApp() {
     encodings: ['gzip', 'deflate'],
   });
 
-  await app.register(rateLimit, {
-    global: false,
-    max: 100,
-    timeWindow: '1 minute',
-  });
+  // Rate limiting: Redis-backed when available, in-memory fallback
+  if (RATE_LIMIT_ENABLED) {
+    const redisStore = getRateLimitRedisStore();
+    await app.register(rateLimit, {
+      global: false,
+      max: 100,
+      timeWindow: '1 minute',
+      redis: redisStore,
+      nameSpace: 'rl:',
+      skipOnError: true, // Gracefully degrade if Redis fails mid-request
+      onExceeded: (request: { ip: string }) => {
+        recordRateLimitViolation(request.ip);
+      },
+    });
+  } else {
+    // Register with effectively no limit so per-route configs don't error
+    await app.register(rateLimit, {
+      global: false,
+      max: 1_000_000,
+      timeWindow: '1 minute',
+    });
+    logger.warn('[RATE-LIMIT] Rate limiting is DISABLED (RATE_LIMIT_ENABLED=false)');
+  }
 
   await app.register(cookie, {
     secret: env.COOKIE_SECRET || env.JWT_SECRET,
@@ -95,7 +117,7 @@ export async function buildApp() {
   // File upload handling (multipart/form-data)
   await app.register(multipart, {
     limits: {
-      fileSize: 5 * 1024 * 1024, // 5MB max file size
+      fileSize: env.MAX_FILE_SIZE_MB * 1024 * 1024, // ENV-configurable (default 10MB)
       files: 1, // Only one file per request
     },
   });
@@ -112,6 +134,13 @@ export async function buildApp() {
 
   // Initialize file storage (create directories)
   await fileStorageService.initialize();
+
+  // --- IP Block Check (runs before everything else) ---
+  app.addHook('onRequest', async (request: FastifyRequest) => {
+    if (await isIpBlocked(request.ip)) {
+      throw new ForbiddenError('Access denied', 'IP_BLOCKED');
+    }
+  });
 
   // --- Request/Response Logging ---
   const skipLogPaths = new Set(['/api/v1/health', '/api/v1/ready', '/api/v1/live']);
@@ -233,9 +262,10 @@ export async function buildApp() {
   // --- Routes ---
   await app.register(authRoutes, { prefix: '/api/v1' });
   await app.register(usersRoutes, { prefix: '/api/v1' });
+  await app.register(adminRoutes, { prefix: '/api/v1' });
 
-  // --- Cleanup Jobs ---
-  await registerCleanupJob(app);
+  // --- Background Jobs ---
+  registerJobs(app);
 
   return app;
 }
