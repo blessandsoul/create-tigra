@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "generate:env": "node -e \"import('fs').then(f=>{if(f.existsSync('.env'))console.log('.env already exists, skipping');else{f.copyFileSync('.env.example','.env');console.log('.env created from .env.example')}})\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

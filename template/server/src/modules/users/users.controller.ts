@@ -10,7 +10,8 @@ import { usersService } from './users.service.js';
 import { validateImageFile, validateFileSize } from '@libs/storage/file-validator.js';
 import { successResponse } from '@shared/responses/successResponse.js';
 import { clearAuthCookies } from '@libs/cookies.js';
-import type { GetUserAvatarParams, UpdateProfileInput, ChangePasswordInput, DeleteAccountInput } from './users.schemas.js';
+import { ChangePasswordSchema, AdminChangePasswordSchema, DeleteAccountSchema } from './users.schemas.js';
+import type { GetUserAvatarParams, UpdateProfileInput } from './users.schemas.js';
 import type { AuthenticatedRequest } from '@shared/types/index.js';
 import { logger } from '@libs/logger.js';
 import { BadRequestError } from '@shared/errors/errors.js';
@@ -48,8 +49,8 @@ class UsersController {
     // Validate file size
     validateFileSize(buffer);
 
-    // Get authenticated user ID
-    const userId = request.user.userId;
+    // Get target user ID (set by resolveMe or resolveTargetUser middleware)
+    const userId = request.targetUserId!;
 
     logger.info({
       msg: 'Avatar upload request',
@@ -79,8 +80,8 @@ class UsersController {
    * @param reply - Fastify reply
    */
   async deleteAvatar(request: AuthenticatedRequest, reply: FastifyReply): Promise<void> {
-    // Get authenticated user ID
-    const userId = request.user.userId;
+    // Get target user ID (set by resolveMe or resolveTargetUser middleware)
+    const userId = request.targetUserId!;
 
     logger.info({ msg: 'Avatar delete request', userId });
 
@@ -126,14 +127,15 @@ class UsersController {
    * @param reply - Fastify reply
    */
   async updateProfile(
-    request: FastifyRequest<{ Body: UpdateProfileInput }>,
+    request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    const userId = request.user.userId;
+    const userId = request.targetUserId!;
+    const body = request.body as UpdateProfileInput;
 
     logger.info({ msg: 'Update profile request', userId });
 
-    const updatedUser = await usersService.updateProfile(userId, request.body);
+    const updatedUser = await usersService.updateProfile(userId, body);
 
     return reply.send(successResponse('Profile updated successfully', updatedUser));
   }
@@ -148,14 +150,21 @@ class UsersController {
    * @param reply - Fastify reply
    */
   async changePassword(
-    request: FastifyRequest<{ Body: ChangePasswordInput }>,
+    request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    const userId = request.user.userId;
+    const userId = request.targetUserId!;
+    const isAdminAction = request.isAdminAction ?? false;
 
-    logger.info({ msg: 'Change password request', userId });
-
-    await usersService.changePassword(userId, request.body);
+    if (isAdminAction) {
+      const parsed = AdminChangePasswordSchema.parse(request.body);
+      logger.info({ msg: 'Admin change password request', targetUserId: userId, adminUserId: request.user.userId });
+      await usersService.changePassword(userId, parsed, true);
+    } else {
+      const parsed = ChangePasswordSchema.parse(request.body);
+      logger.info({ msg: 'Change password request', userId });
+      await usersService.changePassword(userId, parsed, false);
+    }
 
     return reply.send(successResponse('Password changed successfully', null));
   }
@@ -170,16 +179,25 @@ class UsersController {
    * @param reply - Fastify reply
    */
   async deleteAccount(
-    request: FastifyRequest<{ Body: DeleteAccountInput }>,
+    request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    const userId = request.user.userId;
+    const userId = request.targetUserId!;
+    const isAdminAction = request.isAdminAction ?? false;
 
-    logger.info({ msg: 'Delete account request', userId });
+    if (isAdminAction) {
+      logger.info({ msg: 'Admin delete account request', targetUserId: userId, adminUserId: request.user.userId });
+      await usersService.deleteAccount(userId, '', true);
+    } else {
+      const parsed = DeleteAccountSchema.parse(request.body);
+      logger.info({ msg: 'Delete account request', userId });
+      await usersService.deleteAccount(userId, parsed.password, false);
+    }
 
-    await usersService.deleteAccount(userId, request.body.password);
-
-    clearAuthCookies(reply);
+    // Only clear cookies if the user is deleting their OWN account
+    if (!isAdminAction) {
+      clearAuthCookies(reply);
+    }
 
     return reply.send(successResponse('Account deleted successfully', null));
   }

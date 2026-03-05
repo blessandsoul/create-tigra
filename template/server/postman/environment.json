@@ -1,6 +1,6 @@
 {
-  "id": "tigra-server-env",
-  "name": "Tigra Server - Local",
+  "id": "{{PROJECT_NAME}}-server-env",
+  "name": "{{PROJECT_DISPLAY_NAME}} Server - Local",
   "values": [
     {
       "key": "baseUrl",

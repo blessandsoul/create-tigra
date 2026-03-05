@@ -2,6 +2,7 @@
  * File Storage Service
  *
  * Handles local file system operations for user-uploaded files.
+ * Directory structure: uploads/users/{userId}/<media-type>/
  */
 
 import fs from 'fs/promises';
@@ -13,24 +14,39 @@ import { generateAvatarFilename } from './filename-sanitizer.js';
 /**
  * File Storage Service
  *
- * Manages local file storage with user-specific directories and SEO-friendly naming.
+ * Manages local file storage with per-user directories and SEO-friendly naming.
+ * All user media lives under uploads/users/{userId}/ for easy per-user cleanup.
  */
 class FileStorageService {
   private readonly uploadDir: string;
-  private readonly avatarsDir: string;
+  private readonly usersDir: string;
 
   constructor() {
     // Base upload directory: server/uploads
     this.uploadDir = path.join(process.cwd(), 'uploads');
-    // Avatars subdirectory: server/uploads/avatars
-    this.avatarsDir = path.join(this.uploadDir, 'avatars');
+    // Users media directory: server/uploads/users
+    this.usersDir = path.join(this.uploadDir, 'users');
+  }
+
+  /**
+   * Gets the base directory for a user's media
+   */
+  private getUserDir(userId: string): string {
+    return path.join(this.usersDir, userId);
+  }
+
+  /**
+   * Gets the avatar directory for a user
+   */
+  private getUserAvatarDir(userId: string): string {
+    return path.join(this.getUserDir(userId), 'avatar');
   }
 
   /**
    * Saves an avatar image to user-specific directory
    *
    * Process:
-   * 1. Create user directory if it doesn't exist
+   * 1. Create user avatar directory if it doesn't exist
    * 2. Generate SEO-friendly filename
    * 3. Save buffer to file (overwrites existing avatar)
    * 4. Return filename and public URL
@@ -50,7 +66,7 @@ class FileStorageService {
    *   'Doe'
    * );
    * // filename: "john-doe-avatar.webp"
-   * // url: "/uploads/avatars/{userId}/john-doe-avatar.webp"
+   * // url: "/uploads/users/{userId}/avatar/john-doe-avatar.webp"
    * ```
    */
   async saveAvatar(
@@ -61,18 +77,18 @@ class FileStorageService {
   ): Promise<{ filename: string; url: string }> {
     try {
       // Ensure user's avatar directory exists
-      const userDir = path.join(this.avatarsDir, userId);
-      await this.ensureDirectoryExists(userDir);
+      const avatarDir = this.getUserAvatarDir(userId);
+      await this.ensureDirectoryExists(avatarDir);
 
       // Generate SEO-friendly filename
       const filename = generateAvatarFilename(firstName, lastName, 'webp');
-      const filePath = path.join(userDir, filename);
+      const filePath = path.join(avatarDir, filename);
 
       // Write file to disk (overwrites existing)
       await fs.writeFile(filePath, buffer);
 
       // Generate public URL
-      const url = `/uploads/avatars/${userId}/${filename}`;
+      const url = `/uploads/users/${userId}/avatar/${filename}`;
 
       logger.info({
         msg: 'Avatar saved successfully',
@@ -101,22 +117,53 @@ class FileStorageService {
    */
   async deleteAvatar(userId: string): Promise<void> {
     try {
-      const userDir = path.join(this.avatarsDir, userId);
+      const avatarDir = this.getUserAvatarDir(userId);
 
       // Check if directory exists
-      const exists = await this.directoryExists(userDir);
+      const exists = await this.directoryExists(avatarDir);
       if (!exists) {
         logger.info({ msg: 'Avatar directory does not exist, nothing to delete', userId });
         return;
       }
 
-      // Delete entire user directory and contents
-      await fs.rm(userDir, { recursive: true, force: true });
+      // Delete avatar directory and contents
+      await fs.rm(avatarDir, { recursive: true, force: true });
 
       logger.info({ msg: 'Avatar deleted successfully', userId });
     } catch (error) {
       logger.error({ err: error, msg: 'Failed to delete avatar', userId });
       throw new InternalError('Failed to delete avatar file', 'FILE_DELETE_FAILED');
+    }
+  }
+
+  /**
+   * Deletes all media for a user (entire user directory)
+   *
+   * Used by the cleanup job when permanently purging deleted accounts.
+   * No-op if the user directory doesn't exist.
+   *
+   * @param userId - User's unique ID
+   *
+   * @example
+   * ```typescript
+   * await fileStorageService.deleteUserMedia(userId);
+   * ```
+   */
+  async deleteUserMedia(userId: string): Promise<void> {
+    try {
+      const userDir = this.getUserDir(userId);
+
+      const exists = await this.directoryExists(userDir);
+      if (!exists) {
+        return;
+      }
+
+      await fs.rm(userDir, { recursive: true, force: true });
+
+      logger.info({ msg: 'User media deleted successfully', userId });
+    } catch (error) {
+      logger.error({ err: error, msg: 'Failed to delete user media', userId });
+      throw new InternalError('Failed to delete user media', 'FILE_DELETE_FAILED');
     }
   }
 
@@ -128,7 +175,7 @@ class FileStorageService {
    * @returns Absolute file path
    */
   getAvatarPath(userId: string, filename: string): string {
-    return path.join(this.avatarsDir, userId, filename);
+    return path.join(this.getUserAvatarDir(userId), filename);
   }
 
   /**
@@ -139,7 +186,7 @@ class FileStorageService {
    * @returns Public URL path
    */
   getAvatarUrl(userId: string, filename: string): string {
-    return `/uploads/avatars/${userId}/${filename}`;
+    return `/uploads/users/${userId}/avatar/${filename}`;
   }
 
   /**
@@ -192,13 +239,13 @@ class FileStorageService {
   /**
    * Initializes the upload directory structure
    *
-   * Creates base uploads directory and avatars subdirectory if they don't exist.
+   * Creates base uploads directory and users subdirectory if they don't exist.
    * Should be called at application startup.
    */
   async initialize(): Promise<void> {
     try {
       await this.ensureDirectoryExists(this.uploadDir);
-      await this.ensureDirectoryExists(this.avatarsDir);
+      await this.ensureDirectoryExists(this.usersDir);
       logger.info({ msg: 'File storage initialized', uploadDir: this.uploadDir });
     } catch (error) {
       logger.error({ err: error, msg: 'Failed to initialize file storage' });

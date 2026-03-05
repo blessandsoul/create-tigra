@@ -2,7 +2,7 @@
  * Cleanup Deleted Accounts Job
  *
  * Permanently purges soft-deleted user accounts after a 30-day retention period.
- * Deletes avatar files from disk and hard-deletes the user record (cascades to
+ * Deletes all user media from disk and hard-deletes the user record (cascades to
  * refresh tokens and sessions via onDelete: Cascade).
  *
  * Runs once daily.
@@ -32,7 +32,6 @@ export function startCleanupDeletedAccountsJob(app: FastifyInstance): void {
         },
         select: {
           id: true,
-          avatarUrl: true,
         },
       });
 
@@ -49,10 +48,8 @@ export function startCleanupDeletedAccountsJob(app: FastifyInstance): void {
 
       for (const user of usersToDelete) {
         try {
-          // Delete avatar files from disk if they exist
-          if (user.avatarUrl) {
-            await fileStorageService.deleteAvatar(user.id);
-          }
+          // Delete all user media from disk (no-op if dir doesn't exist)
+          await fileStorageService.deleteUserMedia(user.id);
 
           // Hard delete user record (cascades to RefreshToken + Session)
           await prisma.user.delete({

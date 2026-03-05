@@ -21,6 +21,8 @@ const FILES_TO_REPLACE = [
   'server/docker-compose.yml',
   'client/package.json',
   'client/.env.example',
+  'server/postman/collection.json',
+  'server/postman/environment.json',
 ];
 
 // Directories/files to skip when copying

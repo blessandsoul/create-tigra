@@ -78,6 +78,15 @@ export async function register(
     throw new ConflictError('Email already registered', 'EMAIL_ALREADY_EXISTS');
   }
 
+  // Check if a soft-deleted account exists with this email — direct them to login to restore
+  const deletedUser = await authRepo.findDeletedUserByEmail(input.email);
+  if (deletedUser) {
+    throw new ConflictError(
+      'An account with this email was recently deleted. Log in to restore it.',
+      'EMAIL_ALREADY_EXISTS',
+    );
+  }
+
   const hashedPassword = await hashPassword(input.password);
 
   const user = await authRepo.createUser({
@@ -119,40 +128,57 @@ export async function login(
   deviceInfo?: string,
   ipAddress?: string,
 ): Promise<AuthResult> {
-  const user = await authRepo.findUserByEmail(input.email);
+  let user = await authRepo.findUserByEmail(input.email);
+
+  // If no active user found, check for a soft-deleted account that can be restored
   if (!user) {
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
-
-  // Generic error for disabled accounts — prevent info leakage
-  if (!user.isActive) {
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
-
-  // Check account lockout
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
-
-  const valid = await verifyPassword(input.password, user.password);
-
-  if (!valid) {
-    // Increment failed attempts
-    const newAttempts = user.failedLoginAttempts + 1;
-    await authRepo.incrementFailedAttempts(user.id);
-
-    // Check if we need to lock the account
-    const lockDuration = getLockoutDuration(newAttempts);
-    if (lockDuration) {
-      await authRepo.setAccountLock(user.id, new Date(Date.now() + lockDuration));
+    const deletedUser = await authRepo.findDeletedUserByEmail(input.email);
+    if (!deletedUser) {
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
+    // Verify password before restoring — don't restore on wrong password
+    const validPassword = await verifyPassword(input.password, deletedUser.password);
+    if (!validPassword) {
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
 
-  // Successful login — reset failed attempts
-  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-    await authRepo.resetFailedAttempts(user.id);
+    // Restore account: clears deletedAt, sets isActive = true, resets lockout
+    await authRepo.restoreUser(deletedUser.id);
+    user = { ...deletedUser, deletedAt: null, isActive: true, failedLoginAttempts: 0, lockedUntil: null };
+  } else {
+    // Normal login flow for active accounts
+
+    // Generic error for disabled accounts — prevent info leakage
+    if (!user.isActive) {
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    // Check account lockout
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    const valid = await verifyPassword(input.password, user.password);
+
+    if (!valid) {
+      // Increment failed attempts
+      const newAttempts = user.failedLoginAttempts + 1;
+      await authRepo.incrementFailedAttempts(user.id);
+
+      // Check if we need to lock the account
+      const lockDuration = getLockoutDuration(newAttempts);
+      if (lockDuration) {
+        await authRepo.setAccountLock(user.id, new Date(Date.now() + lockDuration));
+      }
+
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    // Successful login — reset failed attempts
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await authRepo.resetFailedAttempts(user.id);
+    }
   }
 
   const accessToken = signAccessToken({

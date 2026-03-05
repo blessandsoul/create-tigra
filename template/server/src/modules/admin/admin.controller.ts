@@ -5,7 +5,8 @@ import { ValidationError } from '@shared/errors/errors.js';
 import { blockIp, unblockIp, getBlockedIps } from '@libs/ip-block.js';
 
 const blockIpSchema = z.object({
-  ip: z.string().ip({ message: 'Invalid IP address' }),
+  ip: z.union([z.ipv4(), z.ipv6()], { message: 'Invalid IP address' }),
+  reason: z.string().max(500).optional(),
 });
 
 type BlockIpBody = z.infer<typeof blockIpSchema>;
@@ -27,8 +28,8 @@ export async function blockIpHandler(
   if (!parsed.success) {
     throw new ValidationError(parsed.error.issues[0]?.message ?? 'Invalid IP address', 'INVALID_IP');
   }
-  await blockIp(parsed.data.ip);
-  reply.status(201).send(successResponse('IP blocked successfully', { ip: parsed.data.ip }));
+  const blocked = await blockIp(parsed.data.ip, request.user.userId, parsed.data.reason);
+  reply.status(201).send(successResponse('IP blocked successfully', blocked));
 }
 
 export async function unblockIpHandler(

@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Tigra Server API",
-    "_postman_id": "tigra-server-collection",
-    "description": "API collection for the Tigra server template.\n\nAll authenticated requests inherit Bearer Token auth from the collection root.\nLogin/Register requests auto-set tokens via test scripts.",
+    "name": "{{PROJECT_DISPLAY_NAME}} API",
+    "_postman_id": "{{PROJECT_NAME}}-server-collection",
+    "description": "API collection for {{PROJECT_DISPLAY_NAME}}.\n\nAll authenticated requests inherit Bearer Token auth from the collection root.\nLogin/Register requests auto-set tokens via test scripts.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -30,6 +30,10 @@
     },
     {
       "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "targetUserId",
       "value": ""
     }
   ],
@@ -359,6 +363,111 @@
       "description": "Admin-only endpoints. Requires ADMIN role. Auth inherited from collection root.",
       "item": [
         {
+          "name": "User Management",
+          "description": "Manage users by ID. Requires ADMIN role. Set {{targetUserId}} before calling.",
+          "item": [
+            {
+              "name": "Update Profile (by ID)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}"]
+                },
+                "description": "Update a user's profile by ID. Requires owner or admin access."
+              },
+              "response": []
+            },
+            {
+              "name": "Change Password (by ID)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newPassword\": \"NewPassword456\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}/password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}", "password"]
+                },
+                "description": "Change a user's password by ID. Admin: only newPassword required. Invalidates all target user sessions."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Account (by ID)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}"]
+                },
+                "description": "Soft-delete a user's account by ID. No password required for admin. Invalidates all target user sessions."
+              },
+              "response": []
+            },
+            {
+              "name": "Upload Avatar (by ID)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "",
+                      "description": "Image file (JPEG, PNG, or WebP, max 10MB)"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}/avatar",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}", "avatar"]
+                },
+                "description": "Upload or replace a user's avatar by ID. Requires admin access. Accepts JPEG, PNG, or WebP."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Avatar (by ID)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}/avatar",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}", "avatar"]
+                },
+                "description": "Delete a user's avatar by ID. Requires admin access."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
           "name": "List Blocked IPs",
           "request": {
             "method": "GET",
@@ -384,14 +493,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ip\": \"1.2.3.4\"\n}"
+              "raw": "{\n  \"ip\": \"1.2.3.4\",\n  \"reason\": \"Spam bot\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/admin/blocked-ips",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "blocked-ips"]
             },
-            "description": "Permanently block an IP address. Blocked IPs receive 403 IP_BLOCKED on all requests."
+            "description": "Permanently block an IP address. Persisted to database and cached in Redis. Blocked IPs receive 403 IP_BLOCKED on all requests. Optional reason field for audit trail."
           },
           "response": []
         },

@@ -14,7 +14,7 @@ import { verifyPassword, hashPassword } from '@libs/password.js';
 import { NotFoundError, BadRequestError, UnauthorizedError } from '@shared/errors/errors.js';
 import { logger } from '@libs/logger.js';
 import path from 'path';
-import type { UpdateProfileInput, ChangePasswordInput } from './users.schemas.js';
+import type { UpdateProfileInput, ChangePasswordInput, AdminChangePasswordInput } from './users.schemas.js';
 
 /**
  * Users Service Class
@@ -144,7 +144,7 @@ class UsersService {
     }
 
     // Extract filename from URL (last segment)
-    // URL format: /uploads/avatars/{userId}/{filename}
+    // URL format: /uploads/users/{userId}/avatar/{filename}
     const filename = path.basename(user.avatarUrl);
 
     // Build full file path
@@ -214,15 +214,22 @@ class UsersService {
    * @throws UnauthorizedError if current password is wrong
    * @throws BadRequestError if new password same as current
    */
-  async changePassword(userId: string, input: ChangePasswordInput): Promise<void> {
+  async changePassword(
+    userId: string,
+    input: ChangePasswordInput | AdminChangePasswordInput,
+    skipPasswordVerification: boolean = false
+  ): Promise<void> {
     const user = await authRepo.findUserById(userId);
     if (!user) {
       throw new NotFoundError('User not found', 'USER_NOT_FOUND');
     }
 
-    const isValid = await verifyPassword(input.currentPassword, user.password);
-    if (!isValid) {
-      throw new UnauthorizedError('Current password is incorrect', 'INVALID_CREDENTIALS');
+    if (!skipPasswordVerification) {
+      const fullInput = input as ChangePasswordInput;
+      const isValid = await verifyPassword(fullInput.currentPassword, user.password);
+      if (!isValid) {
+        throw new UnauthorizedError('Current password is incorrect', 'INVALID_CREDENTIALS');
+      }
     }
 
     const isSamePassword = await verifyPassword(input.newPassword, user.password);
@@ -250,15 +257,21 @@ class UsersService {
    * @throws NotFoundError if user not found
    * @throws UnauthorizedError if password is wrong
    */
-  async deleteAccount(userId: string, password: string): Promise<void> {
+  async deleteAccount(
+    userId: string,
+    password: string,
+    skipPasswordVerification: boolean = false
+  ): Promise<void> {
     const user = await authRepo.findUserById(userId);
     if (!user) {
       throw new NotFoundError('User not found', 'USER_NOT_FOUND');
     }
 
-    const isValid = await verifyPassword(password, user.password);
-    if (!isValid) {
-      throw new UnauthorizedError('Incorrect password', 'INVALID_CREDENTIALS');
+    if (!skipPasswordVerification) {
+      const isValid = await verifyPassword(password, user.password);
+      if (!isValid) {
+        throw new UnauthorizedError('Incorrect password', 'INVALID_CREDENTIALS');
+      }
     }
 
     logger.info({ msg: 'Soft-deleting user account', userId });

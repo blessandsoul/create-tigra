@@ -43,14 +43,6 @@ export function validateImageFile(file: MultipartFile): void {
     throw new ValidationError('No file was uploaded', 'FILE_REQUIRED');
   }
 
-  // Validate file size
-  if (!file.file.bytesRead) {
-    throw new ValidationError('Uploaded file is empty', 'FILE_EMPTY');
-  }
-
-  // Note: file.file.bytesRead might not be available until the stream is consumed
-  // For proper size validation, we'll need to check this during buffer reading
-
   // Validate MIME type
   const mimeType = file.mimetype;
   if (!(FILE_UPLOAD_CONSTANTS.ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType)) {

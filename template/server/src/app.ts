@@ -21,7 +21,7 @@ import { adminRoutes } from '@modules/admin/admin.routes.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
-import { isIpBlocked, recordRateLimitViolation } from '@libs/ip-block.js';
+import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
 import { ForbiddenError } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
@@ -134,6 +134,9 @@ export async function buildApp() {
 
   // Initialize file storage (create directories)
   await fileStorageService.initialize();
+
+  // --- Sync permanent IP blocks from DB to Redis ---
+  await syncBlockedIpsToRedis();
 
   // --- IP Block Check (runs before everything else) ---
   app.addHook('onRequest', async (request: FastifyRequest) => {

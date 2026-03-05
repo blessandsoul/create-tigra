@@ -31,4 +31,4 @@ Thumbs.db
 
 # Uploads (local development)
 uploads/
-!uploads/avatars/.gitkeep
+!uploads/avatar/.gitkeep

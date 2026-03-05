@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '@config/env.js';
 import { prisma } from '@libs/prisma.js';
-import { UnauthorizedError, ForbiddenError } from '@shared/errors/errors.js';
+import { UnauthorizedError, ForbiddenError, BadRequestError } from '@shared/errors/errors.js';
 import type { JwtPayload, UserRole } from '@shared/types/index.js';
 
 let app: FastifyInstance | null = null;
@@ -95,5 +95,49 @@ export function authorize(...roles: UserRole[]) {
       throw new ForbiddenError('Insufficient permissions');
     }
   };
+}
+
+/**
+ * Middleware: resolves targetUserId from the authenticated user's JWT.
+ * Used for /users/me routes.
+ * Must run AFTER authenticate.
+ */
+export async function resolveMe(
+  request: FastifyRequest,
+  _reply: FastifyReply,
+): Promise<void> {
+  request.targetUserId = request.user.userId;
+  request.isAdminAction = false;
+}
+
+/**
+ * Middleware: resolves targetUserId from :userId param.
+ * Allows access if the authenticated user is the owner OR has ADMIN role.
+ * Must run AFTER authenticate.
+ *
+ * Sets:
+ * - request.targetUserId: the resolved user ID from params
+ * - request.isAdminAction: true if admin is acting on a different user
+ */
+export async function resolveTargetUser(
+  request: FastifyRequest,
+  _reply: FastifyReply,
+): Promise<void> {
+  const params = request.params as { userId?: string };
+  const targetUserId = params.userId;
+
+  if (!targetUserId) {
+    throw new BadRequestError('Missing userId parameter', 'MISSING_USER_ID');
+  }
+
+  const isOwner = request.user.userId === targetUserId;
+  const isAdmin = request.user.role === 'ADMIN';
+
+  if (!isOwner && !isAdmin) {
+    throw new ForbiddenError('You do not have permission to perform this action');
+  }
+
+  request.targetUserId = targetUserId;
+  request.isAdminAction = !isOwner && isAdmin;
 }
 

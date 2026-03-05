@@ -22,7 +22,8 @@
     "redis:flush": "tsx scripts/flush-redis.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "generate:env": "node -e \"import('fs').then(f=>{if(f.existsSync('.env'))console.log('.env already exists, skipping');else{f.copyFileSync('.env.example','.env');console.log('.env created from .env.example')}})\""
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

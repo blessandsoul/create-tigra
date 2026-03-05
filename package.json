@@ -1,6 +1,6 @@
 {
   "name": "create-tigra",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "description": "Create a production-ready full-stack app with Next.js 16 + Fastify 5 + Prisma + Redis",
   "bin": {
@@ -39,6 +39,9 @@
     "url": "https://github.com/blessandsoul/create-tigra/issues"
   },
   "homepage": "https://github.com/blessandsoul/create-tigra#readme",
+  "scripts": {
+    "create:test": "node -e \"import('fs').then(f=>f.rmSync('testapp',{recursive:true,force:true}))\" && node bin/create-tigra.js testapp"
+  },
   "dependencies": {
     "chalk": "^5.4.1",
     "commander": "^13.1.0",

@@ -7,13 +7,16 @@
 import { z } from 'zod';
 
 /**
- * Schema for getting a user's avatar
+ * Schema for :userId URL parameter
  *
- * Validates userId parameter in URL
+ * Reused across all routes that take :userId in the URL.
  */
-export const GetUserAvatarSchema = z.object({
+export const UserIdParamSchema = z.object({
   userId: z.string().uuid({ message: 'Invalid user ID format' }),
 });
+
+/** Alias for backward compatibility */
+export const GetUserAvatarSchema = UserIdParamSchema;
 
 /**
  * Schema for updating user profile
@@ -51,9 +54,26 @@ export const DeleteAccountSchema = z.object({
 });
 
 /**
+ * Schema for admin-initiated password change
+ *
+ * Admin does not need to provide the user's current password.
+ */
+export const AdminChangePasswordSchema = z.object({
+  newPassword: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be at most 128 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+});
+
+/**
  * Type inference from schemas
  */
-export type GetUserAvatarParams = z.infer<typeof GetUserAvatarSchema>;
+export type UserIdParams = z.infer<typeof UserIdParamSchema>;
+export type GetUserAvatarParams = UserIdParams;
 export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
+export type AdminChangePasswordInput = z.infer<typeof AdminChangePasswordSchema>;
 export type DeleteAccountInput = z.infer<typeof DeleteAccountSchema>;

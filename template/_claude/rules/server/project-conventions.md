@@ -212,3 +212,16 @@ const apiClient = axios.create({ ...httpClient.defaults, baseURL: 'https://api.e
 - Always use `httpClient` — never `fetch`, `node:http`, or inline `axios.create()`.
 - Never add auth headers, cookies, or credentials to the singleton itself.
 - Never log response bodies (may contain PII or secrets).
+
+## File Storage
+
+Upload directory structure: `uploads/users/{userId}/<media-type>/`
+
+| Media type | Path | Example |
+|---|---|---|
+| Avatar | `uploads/users/{userId}/avatar/` | `uploads/users/abc123/avatar/john-doe-avatar.webp` |
+
+- All user media lives under `uploads/users/{userId}/` for easy per-user cleanup.
+- On account purge, delete the entire `uploads/users/{userId}/` directory via `deleteUserMedia()`.
+- Public URL pattern: `/uploads/users/{userId}/<media-type>/{filename}`
+- New media types follow the same pattern: add a subfolder under the user directory.

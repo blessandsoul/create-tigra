@@ -180,8 +180,6 @@ export const API_ENDPOINTS = {
     LOGOUT: '/auth/logout',
     REFRESH: '/auth/refresh',
     ME: '/auth/me',
-    VERIFY_EMAIL: '/auth/verify-email',
-    RESEND_VERIFICATION: '/auth/resend-verification',
     REQUEST_PASSWORD_RESET: '/auth/request-password-reset',
     RESET_PASSWORD: '/auth/reset-password',
   },
@@ -199,7 +197,6 @@ export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
   REGISTER: '/register',
-  VERIFY_EMAIL: '/verify-email',
   RESET_PASSWORD: '/reset-password',
   DASHBOARD: '/dashboard',
   PROFILE: '/profile',
@@ -369,7 +366,7 @@ Auth types from `02-components-and-types.md`:
 
 #### `src/features/auth/services/auth.service.ts`
 Auth service class from `03-data-and-state.md`:
-- `register`, `login`, `logout`, `refreshToken`, `getMe`, `verifyEmail`, `requestPasswordReset`, `resetPassword`
+- `register`, `login`, `logout`, `refreshToken`, `getMe`, `requestPasswordReset`, `resetPassword`
 - Uses `apiClient` and `API_ENDPOINTS`
 - Singleton export: `export const authService = new AuthService();`
 

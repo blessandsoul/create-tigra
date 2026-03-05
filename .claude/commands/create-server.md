@@ -325,7 +325,6 @@ model User {
   lastName      String
   role          String    @default("USER")
   isActive      Boolean   @default(true)
-  emailVerified Boolean   @default(false)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

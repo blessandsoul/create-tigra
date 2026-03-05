@@ -92,7 +92,7 @@ class ItemService {
 export const itemService = new ItemService();
 ```
 
-Auth service methods: `register`, `login`, `logout`, `refreshToken`, `getMe`, `verifyEmail`, `requestPasswordReset`, `resetPassword`.
+Auth service methods: `register`, `login`, `logout`, `refreshToken`, `getMe`, `requestPasswordReset`, `resetPassword`.
 
 ---
 
