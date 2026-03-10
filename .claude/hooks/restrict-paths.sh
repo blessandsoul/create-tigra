@@ -14,9 +14,9 @@
 
 ROLE_FILE="$CLAUDE_PROJECT_DIR/.developer-role"
 
-# Read role from file, trim whitespace
+# Read role from first non-comment, non-empty line
 if [ -f "$ROLE_FILE" ]; then
-  ROLE=$(tr -d '[:space:]' < "$ROLE_FILE")
+  ROLE=$(grep -v '^\s*#' "$ROLE_FILE" | grep -v '^\s*$' | head -1 | tr -d '[:space:]')
 else
   ROLE=""
 fi

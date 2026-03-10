@@ -9,9 +9,6 @@ const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1',
   timeout: 30000,
   withCredentials: true, // Send cookies with every request
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // No request interceptor needed — cookies are sent automatically
@@ -46,8 +43,15 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Don't retry refresh endpoint itself
-    if (originalRequest.url === API_ENDPOINTS.AUTH.REFRESH) {
+    // Don't retry auth endpoints that don't use tokens —
+    // a 401 here means wrong credentials, not an expired token.
+    const noRetryEndpoints = [
+      API_ENDPOINTS.AUTH.LOGIN,
+      API_ENDPOINTS.AUTH.REGISTER,
+      API_ENDPOINTS.AUTH.REFRESH,
+      API_ENDPOINTS.AUTH.RESET_PASSWORD,
+    ];
+    if (noRetryEndpoints.includes(originalRequest.url ?? '')) {
       return Promise.reject(error);
     }
 
@@ -57,6 +61,8 @@ apiClient.interceptors.response.use(
       resetRefreshState();
     }
 
+    originalRequest._retry = true;
+
     if (isRefreshing) {
       return new Promise<void>((resolve, reject) => {
         failedQueue.push({ resolve, reject });
@@ -64,8 +70,6 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       });
     }
-
-    originalRequest._retry = true;
     isRefreshing = true;
     refreshTimestamp = Date.now();
 
@@ -94,6 +98,9 @@ apiClient.interceptors.response.use(
         store.dispatch(logout());
 
         if (typeof window !== 'undefined') {
+          // Clear session indicator so middleware won't let user through
+          // to protected pages — prevents redirect loops
+          document.cookie = 'auth_session=; Max-Age=0; path=/; SameSite=Strict';
           window.location.href = ROUTES.LOGIN;
         }
       }

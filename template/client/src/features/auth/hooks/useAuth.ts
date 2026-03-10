@@ -38,7 +38,7 @@ export const useAuth = (): UseAuthReturn => {
       dispatch(setUser(data.user));
       toast.success('Signed in successfully');
       const from = searchParams.get('from');
-      const redirectTo = from && from.startsWith('/') && !from.startsWith('//') ? from : '/';
+      const redirectTo = from && from.startsWith('/') && !from.startsWith('//') ? from : ROUTES.DASHBOARD;
       router.push(redirectTo);
     },
     onError: (error) => {
@@ -51,7 +51,7 @@ export const useAuth = (): UseAuthReturn => {
     onSuccess: (data) => {
       dispatch(setUser(data.user));
       toast.success('Account created successfully');
-      router.push(ROUTES.HOME);
+      router.push(ROUTES.DASHBOARD);
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));

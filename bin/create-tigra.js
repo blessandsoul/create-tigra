@@ -216,7 +216,18 @@ async function main() {
         }
 
         // Create .developer-role file (default: fullstack = no restrictions)
-        await fs.writeFile(path.join(targetDir, '.developer-role'), 'fullstack\n', 'utf-8');
+        const developerRoleContent = [
+          'fullstack',
+          '# Available roles (change the first line to switch):',
+          '#',
+          '#   frontend   - Can edit client/ only. Cannot edit server/ files. Can read everything.',
+          '#   backend    - Can edit server/ only. Cannot edit client/ files. Can read everything.',
+          '#   fullstack  - Can edit everything. No restrictions.',
+          '#',
+          '# You can also switch roles using the /role command in Claude.',
+          '',
+        ].join('\n');
+        await fs.writeFile(path.join(targetDir, '.developer-role'), developerRoleContent, 'utf-8');
 
         spinner.succeed('Project scaffolded successfully!');
       } catch (error) {

@@ -215,7 +215,15 @@ const apiClient = axios.create({ ...httpClient.defaults, baseURL: 'https://api.e
 
 ## File Storage
 
-Upload directory structure: `uploads/users/{userId}/<media-type>/`
+### Directory Structure Principles
+
+Upload folders must be **scalable and manageable**. Never dump all files into a single flat directory (e.g., all product images under `/uploads/products/`). Instead, organize by **owner/entity ID** so each entity's files are isolated and easy to find, move, or delete.
+
+**Pattern**: `uploads/<domain>/{entityId}/<media-type>/`
+
+### User Uploads
+
+Structure: `uploads/users/{userId}/<media-type>/`
 
 | Media type | Path | Example |
 |---|---|---|
@@ -225,3 +233,22 @@ Upload directory structure: `uploads/users/{userId}/<media-type>/`
 - On account purge, delete the entire `uploads/users/{userId}/` directory via `deleteUserMedia()`.
 - Public URL pattern: `/uploads/users/{userId}/<media-type>/{filename}`
 - New media types follow the same pattern: add a subfolder under the user directory.
+
+### Domain Entity Uploads (Products, Articles, etc.)
+
+Structure: `uploads/<domain>/{entityId}/<media-type>/`
+
+| Domain | Media type | Path | Example |
+|---|---|---|---|
+| Products | Images | `uploads/products/{productId}/images/` | `uploads/products/prod-456/images/front-view.webp` |
+| Products | Thumbnails | `uploads/products/{productId}/thumbnails/` | `uploads/products/prod-456/thumbnails/front-view-thumb.webp` |
+| Articles | Cover | `uploads/articles/{articleId}/cover/` | `uploads/articles/art-789/cover/hero.webp` |
+| Articles | Content images | `uploads/articles/{articleId}/content/` | `uploads/articles/art-789/content/diagram-1.webp` |
+
+### Rules
+
+1. **Never use flat directories** — `uploads/products/img1.jpg, img2.jpg, ...` is forbidden. Always namespace by entity ID.
+2. **One folder per entity instance** — makes deletion, migration, and backup trivial (`rm -rf uploads/products/{id}/`).
+3. **Separate media types into subfolders** — don't mix avatars, thumbnails, and full-size images in the same folder.
+4. **Entity cleanup** — when an entity is deleted, remove its entire upload directory (e.g., `uploads/products/{productId}/`).
+5. **Consistent naming** — use kebab-case for filenames, domain plural for top-level folders (`products`, `articles`, `users`).
