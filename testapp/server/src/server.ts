@@ -13,7 +13,7 @@ async function start(): Promise<void> {
     if (isShuttingDown) return; // Prevent multiple shutdown attempts
     isShuttingDown = true;
 
-    logger.info(`[SERVER] Received ${signal} — shutting down gracefully`);
+    logger.info(`[SERVER] Received ${signal} - shutting down gracefully`);
     try {
       if (app) {
         await app.close();
