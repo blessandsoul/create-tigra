@@ -28,6 +28,11 @@ RUN if [ -f pnpm-lock.yaml ]; then \
 # ===================================================================
 FROM node:20-alpine AS builder
 
+# Override NODE_ENV to ensure devDependencies are installed.
+# Coolify may inject NODE_ENV=production as a build arg, which causes npm ci
+# to skip devDependencies (typescript, @types/node, etc.) and break the build.
+ENV NODE_ENV=development
+
 WORKDIR /app
 
 # Copy package files and install ALL dependencies (including dev)

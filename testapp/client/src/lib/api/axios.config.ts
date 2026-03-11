@@ -45,7 +45,7 @@ apiClient.interceptors.response.use(
 
     // Don't retry auth endpoints that don't use tokens —
     // a 401 here means wrong credentials, not an expired token.
-    const noRetryEndpoints = [
+    const noRetryEndpoints: string[] = [
       API_ENDPOINTS.AUTH.LOGIN,
       API_ENDPOINTS.AUTH.REGISTER,
       API_ENDPOINTS.AUTH.REFRESH,
