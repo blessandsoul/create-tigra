@@ -82,6 +82,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 # Copy Prisma files (needed for migrations)
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 
+# Create uploads directory with correct ownership (must be before USER nodejs)
+RUN mkdir -p /app/uploads && chown nodejs:nodejs /app/uploads
+
 # Switch to non-root user
 USER nodejs
 
