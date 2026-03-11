@@ -1,0 +1,524 @@
+{
+  "info": {
+    "name": "Testapp API",
+    "_postman_id": "testapp-server-collection",
+    "description": "API collection for Testapp.\n\nAll authenticated requests inherit Bearer Token auth from the collection root.\nLogin/Register requests auto-set tokens via test scripts.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api/v1"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "targetUserId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Authentication endpoints. No auth required for these requests.",
+      "auth": {
+        "type": "noauth"
+      },
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password123\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user account."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const res = pm.response.json();",
+                  "  if (res.data && res.data.user) {",
+                  "    pm.collectionVariables.set('userId', res.data.user.id);",
+                  "  }",
+                  "  // Tokens are set via httpOnly cookies, not in response body",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"Password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with email and password. Tokens are set as httpOnly cookies."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  if (res.data && res.data.user) {",
+                  "    pm.collectionVariables.set('userId', res.data.user.id);",
+                  "  }",
+                  "  // Tokens are set via httpOnly cookies, not in response body",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Refresh access token using the refresh_token cookie."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout and clear auth cookies."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Get the currently authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Sessions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "sessions"]
+            },
+            "description": "Get all active sessions for the current user."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout All Sessions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout-all"]
+            },
+            "description": "Logout from all sessions and invalidate all refresh tokens."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "User profile and avatar management. All requests require authentication (inherited from collection root).",
+      "item": [
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Update the current user's profile. At least one field (firstName or lastName) must be provided."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Password123\",\n  \"newPassword\": \"NewPassword456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "password"]
+            },
+            "description": "Change the current user's password. Requires current password verification. Invalidates all sessions after successful change."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"Password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Soft-delete the current user's account. Requires password confirmation. Account data is permanently purged after 30 days."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Avatar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Image file (JPEG, PNG, or WebP, max 10MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "avatar"]
+            },
+            "description": "Upload or replace the current user's avatar. Accepts JPEG, PNG, or WebP. Max 10MB. Image is optimized and converted to WebP."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Avatar",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "avatar"]
+            },
+            "description": "Delete the current user's avatar."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Avatar",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}/avatar",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}", "avatar"]
+            },
+            "description": "Get a user's avatar image by user ID. Public endpoint — no authentication required."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints. Requires ADMIN role. Auth inherited from collection root.",
+      "item": [
+        {
+          "name": "User Management",
+          "description": "Manage users by ID. Requires ADMIN role. Set {{targetUserId}} before calling.",
+          "item": [
+            {
+              "name": "Update Profile (by ID)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}"]
+                },
+                "description": "Update a user's profile by ID. Requires owner or admin access."
+              },
+              "response": []
+            },
+            {
+              "name": "Change Password (by ID)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"newPassword\": \"NewPassword456\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}/password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}", "password"]
+                },
+                "description": "Change a user's password by ID. Admin: only newPassword required. Invalidates all target user sessions."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Account (by ID)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}"]
+                },
+                "description": "Soft-delete a user's account by ID. No password required for admin. Invalidates all target user sessions."
+              },
+              "response": []
+            },
+            {
+              "name": "Upload Avatar (by ID)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": "",
+                      "description": "Image file (JPEG, PNG, or WebP, max 10MB)"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}/avatar",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}", "avatar"]
+                },
+                "description": "Upload or replace a user's avatar by ID. Requires admin access. Accepts JPEG, PNG, or WebP."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Avatar (by ID)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/{{targetUserId}}/avatar",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", "{{targetUserId}}", "avatar"]
+                },
+                "description": "Delete a user's avatar by ID. Requires admin access."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "List Blocked IPs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/blocked-ips",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "blocked-ips"]
+            },
+            "description": "List all blocked IP addresses. Returns permanent blocks and active auto-blocks separately."
+          },
+          "response": []
+        },
+        {
+          "name": "Block IP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ip\": \"1.2.3.4\",\n  \"reason\": \"Spam bot\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/blocked-ips",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "blocked-ips"]
+            },
+            "description": "Permanently block an IP address. Persisted to database and cached in Redis. Blocked IPs receive 403 IP_BLOCKED on all requests. Optional reason field for audit trail."
+          },
+          "response": []
+        },
+        {
+          "name": "Unblock IP",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/blocked-ips/1.2.3.4",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "blocked-ips", "1.2.3.4"]
+            },
+            "description": "Remove an IP from the permanent block list. Also removes it from auto-blocks if present."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

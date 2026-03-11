@@ -17,6 +17,7 @@
 | Writing service or business logic | `project-conventions.md` (Layer Responsibilities) |
 | Changing DB schema, migrations, indexes | `database.md` |
 | Adding or changing API endpoints | `project-conventions.md` (Postman Collection) |
+| Adding dependencies, changing ports, entry points, or env vars | `deployment.md` |
 | Unsure where to start | This file |
 
 ---
@@ -48,3 +49,4 @@ Request
 5. **Logging**: Use `logger` from `src/libs/logger`. Never `console.log`.
 6. **Routes**: All prefixed with `/api/v1`. Registered as Fastify plugins.
 7. **Postman**: Every new or modified endpoint must be reflected in `postman/collection.json`. Create the collection if it doesn't exist.
+8. **Deployment**: Every change must remain compatible with the Dockerfile. Read `deployment.md` when adding system dependencies, changing ports, renaming entry points, or adding env vars.

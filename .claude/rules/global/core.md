@@ -66,6 +66,21 @@ When the user asks to create, scaffold, or start a new server or client project,
 
 ---
 
+## Deployment Awareness
+
+Both server and client are deployed via **Docker on Coolify**. The `Dockerfile` in each directory is the production deployment contract. Code changes must never silently break the Docker build.
+
+**Always check deployment impact when you:**
+- Add a native/system npm dependency (needs `apk add` in Dockerfile)
+- Add, remove, or rename a `NEXT_PUBLIC_*` env var (needs `ARG` + `ENV` in client Dockerfile)
+- Change the build output directory, entry point file, or default port
+- Add runtime file dependencies (templates, static assets not in `public/`)
+- Change or remove a health check endpoint
+
+**See the deployment rules** in `server/deployment.md` and `client/07-deployment.md` for full details.
+
+---
+
 ## Code Review Checklist
 
 Before considering work done, verify:
@@ -77,3 +92,4 @@ Before considering work done, verify:
 - [ ] Inputs validated with Zod.
 - [ ] Error cases handled (not just the happy path).
 - [ ] Existing tests still pass.
+- [ ] Dockerfile still compatible with changes (see Deployment Awareness above).

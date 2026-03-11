@@ -12,6 +12,7 @@
 | Choosing colors, styling, typography, spacing, motion | `04-design-system.md` |
 | Auth tokens, env vars, security headers | `05-security.md` |
 | UX psychology, cognitive load, a11y, performance | `06-ux-checklist.md` |
+| Docker, deployment, adding env vars, system deps | `07-deployment.md` |
 
 ---
 
@@ -41,3 +42,4 @@ State: Server data (SSR) → Server Components
 6. **Import order**: React/Next → third-party → UI → local → hooks → services → types → utils.
 7. **Forms**: Validate with Zod. Always validate client-side AND server-side.
 8. **Security**: Never inject raw HTML without sanitization. Never prefix secrets with `NEXT_PUBLIC_`.
+9. **Deployment**: Never remove `output: "standalone"` from `next.config.ts`. When adding `NEXT_PUBLIC_*` env vars, also add them as `ARG` + `ENV` in the Dockerfile builder stage. Read `07-deployment.md` for details.
