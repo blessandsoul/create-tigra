@@ -66,6 +66,12 @@ When the user asks to create, scaffold, or start a new server or client project,
 
 ---
 
+## Task Completion Reports
+
+After completing any task, phase, or bug fix, you MUST provide a structured completion report — not freeform paragraphs. **Read `completion-reports.md`** for the required templates and rules. This includes deployment/production impact analysis whenever infrastructure, env vars, database, or Docker changes are involved.
+
+---
+
 ## Code Review Checklist
 
 Before considering work done, verify:

@@ -52,7 +52,7 @@ export const Header = (): React.ReactElement => {
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
         <Link
           href={ROUTES.HOME}
-          className="text-xl font-bold tracking-tight transition-colors duration-150 hover:text-primary"
+          className="text-xl font-bold tracking-tight transition-colors duration-150 active:opacity-70 md:hover:text-primary"
         >
           {APP_NAME}
         </Link>

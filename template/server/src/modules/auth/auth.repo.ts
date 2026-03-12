@@ -1,12 +1,13 @@
 import { prisma } from '@libs/prisma.js';
+import type { User, RefreshToken } from '@prisma/client';
 
-export async function findUserByEmail(email: string) {
+export async function findUserByEmail(email: string): Promise<User | null> {
   return prisma.user.findUnique({
     where: { email, deletedAt: null },
   });
 }
 
-export async function findDeletedUserByEmail(email: string) {
+export async function findDeletedUserByEmail(email: string): Promise<User | null> {
   return prisma.user.findFirst({
     where: { email, deletedAt: { not: null } },
   });
@@ -24,7 +25,7 @@ export async function restoreUser(userId: string): Promise<void> {
   });
 }
 
-export async function findUserById(id: string) {
+export async function findUserById(id: string): Promise<User | null> {
   return prisma.user.findUnique({
     where: { id, deletedAt: null },
   });
@@ -35,7 +36,7 @@ export async function createUser(data: {
   password: string;
   firstName: string;
   lastName: string;
-}) {
+}): Promise<User> {
   return prisma.user.create({
     data,
   });
@@ -45,13 +46,13 @@ export async function createRefreshToken(data: {
   token: string;
   userId: string;
   expiresAt: Date;
-}) {
+}): Promise<RefreshToken> {
   return prisma.refreshToken.create({
     data,
   });
 }
 
-export async function findRefreshToken(token: string) {
+export async function findRefreshToken(token: string): Promise<RefreshToken | null> {
   return prisma.refreshToken.findUnique({
     where: { token },
   });
@@ -98,8 +99,8 @@ export async function rotateRefreshToken(
   }
 }
 
-export async function deleteRefreshTokensByUserId(userId: string) {
-  return prisma.refreshToken.deleteMany({
+export async function deleteRefreshTokensByUserId(userId: string): Promise<void> {
+  await prisma.refreshToken.deleteMany({
     where: { userId },
   });
 }

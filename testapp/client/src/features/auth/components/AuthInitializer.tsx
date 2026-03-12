@@ -10,7 +10,7 @@ import { ROUTES } from '@/lib/constants/routes';
 import { authService } from '../services/auth.service';
 import { setUser, setInitialized } from '../store/authSlice';
 
-const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE];
+const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE, '/admin'];
 
 interface AuthInitializerProps {
   children: React.ReactNode;

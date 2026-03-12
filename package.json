@@ -1,6 +1,6 @@
 {
   "name": "create-tigra",
-  "version": "2.4.0",
+  "version": "2.6.0",
   "type": "module",
   "description": "Create a production-ready full-stack app with Next.js 16 + Fastify 5 + Prisma + Redis",
   "bin": {

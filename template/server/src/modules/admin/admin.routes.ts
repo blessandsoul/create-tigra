@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate, authorize } from '@libs/auth.js';
 import { RATE_LIMITS } from '@config/rate-limit.config.js';
 import * as adminController from './admin.controller.js';
+import { blockIpSchema, unblockIpParamsSchema } from './admin.schemas.js';
 
 export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   // All admin routes require authentication + ADMIN role
@@ -28,6 +29,9 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * Body: { ip: string }
    */
   fastify.post('/admin/blocked-ips', {
+    schema: {
+      body: blockIpSchema,
+    },
     config: { rateLimit: RATE_LIMITS.ADMIN_DEFAULT },
     handler: adminController.blockIpHandler,
   });
@@ -39,6 +43,9 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * Auth: Required (ADMIN)
    */
   fastify.delete('/admin/blocked-ips/:ip', {
+    schema: {
+      params: unblockIpParamsSchema,
+    },
     config: { rateLimit: RATE_LIMITS.ADMIN_DEFAULT },
     handler: adminController.unblockIpHandler,
   });

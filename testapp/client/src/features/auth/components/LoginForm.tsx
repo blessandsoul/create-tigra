@@ -97,7 +97,7 @@ export const LoginForm = (): React.ReactElement => {
         Don&apos;t have an account?{' '}
         <Link
           href={ROUTES.REGISTER}
-          className="font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+          className="font-medium text-primary transition-colors duration-150 active:opacity-70 md:hover:text-primary/80"
         >
           Create account
         </Link>

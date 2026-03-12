@@ -13,7 +13,7 @@ export default function GlobalError({
   reset: () => void;
 }): React.ReactElement {
   return (
-    <div className="flex min-h-[400px] flex-col items-center justify-center p-8 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center p-8 text-center">
       <AlertCircle className="mb-4 h-12 w-12 text-destructive" />
       <h2 className="mb-2 text-2xl font-bold">Something went wrong</h2>
       <p className="mb-4 text-muted-foreground">

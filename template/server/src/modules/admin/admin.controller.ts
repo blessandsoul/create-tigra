@@ -1,16 +1,10 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { z } from 'zod';
 import { successResponse } from '@shared/responses/successResponse.js';
 import { ValidationError } from '@shared/errors/errors.js';
 import { blockIp, unblockIp, getBlockedIps } from '@libs/ip-block.js';
+import { blockIpSchema } from './admin.schemas.js';
 
-const blockIpSchema = z.object({
-  ip: z.union([z.ipv4(), z.ipv6()], { message: 'Invalid IP address' }),
-  reason: z.string().max(500).optional(),
-});
-
-type BlockIpBody = z.infer<typeof blockIpSchema>;
-type UnblockIpParams = { ip: string };
+import type { BlockIpInput, UnblockIpParams } from './admin.schemas.js';
 
 export async function listBlockedIps(
   _request: FastifyRequest,
@@ -21,7 +15,7 @@ export async function listBlockedIps(
 }
 
 export async function blockIpHandler(
-  request: FastifyRequest<{ Body: BlockIpBody }>,
+  request: FastifyRequest<{ Body: BlockIpInput }>,
   reply: FastifyReply,
 ): Promise<void> {
   const parsed = blockIpSchema.safeParse(request.body);

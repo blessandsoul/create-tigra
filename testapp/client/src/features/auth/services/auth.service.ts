@@ -36,10 +36,6 @@ class AuthService {
     return response.data.data;
   }
 
-  async verifyEmail(token: string): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.AUTH.VERIFY_EMAIL, { token });
-  }
-
   async requestPasswordReset(email: string): Promise<void> {
     await apiClient.post(API_ENDPOINTS.AUTH.REQUEST_PASSWORD_RESET, { email });
   }

@@ -32,6 +32,12 @@ src/
 │       ├── store/          # <domain>Slice.ts (if needed)
 │       ├── types/          # <domain>.types.ts
 │       └── actions/        # <domain>.actions.ts (Server Actions)
+├── styles/
+│   └── themes/             # Color theme presets (switch in globals.css import)
+│       ├── warm-orange.css  # Default — earthy, warm
+│       ├── electric-indigo.css
+│       ├── ocean-teal.css
+│       └── rose-pink.css
 ├── hooks/                  # Global hooks (useDebounce, useLocalStorage, useMediaQuery)
 ├── lib/
 │   ├── api/                # axios.config.ts, api.types.ts

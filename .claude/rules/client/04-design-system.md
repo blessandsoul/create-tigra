@@ -14,60 +14,83 @@ Clean, airy, "expensive" look inspired by Linear, Vercel, Stripe, Arc. Every vis
 
 This project uses **Tailwind CSS v4** with **OKLCH color space** and the `@theme inline` directive (not the legacy `tailwind.config.ts`).
 
-```css
-/* app/globals.css */
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
-
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  /* ... maps all semantic tokens to Tailwind */
-}
-
-:root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --primary: oklch(0.45 0.2 260);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.45 0.2 260);
-  --success: oklch(0.52 0.17 155);
-  --success-foreground: oklch(1 0 0);
-  --warning: oklch(0.75 0.18 75);
-  --warning-foreground: oklch(0.2 0 0);
-  --info: oklch(0.55 0.15 240);
-  --info-foreground: oklch(1 0 0);
-  --chart-1 through --chart-5  /* Data visualization colors */
-  --sidebar, --sidebar-foreground, etc.  /* Sidebar-specific tokens */
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  /* ... dark mode overrides for all tokens */
-}
-```
-
 **Key differences from Tailwind v3:**
 - No `tailwind.config.ts` — all config is CSS-based via `@theme inline`
 - Colors use **OKLCH** (perceptually uniform) not HSL
 - `@custom-variant dark` replaces `darkMode: 'class'`
-- No `@layer base { :root { } }` — variables defined directly on `:root`
+- No `@layer base { :root { } }` — variables defined on `:root` via theme preset files
+
+---
+
+## Theme Preset System (Color Management)
+
+**ALL color variables live in theme preset files, NOT in `globals.css`.** This is the single source of truth for the entire app's color palette.
+
+### How It Works
+
+```
+src/
+├── app/globals.css                    ← imports ONE theme preset (switch here)
+└── styles/themes/
+    ├── warm-orange.css                ← Earthy, warm (default)
+    ├── electric-indigo.css            ← Modern, bold, tech-forward
+    ├── ocean-teal.css                 ← Calm, professional
+    └── rose-pink.css                  ← Elegant, creative
+```
+
+`globals.css` imports the active theme via a single line:
+
+```css
+@import "../styles/themes/warm-orange.css";
+```
+
+**To switch the entire palette**: change that ONE import line. That's it. Every color in the app updates instantly — light mode, dark mode, charts, sidebar, everything.
+
+### Theme Preset Structure
+
+Each preset file defines ALL semantic color variables for both `:root` (light) and `.dark` (dark mode):
+
+```css
+:root {
+  --radius: 0.625rem;
+  --background: oklch(...);
+  --foreground: oklch(...);
+  --primary: oklch(...);
+  --primary-foreground: oklch(...);
+  /* ... all ~35 semantic tokens */
+}
+
+.dark {
+  --background: oklch(...);
+  --foreground: oklch(...);
+  --primary: oklch(...);
+  /* ... dark mode overrides for all tokens */
+}
+```
+
+### Creating a Custom Theme
+
+1. Copy any existing preset file (e.g., `warm-orange.css`)
+2. Rename it (e.g., `my-brand.css`)
+3. Edit the OKLCH values to match your brand palette
+4. Update the import in `globals.css`: `@import "../styles/themes/my-brand.css";`
+
+### Available Presets
+
+| Preset | Accent | Vibe | Inspired by |
+|--------|--------|------|-------------|
+| `warm-orange.css` | Terracotta orange | Earthy, warm, approachable | Claude |
+| `electric-indigo.css` | Deep indigo-violet | Modern, bold, tech-forward | Linear, Figma |
+| `ocean-teal.css` | Deep teal-cyan | Calm, professional, trustworthy | Stripe, Vercel |
+| `rose-pink.css` | Soft rose-magenta | Elegant, creative, premium | Dribbble, Notion |
+
+### CRITICAL RULES — Color Management
+
+1. **NEVER add or modify color variables directly in `globals.css`.** All `:root` and `.dark` color variables belong in the active theme preset file only.
+2. **NEVER hardcode OKLCH/hex/rgb values in components.** Always use semantic tokens (`bg-primary`, `text-foreground`).
+3. **To change the brand palette**: switch the import in `globals.css` or edit the active preset file. Never scatter color values across multiple files.
+4. **New semantic tokens**: If you need a new color token (rare), add it to ALL preset files to keep them in sync.
+5. **The `@theme inline` block in `globals.css` maps CSS vars to Tailwind** — it does NOT define colors. Colors come from the preset.
 
 ---
 
@@ -117,7 +140,7 @@ This project uses **Tailwind CSS v4** with **OKLCH color space** and the `@theme
 1. **Never hardcode**: No `bg-blue-500`, no `bg-[#3b82f6]`, no `style={{ color }}`. Always semantic tokens.
 2. **Semantic names by purpose**: `bg-destructive` not `bg-red`.
 3. **Always pair bg + foreground**: `bg-primary text-primary-foreground` for contrast.
-4. **Single source of truth**: Change colors only in `globals.css` variables.
+4. **Single source of truth**: Change colors ONLY in the active theme preset file (`src/styles/themes/*.css`). Never in `globals.css`, never in components.
 5. **90% monochrome**: 90% of UI uses `background`, `foreground`, `muted`, `border`. Color is the exception.
 6. **Opacity for hierarchy**: Use `bg-primary/10`, `bg-primary/5` for tinted backgrounds.
 

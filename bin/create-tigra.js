@@ -12,6 +12,9 @@ import crypto from 'crypto';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+const VERSION = packageJson.version;
+
 const TEMPLATE_DIR = path.join(__dirname, '..', 'template');
 
 // Files that contain template variables and need replacement
@@ -126,11 +129,11 @@ async function main() {
   program
     .name('create-tigra')
     .description('Create a production-ready full-stack app with Next.js + Fastify + Prisma + Redis')
-    .version('2.1.0')
+    .version(VERSION)
     .argument('[project-name]', 'Name for your new project')
     .action(async (projectNameArg) => {
       console.log();
-      console.log(chalk.bold('  Create Tigra') + chalk.dim(' v2.1.0'));
+      console.log(chalk.bold('  Create Tigra') + chalk.dim(` v${VERSION}`));
       console.log();
 
       let projectName = projectNameArg;
