@@ -9,7 +9,7 @@
 | Creating files, folders, feature modules | `01-project-structure.md` |
 | Building components, writing types/interfaces | `02-components-and-types.md` |
 | Fetching data, managing state, calling APIs, forms | `03-data-and-state.md` |
-| Choosing colors, styling, typography, spacing, motion, **theme presets** | `04-design-system.md` |
+| Choosing colors, styling, typography, spacing, motion, **theme presets**, **font presets** | `04-design-system.md` |
 | Auth tokens, env vars, security headers | `05-security.md` |
 | UX psychology, cognitive load, a11y, performance | `06-ux-checklist.md` |
 
@@ -37,8 +37,9 @@ State: Server data (SSR) → Server Components
 2. **Server Components by default.** Only add `'use client'` when you need hooks, state, or event handlers.
 3. **Component limits**: Max 250 lines, max 5 props, max 3 JSX nesting levels.
 4. **No hardcoded colors**: Use Tailwind semantic tokens (`bg-primary`, `text-foreground`). Never hex/rgb. **All color variables live in theme preset files (`src/styles/themes/*.css`), NOT in `globals.css` or components.** To change the palette, switch the import in `globals.css` or edit the active preset. Read `04-design-system.md` → "Theme Preset System" for details.
-5. **No inline styles**: Tailwind only. Use `cn()` for conditional classes.
-6. **Import order**: React/Next → third-party → UI → local → hooks → services → types → utils.
-7. **Forms**: Validate with Zod. Always validate client-side AND server-side.
-8. **Security**: Never inject raw HTML without sanitization. Never prefix secrets with `NEXT_PUBLIC_`.
-9. **Deployment**: Never remove `output: "standalone"` from `next.config.ts`. When adding `NEXT_PUBLIC_*` env vars, also add them as `ARG` + `ENV` in the Dockerfile builder stage. Read `07-deployment.md` for details.
+5. **No hardcoded fonts**: Use Tailwind font classes (`font-sans`, `font-heading`, `font-mono`). Never hardcode `font-family` in components. **Font families are defined in font preset files (`src/styles/fonts/*.css`).** To change fonts, update the `next/font/google` imports in `layout.tsx` and the font preset file. Read `04-design-system.md` → "Font Preset System" for details.
+6. **No inline styles**: Tailwind only. Use `cn()` for conditional classes.
+7. **Import order**: React/Next → third-party → UI → local → hooks → services → types → utils.
+8. **Forms**: Validate with Zod. Always validate client-side AND server-side.
+9. **Security**: Never inject raw HTML without sanitization. Never prefix secrets with `NEXT_PUBLIC_`.
+10. **Deployment**: Never remove `output: "standalone"` from `next.config.ts`. When adding `NEXT_PUBLIC_*` env vars, also add them as `ARG` + `ENV` in the Dockerfile builder stage. Read `07-deployment.md` for details.

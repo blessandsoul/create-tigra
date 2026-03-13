@@ -463,7 +463,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
 
 #### `src/app/layout.tsx`
 Root layout:
-- Import and use `next/font` (Inter or Geist Sans)
+- Import and use `next/font/google` (fonts defined by the active font preset — default: Inter + JetBrains Mono)
 - `<html lang="en" suppressHydrationWarning>`
 - Wrap children in `<Providers>`
 - Default metadata with app name

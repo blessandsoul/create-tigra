@@ -1,0 +1,16 @@
+/*
+ * Font Preset: Inter + JetBrains Mono
+ * Sans/Heading: Inter — clean, modern, designed for screens
+ * Mono: JetBrains Mono — developer-friendly with ligatures
+ *
+ * To switch fonts:
+ * 1. Update the font imports in layout.tsx (next/font/google)
+ * 2. Create a new preset file (or edit this one) with matching font-family names
+ * 3. Update the import in globals.css to point to your preset
+ */
+
+:root {
+  --font-sans-value: var(--font-inter);
+  --font-heading-value: var(--font-inter);
+  --font-mono-value: var(--font-jetbrains-mono);
+}

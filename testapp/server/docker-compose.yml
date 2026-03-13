@@ -9,7 +9,7 @@ services:
     container_name: testapp-mysql
     restart: unless-stopped
     ports:
-      - '${MYSQL_PORT:-3428}:3306'
+      - '${MYSQL_PORT:-3484}:3306'
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: testapp_db
@@ -28,7 +28,7 @@ services:
     container_name: testapp-phpmyadmin
     restart: unless-stopped
     ports:
-      - '${PHPMYADMIN_PORT:-8202}:80'
+      - '${PHPMYADMIN_PORT:-8258}:80'
     environment:
       PMA_HOST: mysql
       PMA_PORT: 3306
@@ -48,7 +48,7 @@ services:
     container_name: testapp-redis
     restart: unless-stopped
     ports:
-      - '${REDIS_PORT:-6501}:6379'
+      - '${REDIS_PORT:-6557}:6379'
     volumes:
       - redis_data:/data
     networks:
@@ -64,7 +64,7 @@ services:
     container_name: testapp-redis-commander
     restart: unless-stopped
     ports:
-      - '${REDIS_COMMANDER_PORT:-8203}:8081'
+      - '${REDIS_COMMANDER_PORT:-8259}:8081'
     environment:
       REDIS_HOSTS: local:redis:6379
     depends_on:

@@ -94,6 +94,100 @@ Each preset file defines ALL semantic color variables for both `:root` (light) a
 
 ---
 
+## Font Preset System (Font Management)
+
+**Font families are defined in font preset files, NOT hardcoded in components.** This mirrors the color theme preset system — switch the entire font pairing by changing one import.
+
+### How It Works
+
+```
+src/
+├── app/
+│   ├── layout.tsx                     ← loads fonts via next/font/google
+│   └── globals.css                    ← imports ONE font preset (switch here)
+└── styles/fonts/
+    └── inter-jetbrains.css            ← Default (Inter + JetBrains Mono)
+```
+
+### Three Semantic Font Roles
+
+| Role | CSS Variable | Tailwind Class | Default Font |
+|------|-------------|----------------|--------------|
+| Body text | `--font-sans-value` | `font-sans` | Inter |
+| Headings | `--font-heading-value` | `font-heading` | Inter |
+| Code/mono | `--font-mono-value` | `font-mono` | JetBrains Mono |
+
+### How to Switch Fonts
+
+Switching fonts requires two changes:
+
+**Step 1 — Update font imports in `layout.tsx`:**
+
+```tsx
+// Change these imports to your desired fonts
+import { Roboto, Fira_Code } from 'next/font/google';
+
+const roboto = Roboto({
+  variable: '--font-roboto',
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+});
+
+const firaCode = Fira_Code({
+  variable: '--font-fira-code',
+  subsets: ['latin'],
+});
+
+// Update the className to use new variables
+<body className={`${roboto.variable} ${firaCode.variable} font-sans antialiased`}>
+```
+
+**Step 2 — Update the font preset file (or create a new one):**
+
+```css
+/* styles/fonts/roboto-fira.css */
+:root {
+  --font-sans-value: var(--font-roboto);
+  --font-heading-value: var(--font-roboto);
+  --font-mono-value: var(--font-fira-code);
+}
+```
+
+Then update the import in `globals.css`:
+```css
+@import "../styles/fonts/roboto-fira.css";
+```
+
+### Font Preset Structure
+
+Each preset maps raw font variables (set by `next/font/google` in `layout.tsx`) to semantic roles:
+
+```css
+:root {
+  --font-sans-value: var(--font-inter);        /* body text */
+  --font-heading-value: var(--font-inter);      /* headings */
+  --font-mono-value: var(--font-jetbrains-mono); /* code */
+}
+```
+
+### Creating a Custom Font Preset
+
+1. Choose your fonts from [Google Fonts](https://fonts.google.com)
+2. Update `layout.tsx` — import fonts via `next/font/google`, set CSS variable names
+3. Create a new preset file in `src/styles/fonts/` (or edit the existing one)
+4. Map your font variables to the three semantic roles
+5. Update the import in `globals.css` to point to your preset
+
+### CRITICAL RULES — Font Management
+
+1. **NEVER hardcode font-family values in components.** Always use Tailwind classes (`font-sans`, `font-heading`, `font-mono`).
+2. **ALL font-family mappings live in the font preset file**, not in `globals.css` or components.
+3. **To change fonts**: update `layout.tsx` imports + update the font preset file. Never scatter font-family values across the codebase.
+4. **The `@theme inline` block in `globals.css` maps preset variables to Tailwind** — it does NOT define fonts. Fonts come from the preset.
+5. **Fonts are loaded via `next/font/google`** — this self-hosts fonts automatically at build time. No external requests at runtime, no manual file downloads needed.
+
+---
+
 ## Mobile-First Responsive Strategy
 
 **All Tailwind utilities are written for mobile first.** `md:` and `lg:` are progressive enhancements, not the other way around.
@@ -161,7 +255,7 @@ Each preset file defines ALL semantic color variables for both `:root` (light) a
 
 ## Typography
 
-- **Font**: Inter v4 (variable) or Geist Sans via `next/font`.
+- **Font**: Defined by the active font preset (default: Inter for sans/heading, JetBrains Mono for mono). See "Font Preset System" above for how to switch.
 - **Headings**: `text-wrap: balance`, `leading-tight`. Mobile-first responsive sizes:
   - H1: `text-2xl md:text-3xl lg:text-4xl`
   - H2: `text-xl md:text-2xl`

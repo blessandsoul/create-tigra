@@ -33,11 +33,13 @@ src/
 │       ├── types/          # <domain>.types.ts
 │       └── actions/        # <domain>.actions.ts (Server Actions)
 ├── styles/
-│   └── themes/             # Color theme presets (switch in globals.css import)
-│       ├── warm-orange.css  # Default — earthy, warm
-│       ├── electric-indigo.css
-│       ├── ocean-teal.css
-│       └── rose-pink.css
+│   ├── themes/             # Color theme presets (switch in globals.css import)
+│   │   ├── warm-orange.css  # Default — earthy, warm
+│   │   ├── electric-indigo.css
+│   │   ├── ocean-teal.css
+│   │   └── rose-pink.css
+│   └── fonts/              # Font presets (switch in globals.css import)
+│       └── inter-jetbrains.css  # Default — Inter + JetBrains Mono
 ├── hooks/                  # Global hooks (useDebounce, useLocalStorage, useMediaQuery)
 ├── lib/
 │   ├── api/                # axios.config.ts, api.types.ts

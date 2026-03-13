@@ -88,6 +88,5 @@ model BlockedIp {
 
   user User @relation(fields: [blockedBy], references: [id])
 
-  @@index([ip])
   @@map("blocked_ips")
 }
