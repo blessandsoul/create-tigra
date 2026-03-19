@@ -6,4 +6,10 @@ export const ROUTES = {
   RESET_PASSWORD: '/reset-password',
   DASHBOARD: '/dashboard',
   PROFILE: '/profile',
+  ADMIN: {
+    DASHBOARD: '/admin',
+    USERS: '/admin/users',
+    USER_DETAIL: (userId: string) => `/admin/users/${userId}`,
+    SESSIONS: '/admin/sessions',
+  },
 } as const;

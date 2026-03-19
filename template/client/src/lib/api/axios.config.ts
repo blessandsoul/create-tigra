@@ -4,9 +4,10 @@ import type { InternalAxiosRequestConfig } from 'axios';
 
 import { API_ENDPOINTS } from '@/lib/constants/api-endpoints';
 import { ROUTES } from '@/lib/constants/routes';
+import { env } from '@/lib/env';
 
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1',
+  baseURL: env.NEXT_PUBLIC_API_BASE_URL,
   timeout: 30000,
   withCredentials: true, // Send cookies with every request
 });

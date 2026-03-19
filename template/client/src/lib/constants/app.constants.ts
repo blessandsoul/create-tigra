@@ -1,4 +1,6 @@
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'My App';
+import { env } from '@/lib/env';
+
+export const APP_NAME = env.NEXT_PUBLIC_APP_NAME;
 
 export const PAGINATION = {
   DEFAULT_PAGE: 1,

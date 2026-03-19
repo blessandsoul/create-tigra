@@ -4,21 +4,16 @@
 
 /*
  * ============================================================
- * THEME PRESETS — All themes loaded, switched via data-theme
+ * THEME — Single theme with light/dark mode
  * ============================================================
- * warm-orange.css is the default (uses :root / .dark selectors).
- * Other presets are scoped to [data-theme="<name>"] and activated
- * by the ThemeSwitcher component setting data-theme on <html>.
+ * Colors are defined in default.css using :root (light) and
+ * .dark (dark mode) selectors. Light/dark toggle is handled
+ * by next-themes setting the "dark" class on <html>.
  *
- * To create a custom theme: copy any preset, scope it under
- * [data-theme="your-name"] / .dark[data-theme="your-name"],
- * import it below, and add it to ThemeSwitcher's PALETTES array.
+ * To customize colors: edit src/styles/themes/default.css
  * ============================================================
  */
-@import "../styles/themes/warm-orange.css";
-@import "../styles/themes/electric-indigo.css";
-@import "../styles/themes/ocean-teal.css";
-@import "../styles/themes/rose-pink.css";
+@import "../styles/themes/default.css";
 
 /*
  * ============================================================
@@ -85,8 +80,13 @@
 }
 
 @layer base {
-  * {
+  *,
+  *::before,
+  *::after {
     @apply border-border outline-ring/50;
+    transition-property: background-color, color, border-color, box-shadow;
+    transition-duration: 200ms;
+    transition-timing-function: ease-out;
   }
   body {
     @apply bg-background text-foreground;

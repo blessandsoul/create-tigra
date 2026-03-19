@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 
 import Image from 'next/image';
 
-import { ThemeSwitcher } from '@/components/common/ThemeSwitcher';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 import { APP_NAME } from '@/lib/constants/app.constants';
 
@@ -46,12 +46,12 @@ export default function WelcomePage(): React.ReactElement {
           <span className="font-semibold text-foreground">create-tigra</span>
         </p>
 
-        {/* Theme Palette Switcher */}
-        <div className="mt-8 pb-6">
-          <ThemeSwitcher />
+        {/* Light/Dark mode toggle */}
+        <div className="mt-8">
+          <ThemeToggle />
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:gap-4">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:gap-4">
           <a
             href="https://github.com/BehzodKarimov/create-tigra"
             target="_blank"

@@ -1,4 +1,4 @@
-import { prisma } from '@libs/prisma.js';
+import { prisma, isPrismaNotFound } from '@libs/prisma.js';
 import type { Session } from '@prisma/client';
 
 export class SessionRepository {
@@ -51,12 +51,17 @@ export class SessionRepository {
   }
 
   /**
-   * Delete a specific session
+   * Delete a specific session (no-op if already deleted)
    */
   async deleteSession(sessionId: string): Promise<void> {
-    await prisma.session.delete({
-      where: { id: sessionId },
-    });
+    try {
+      await prisma.session.delete({
+        where: { id: sessionId },
+      });
+    } catch (error) {
+      if (isPrismaNotFound(error)) return;
+      throw error;
+    }
   }
 
   /**

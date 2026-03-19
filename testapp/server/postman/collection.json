@@ -2,18 +2,8 @@
   "info": {
     "name": "Testapp API",
     "_postman_id": "testapp-server-collection",
-    "description": "API collection for Testapp.\n\nAll authenticated requests inherit Bearer Token auth from the collection root.\nLogin/Register requests auto-set tokens via test scripts.",
+    "description": "API collection for Testapp.\n\nAuthentication is cookie-based (httpOnly). After Login or Register, Postman's cookie jar automatically stores access_token and refresh_token cookies. All subsequent requests send these cookies automatically — no manual token management needed.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{accessToken}}",
-        "type": "string"
-      }
-    ]
   },
   "variable": [
     {
@@ -21,19 +11,19 @@
       "value": "http://localhost:8000/api/v1"
     },
     {
-      "key": "accessToken",
-      "value": ""
-    },
-    {
-      "key": "refreshToken",
-      "value": ""
-    },
-    {
       "key": "userId",
       "value": ""
     },
     {
       "key": "targetUserId",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "blockedIp",
       "value": ""
     }
   ],
@@ -156,16 +146,6 @@
         {
           "name": "Get Me",
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "GET",
             "header": [],
             "url": {
@@ -173,23 +153,13 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "me"]
             },
-            "description": "Get the currently authenticated user."
+            "description": "Get the currently authenticated user. Auth via httpOnly access_token cookie (sent automatically after login)."
           },
           "response": []
         },
         {
           "name": "Get Sessions",
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "GET",
             "header": [],
             "url": {
@@ -197,23 +167,13 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "sessions"]
             },
-            "description": "Get all active sessions for the current user."
+            "description": "Get all active sessions for the current user. Auth via httpOnly access_token cookie."
           },
           "response": []
         },
         {
           "name": "Logout All Sessions",
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            },
             "method": "POST",
             "header": [],
             "url": {
@@ -221,7 +181,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["auth", "logout-all"]
             },
-            "description": "Logout from all sessions and invalidate all refresh tokens."
+            "description": "Logout from all sessions and invalidate all refresh tokens. Auth via httpOnly access_token cookie."
           },
           "response": []
         }
@@ -502,6 +462,22 @@
             },
             "description": "Permanently block an IP address. Persisted to database and cached in Redis. Blocked IPs receive 403 IP_BLOCKED on all requests. Optional reason field for audit trail."
           },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "  const body = JSON.parse(pm.request.body.raw);",
+                  "  if (body && body.ip) {",
+                  "    pm.collectionVariables.set('blockedIp', body.ip);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "response": []
         },
         {
@@ -510,13 +486,155 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/blocked-ips/1.2.3.4",
+              "raw": "{{baseUrl}}/admin/blocked-ips/{{blockedIp}}",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "blocked-ips", "1.2.3.4"]
+              "path": ["admin", "blocked-ips", "{{blockedIp}}"]
             },
             "description": "Remove an IP from the permanent block list. Also removes it from auto-blocks if present."
           },
           "response": []
+        },
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stats"]
+            },
+            "description": "Get dashboard statistics: total users, active users, admin count, recent signups (7 days), active sessions."
+          },
+          "response": []
+        },
+        {
+          "name": "Users",
+          "description": "Admin user listing, detail, status, and role management.",
+          "item": [
+            {
+              "name": "List Users",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" },
+                    { "key": "search", "value": "", "disabled": true },
+                    { "key": "role", "value": "USER", "disabled": true },
+                    { "key": "isActive", "value": "true", "disabled": true },
+                    { "key": "sortBy", "value": "createdAt", "disabled": true },
+                    { "key": "sortOrder", "value": "desc", "disabled": true }
+                  ]
+                },
+                "description": "Get paginated list of users. Supports search (email, firstName, lastName), role filter, isActive filter, and sorting."
+              },
+              "response": []
+            },
+            {
+              "name": "Get User Detail",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/{{targetUserId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", "{{targetUserId}}"]
+                },
+                "description": "Get detailed user info including active session count and last login timestamp."
+              },
+              "response": []
+            },
+            {
+              "name": "Toggle User Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"isActive\": false\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/{{targetUserId}}/status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", "{{targetUserId}}", "status"]
+                },
+                "description": "Activate or deactivate a user. Deactivating also invalidates all their sessions and refresh tokens."
+              },
+              "response": []
+            },
+            {
+              "name": "Change User Role",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"role\": \"ADMIN\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/users/{{targetUserId}}/role",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "users", "{{targetUserId}}", "role"]
+                },
+                "description": "Change a user's role. Cannot change your own role (self-protection). Demoting from ADMIN invalidates their sessions."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Sessions",
+          "description": "Admin session management. View and force-expire active sessions.",
+          "item": [
+            {
+              "name": "List Sessions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sessions?page=1&limit=10",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "sessions"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" },
+                    { "key": "userId", "value": "", "disabled": true }
+                  ]
+                },
+                "description": "Get paginated list of all active sessions. Optionally filter by userId. Includes user info (id, email, name) for each session."
+              },
+              "response": []
+            },
+            {
+              "name": "Force Expire Session",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin/sessions/{{sessionId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["admin", "sessions", "{{sessionId}}"]
+                },
+                "description": "Force-expire a specific session. Also deletes associated refresh tokens."
+              },
+              "response": []
+            }
+          ]
         }
       ]
     }

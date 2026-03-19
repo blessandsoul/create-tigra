@@ -46,6 +46,7 @@ model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique @db.VarChar(500)
   userId    String
+  sessionId String?  // Links token to its session for direct lookup on logout
   expiresAt DateTime
   createdAt DateTime @default(now())
 
@@ -56,6 +57,7 @@ model RefreshToken {
   @@index([token])
   @@index([userId, expiresAt]) // Compound index for efficient token cleanup queries
   @@index([expiresAt])         // For expired token cleanup cron jobs
+  @@index([sessionId])         // For deleting tokens by session (admin force-expire)
   @@map("refresh_tokens")
 }
 

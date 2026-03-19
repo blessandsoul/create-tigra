@@ -103,16 +103,17 @@ export async function register(
   const refreshToken = generateRefreshToken();
   const refreshTokenExpiresAt = getRefreshTokenExpiresAt();
 
-  await authRepo.createRefreshToken({
-    token: refreshToken,
-    userId: user.id,
-    expiresAt: refreshTokenExpiresAt,
-  });
-
-  await sessionRepository.createSession({
+  const session = await sessionRepository.createSession({
     userId: user.id,
     deviceInfo,
     ipAddress,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  await authRepo.createRefreshToken({
+    token: refreshToken,
+    userId: user.id,
+    sessionId: session.id,
     expiresAt: refreshTokenExpiresAt,
   });
 
@@ -188,16 +189,17 @@ export async function login(
   const refreshToken = generateRefreshToken();
   const refreshTokenExpiresAt = getRefreshTokenExpiresAt();
 
-  await authRepo.createRefreshToken({
-    token: refreshToken,
-    userId: user.id,
-    expiresAt: refreshTokenExpiresAt,
-  });
-
-  await sessionRepository.createSession({
+  const session = await sessionRepository.createSession({
     userId: user.id,
     deviceInfo,
     ipAddress,
+    expiresAt: refreshTokenExpiresAt,
+  });
+
+  await authRepo.createRefreshToken({
+    token: refreshToken,
+    userId: user.id,
+    sessionId: session.id,
     expiresAt: refreshTokenExpiresAt,
   });
 
@@ -235,6 +237,7 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
   const rotated = await authRepo.rotateRefreshToken(refreshToken, {
     token: newRefreshToken,
     userId: user.id,
+    sessionId: storedToken.sessionId ?? undefined,
     expiresAt: getRefreshTokenExpiresAt(),
   });
 
@@ -249,25 +252,14 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
 }
 
 export async function logout(refreshToken: string): Promise<void> {
-  try {
-    // Find the token before deleting so we can match the corresponding session
-    const storedToken = await authRepo.findRefreshToken(refreshToken);
-    await authRepo.deleteRefreshToken(refreshToken);
+  // Find the token before deleting so we can delete the linked session.
+  // Both deleteRefreshToken and deleteSession handle "already deleted" (P2025)
+  // gracefully, so no catch needed for concurrent request / cleanup job races.
+  const storedToken = await authRepo.findRefreshToken(refreshToken);
+  await authRepo.deleteRefreshToken(refreshToken);
 
-    if (storedToken) {
-      // Match session by creation time — token and session are created together during login
-      const sessions = await sessionRepository.getUserSessions(storedToken.userId);
-      const tokenCreatedMs = storedToken.createdAt.getTime();
-      const matchingSession = sessions.find(
-        (s) => Math.abs(s.createdAt.getTime() - tokenCreatedMs) < 5000,
-      );
-
-      if (matchingSession) {
-        await sessionRepository.deleteSession(matchingSession.id);
-      }
-    }
-  } catch {
-    // Token may already be deleted by concurrent request or cleanup job
+  if (storedToken?.sessionId) {
+    await sessionRepository.deleteSession(storedToken.sessionId);
   }
 }
 

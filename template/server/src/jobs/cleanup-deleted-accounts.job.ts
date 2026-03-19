@@ -48,13 +48,23 @@ export function startCleanupDeletedAccountsJob(app: FastifyInstance): void {
 
       for (const user of usersToDelete) {
         try {
-          // Delete all user media from disk (no-op if dir doesn't exist)
-          await fileStorageService.deleteUserMedia(user.id);
-
-          // Hard delete user record (cascades to RefreshToken + Session)
+          // Hard delete user record first (cascades to RefreshToken + Session).
+          // DB deletion is the critical operation — if it succeeds but file cleanup
+          // fails, we only have orphaned files (harmless, cleanable later).
+          // The reverse (files deleted, DB intact) would leave a dangling user record.
           await prisma.user.delete({
             where: { id: user.id },
           });
+
+          // Delete all user media from disk (no-op if dir doesn't exist)
+          try {
+            await fileStorageService.deleteUserMedia(user.id);
+          } catch (fileError) {
+            logger.warn(
+              { err: fileError, userId: user.id },
+              'User record purged but file cleanup failed — orphaned files may remain',
+            );
+          }
 
           purgedCount++;
         } catch (error) {

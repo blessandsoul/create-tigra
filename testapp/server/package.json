@@ -52,6 +52,7 @@
   },
   "overrides": {
     "bn.js": ">=5.2.3",
+    "flatted": ">=3.4.2",
     "@typescript-eslint/typescript-estree": {
       "minimatch": ">=10.2.1"
     }

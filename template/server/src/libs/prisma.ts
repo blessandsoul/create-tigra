@@ -50,6 +50,19 @@ if (env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
+/**
+ * Check if a caught error is Prisma's "record not found" error (P2025).
+ * Use in delete/update operations where the record may have already been
+ * removed by a concurrent request or cleanup job.
+ */
+export function isPrismaNotFound(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error as { code: string }).code === 'P2025'
+  );
+}
+
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
     await prisma.$queryRaw`SELECT 1`;

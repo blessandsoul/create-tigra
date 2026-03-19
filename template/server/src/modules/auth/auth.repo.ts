@@ -1,4 +1,4 @@
-import { prisma } from '@libs/prisma.js';
+import { prisma, isPrismaNotFound } from '@libs/prisma.js';
 import type { User, RefreshToken } from '@prisma/client';
 
 export async function findUserByEmail(email: string): Promise<User | null> {
@@ -45,6 +45,7 @@ export async function createUser(data: {
 export async function createRefreshToken(data: {
   token: string;
   userId: string;
+  sessionId?: string;
   expiresAt: Date;
 }): Promise<RefreshToken> {
   return prisma.refreshToken.create({
@@ -64,21 +65,14 @@ export async function deleteRefreshToken(token: string): Promise<void> {
       where: { token },
     });
   } catch (error) {
-    // P2025: Record not found — token was already deleted (e.g. concurrent request)
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      (error as { code: string }).code === 'P2025'
-    ) {
-      return;
-    }
+    if (isPrismaNotFound(error)) return;
     throw error;
   }
 }
 
 export async function rotateRefreshToken(
   oldToken: string,
-  newData: { token: string; userId: string; expiresAt: Date },
+  newData: { token: string; userId: string; sessionId?: string; expiresAt: Date },
 ): Promise<boolean> {
   try {
     await prisma.$transaction([
@@ -87,14 +81,7 @@ export async function rotateRefreshToken(
     ]);
     return true;
   } catch (error) {
-    // P2025: Old token not found — already consumed by a concurrent request
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      (error as { code: string }).code === 'P2025'
-    ) {
-      return false;
-    }
+    if (isPrismaNotFound(error)) return false;
     throw error;
   }
 }

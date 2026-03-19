@@ -1,0 +1,92 @@
+/*
+ * Default Theme — Claude-inspired warm palette
+ * Accent: Terracotta orange
+ * Vibe: Earthy, warm, approachable
+ *
+ * This is the single theme file. Colors use HEX values.
+ * Light mode: :root selectors. Dark mode: .dark selectors.
+ * To customize: edit the HEX values below.
+ */
+
+:root {
+  --radius: 0.625rem;
+  /* Warm cream background with terracotta orange accent */
+  --background: #f4f3ee;
+  --foreground: #1a170f;
+  --card: #ffffff;
+  --card-foreground: #1a170f;
+  --popover: #ffffff;
+  --popover-foreground: #1a170f;
+  --primary: #c15f3c;
+  --primary-foreground: #ffffff;
+  --secondary: #ebeae3;
+  --secondary-foreground: #302e25;
+  --muted: #ebeae3;
+  --muted-foreground: #b1ada1;
+  --accent: #ebeae3;
+  --accent-foreground: #302e25;
+  --destructive: #e7000b;
+  --border: #deddd4;
+  --input: #deddd4;
+  --ring: #c15f3c;
+  --success: #008339;
+  --success-foreground: #ffffff;
+  --warning: #e99b2a;
+  --warning-foreground: #242119;
+  --info: #0079bf;
+  --info-foreground: #ffffff;
+  --chart-1: #c15f3c;
+  --chart-2: #009689;
+  --chart-3: #104e64;
+  --chart-4: #ebc065;
+  --chart-5: #b1ada1;
+  --sidebar: #f0efe9;
+  --sidebar-foreground: #1a170f;
+  --sidebar-primary: #302e25;
+  --sidebar-primary-foreground: #f4f3ee;
+  --sidebar-accent: #ebeae3;
+  --sidebar-accent-foreground: #302e25;
+  --sidebar-border: #deddd4;
+  --sidebar-ring: #c15f3c;
+}
+
+.dark {
+  /* Dark mode: inverted with same warm undertone */
+  --background: #15130d;
+  --foreground: #e9e8e3;
+  --card: #201e18;
+  --card-foreground: #e9e8e3;
+  --popover: #201e18;
+  --popover-foreground: #e9e8e3;
+  --primary: #d6724f;
+  --primary-foreground: #15130d;
+  --secondary: #2b2922;
+  --secondary-foreground: #e9e8e3;
+  --muted: #2b2922;
+  --muted-foreground: #928f85;
+  --accent: #2b2922;
+  --accent-foreground: #e9e8e3;
+  --destructive: #ff6467;
+  --border: rgba(255, 255, 250, 0.12);
+  --input: rgba(255, 255, 250, 0.15);
+  --ring: #d6724f;
+  --success: #009c50;
+  --success-foreground: #ffffff;
+  --warning: #faab3f;
+  --warning-foreground: #242119;
+  --info: #0099e0;
+  --info-foreground: #ffffff;
+  --chart-1: #d6724f;
+  --chart-2: #00bc7d;
+  --chart-3: #e5a658;
+  --chart-4: #a066df;
+  --chart-5: #e25969;
+  --sidebar: #201e18;
+  --sidebar-foreground: #e9e8e3;
+  --sidebar-primary: #d6724f;
+  --sidebar-primary-foreground: #e9e8e3;
+  --sidebar-accent: #2b2922;
+  --sidebar-accent-foreground: #e9e8e3;
+  --sidebar-border: rgba(255, 255, 250, 0.12);
+  --sidebar-ring: #d6724f;
+}

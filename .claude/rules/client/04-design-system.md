@@ -12,85 +12,89 @@ Clean, airy, "expensive" look inspired by Linear, Vercel, Stripe, Arc. Every vis
 
 ## CSS Architecture (Source of Truth)
 
-This project uses **Tailwind CSS v4** with **OKLCH color space** and the `@theme inline` directive (not the legacy `tailwind.config.ts`).
+This project uses **Tailwind CSS v4** with **HEX colors** and the `@theme inline` directive (not the legacy `tailwind.config.ts`).
 
 **Key differences from Tailwind v3:**
 - No `tailwind.config.ts` — all config is CSS-based via `@theme inline`
-- Colors use **OKLCH** (perceptually uniform) not HSL
+- Colors use **HEX** values (e.g., `#c15f3c`), with `rgba()` for alpha values
 - `@custom-variant dark` replaces `darkMode: 'class'`
-- No `@layer base { :root { } }` — variables defined on `:root` via theme preset files
+- No `@layer base { :root { } }` — variables defined on `:root` via theme file
 
 ---
 
-## Theme Preset System (Color Management)
+## Theme System (Color Management)
 
-**ALL color variables live in theme preset files, NOT in `globals.css`.** This is the single source of truth for the entire app's color palette.
+**ALL color variables live in `src/styles/themes/default.css`, NOT in `globals.css` or components.** This is the single source of truth for the entire app's color palette.
 
 ### How It Works
 
 ```
 src/
-├── app/globals.css                    ← imports ONE theme preset (switch here)
+├── app/globals.css                    ← imports the theme + defines smooth transitions
 └── styles/themes/
-    ├── warm-orange.css                ← Earthy, warm (default)
-    ├── electric-indigo.css            ← Modern, bold, tech-forward
-    ├── ocean-teal.css                 ← Calm, professional
-    └── rose-pink.css                  ← Elegant, creative
+    └── default.css                    ← Claude-inspired warm palette (HEX)
 ```
 
-`globals.css` imports the active theme via a single line:
+`globals.css` imports the theme:
 
 ```css
-@import "../styles/themes/warm-orange.css";
+@import "../styles/themes/default.css";
 ```
 
-**To switch the entire palette**: change that ONE import line. That's it. Every color in the app updates instantly — light mode, dark mode, charts, sidebar, everything.
+### Theme File Structure
 
-### Theme Preset Structure
-
-Each preset file defines ALL semantic color variables for both `:root` (light) and `.dark` (dark mode):
+`default.css` defines ALL semantic color variables for both `:root` (light) and `.dark` (dark mode) using HEX:
 
 ```css
 :root {
   --radius: 0.625rem;
-  --background: oklch(...);
-  --foreground: oklch(...);
-  --primary: oklch(...);
-  --primary-foreground: oklch(...);
+  --background: #f4f3ee;
+  --foreground: #1a170f;
+  --primary: #c15f3c;
+  --primary-foreground: #ffffff;
   /* ... all ~35 semantic tokens */
 }
 
 .dark {
-  --background: oklch(...);
-  --foreground: oklch(...);
-  --primary: oklch(...);
+  --background: #15130d;
+  --foreground: #e9e8e3;
+  --primary: #d6724f;
   /* ... dark mode overrides for all tokens */
 }
 ```
 
-### Creating a Custom Theme
+### Customizing Colors
 
-1. Copy any existing preset file (e.g., `warm-orange.css`)
-2. Rename it (e.g., `my-brand.css`)
-3. Edit the OKLCH values to match your brand palette
-4. Update the import in `globals.css`: `@import "../styles/themes/my-brand.css";`
+To change the brand palette, edit the HEX values in `default.css`. That's it — every color in the app updates instantly for both light and dark modes.
 
-### Available Presets
+### Smooth Theme Transitions
 
-| Preset | Accent | Vibe | Inspired by |
-|--------|--------|------|-------------|
-| `warm-orange.css` | Terracotta orange | Earthy, warm, approachable | Claude |
-| `electric-indigo.css` | Deep indigo-violet | Modern, bold, tech-forward | Linear, Figma |
-| `ocean-teal.css` | Deep teal-cyan | Calm, professional, trustworthy | Stripe, Vercel |
-| `rose-pink.css` | Soft rose-magenta | Elegant, creative, premium | Dribbble, Notion |
+`globals.css` includes a global transition rule in `@layer base` that smoothly animates color changes when toggling light/dark mode:
+
+```css
+*, *::before, *::after {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+```
+
+### Light/Dark Mode Toggle
+
+- Managed by `next-themes` with `attribute="class"` and `defaultTheme="light"`
+- The `ThemeToggle` component (`components/common/ThemeToggle.tsx`) provides the UI
+- The Header component also includes a sun/moon toggle button
 
 ### CRITICAL RULES — Color Management
 
-1. **NEVER add or modify color variables directly in `globals.css`.** All `:root` and `.dark` color variables belong in the active theme preset file only.
-2. **NEVER hardcode OKLCH/hex/rgb values in components.** Always use semantic tokens (`bg-primary`, `text-foreground`).
-3. **To change the brand palette**: switch the import in `globals.css` or edit the active preset file. Never scatter color values across multiple files.
-4. **New semantic tokens**: If you need a new color token (rare), add it to ALL preset files to keep them in sync.
-5. **The `@theme inline` block in `globals.css` maps CSS vars to Tailwind** — it does NOT define colors. Colors come from the preset.
+1. **NEVER add or modify color variables in `globals.css`.** All `:root` and `.dark` color variables belong in `default.css` only.
+2. **NEVER hardcode hex/rgb values in components.** Always use semantic tokens (`bg-primary`, `text-foreground`).
+3. **NEVER use OKLCH color values.** All colors must be HEX (e.g., `#c15f3c`). Use `rgba()` only when alpha transparency is needed.
+4. **NEVER rename CSS variables.** The variable names (`--primary`, `--background`, `--muted`, etc.) are locked for consistency. Only edit their HEX values.
+5. **NEVER modify the smooth transition rules in `globals.css`.** The `transition-property`, `transition-duration`, and `transition-timing-function` on `*` are part of the theme system and must not be changed or removed.
+6. **NEVER modify the `@theme inline` block in `globals.css`.** It maps CSS vars to Tailwind — it does NOT define colors. Colors come from `default.css`.
+7. **To change the brand palette**: edit the HEX values in `default.css`. Never scatter color values across multiple files.
+8. **New semantic tokens**: If you need a new token (rare), add it to both `:root` and `.dark` in `default.css`.
 
 ---
 
@@ -248,7 +252,7 @@ Each preset maps raw font variables (set by `next/font/google` in `layout.tsx`) 
   - Hovered/elevated: `shadow-md` to `shadow-lg`
   - Modals/popovers: `shadow-xl`
 - **Glassmorphism**: Only on sticky headers, floating toolbars, modal backdrops. Never on content cards.
-  `backdrop-filter: blur(12px) saturate(1.5); background: oklch(from var(--background) l c h / 0.8);`
+  Use `backdrop-blur-md` + `bg-background/80` in Tailwind.
 - **No pure black/white**: Use `--background` and `--foreground` tokens (already off-pure).
 
 ---
@@ -374,7 +378,8 @@ Link:    transition-colors duration-150 active:opacity-70 md:hover:text-primary
 
 ## Dark Mode
 
-- Use `next-themes` with `attribute="class"`, `defaultTheme="system"`.
+- Use `next-themes` with `attribute="class"`, `defaultTheme="light"`.
+- Smooth transitions handled by the global CSS transition rules in `globals.css` — do NOT add `disableTransitionOnChange` to `ThemeProvider`.
 - Reduce shadow visibility in dark mode (use subtle light borders instead).
 - Consider `brightness-90` on images in dark mode.
 - Add `suppressHydrationWarning` to `<html>` tag.
