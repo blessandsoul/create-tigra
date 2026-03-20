@@ -87,6 +87,13 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.CORS_ORIGIN) {
   process.exit(1);
 }
 
+// Validate RESEND_API_KEY when email verification is enabled
+if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
+  // eslint-disable-next-line no-console
+  console.error('\nRESEND_API_KEY is required when REQUIRE_USER_VERIFICATION is enabled.\nGet your API key from: https://resend.com/api-keys\n');
+  process.exit(1);
+}
+
 export const env = parsed.data;
 
 export type Env = z.infer<typeof envSchema>;

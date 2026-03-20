@@ -176,6 +176,25 @@ async function main() {
         }
       }
 
+      // Ask about email verification
+      const { enableVerification } = await prompts(
+        {
+          type: 'toggle',
+          name: 'enableVerification',
+          message: 'Enable email verification for new users?',
+          initial: false,
+          active: 'Yes',
+          inactive: 'No',
+          hint: 'Users must verify email before accessing the app',
+        },
+        {
+          onCancel: () => {
+            console.log(chalk.red('\n  Cancelled.\n'));
+            process.exit(1);
+          },
+        }
+      );
+
       // Generate random port offset (1-200) so multiple projects don't conflict
       const portOffset = crypto.randomInt(1, 201);
 
@@ -215,6 +234,25 @@ async function main() {
           const envPath = path.join(targetDir, envExample.replace('.env.example', '.env'));
           if (await fs.pathExists(examplePath)) {
             await fs.copy(examplePath, envPath);
+          }
+        }
+
+        // Apply email verification module if selected
+        if (enableVerification) {
+          const { applyEmailVerificationModule } = await import('../lib/patchers/email-verification.patcher.js');
+          await applyEmailVerificationModule(targetDir);
+        } else {
+          // Disable verification requirement in .env files
+          for (const envFile of ['server/.env.example', 'server/.env']) {
+            const envPath = path.join(targetDir, envFile);
+            if (await fs.pathExists(envPath)) {
+              const content = await fs.readFile(envPath, 'utf-8');
+              await fs.writeFile(
+                envPath,
+                content.replace('REQUIRE_USER_VERIFICATION=true', 'REQUIRE_USER_VERIFICATION=false'),
+                'utf-8',
+              );
+            }
           }
         }
 
@@ -281,10 +319,116 @@ async function main() {
       console.log();
       console.log(line);
       console.log();
+      if (enableVerification) {
+        console.log(dim('  Email verification: ') + green('enabled'));
+        console.log(dim('  Set RESEND_API_KEY in server/.env to send emails'));
+        console.log();
+      }
       console.log(dim('  Tip: ') + 'npm run docker:down' + dim(' to stop infrastructure'));
       console.log();
       console.log(dim('  Happy coding! 🚀'));
       console.log();
+    });
+
+  // ─── Add module to existing project ───────────────────────────
+  program
+    .command('add <module>')
+    .description('Add a module to an existing Tigra project')
+    .action(async (moduleName) => {
+      console.log();
+      console.log(chalk.bold('  Create Tigra') + chalk.dim(` v${VERSION}`) + chalk.dim(' — add module'));
+      console.log();
+
+      const projectDir = process.cwd();
+
+      // Detect if we're inside a Tigra project
+      const hasServer = await fs.pathExists(path.join(projectDir, 'server', 'src', 'modules', 'auth'));
+      const hasClient = await fs.pathExists(path.join(projectDir, 'client', 'src', 'features', 'auth'));
+
+      if (!hasServer || !hasClient) {
+        console.error(chalk.red('  This does not appear to be a Tigra project.'));
+        console.error(chalk.dim('  Run this command from the root of your project (the folder containing server/ and client/).'));
+        console.log();
+        process.exit(1);
+      }
+
+      const availableModules = ['email-verification'];
+
+      if (!availableModules.includes(moduleName)) {
+        console.error(chalk.red(`  Unknown module: "${moduleName}"`));
+        console.log();
+        console.log(chalk.dim('  Available modules:'));
+        for (const m of availableModules) {
+          console.log(chalk.cyan(`    - ${m}`));
+        }
+        console.log();
+        process.exit(1);
+      }
+
+      if (moduleName === 'email-verification') {
+        // Check if already applied
+        const alreadyApplied = await fs.pathExists(
+          path.join(projectDir, 'server', 'src', 'modules', 'auth', 'verification.service.ts'),
+        );
+        if (alreadyApplied) {
+          console.log(chalk.yellow('  Email verification is already installed in this project.'));
+          console.log();
+          process.exit(0);
+        }
+
+        const spinner = ora('Adding email verification module...').start();
+
+        try {
+          const { applyEmailVerificationModule } = await import(
+            '../lib/patchers/email-verification.patcher.js'
+          );
+          await applyEmailVerificationModule(projectDir);
+
+          // Set REQUIRE_USER_VERIFICATION=true in .env if it's currently false
+          for (const envFile of ['server/.env.example', 'server/.env']) {
+            const envPath = path.join(projectDir, envFile);
+            if (await fs.pathExists(envPath)) {
+              const content = await fs.readFile(envPath, 'utf-8');
+              if (content.includes('REQUIRE_USER_VERIFICATION=false')) {
+                await fs.writeFile(
+                  envPath,
+                  content.replace('REQUIRE_USER_VERIFICATION=false', 'REQUIRE_USER_VERIFICATION=true'),
+                  'utf-8',
+                );
+              }
+            }
+          }
+
+          spinner.succeed('Email verification module added!');
+        } catch (error) {
+          spinner.fail('Failed to add email verification module');
+          console.error(chalk.red(`\n  ${error.message}\n`));
+          process.exit(1);
+        }
+
+        const dim = chalk.dim;
+        const cyan = chalk.cyan;
+        const green = chalk.green;
+
+        console.log();
+        console.log(green('  ✓ ') + 'Files added:');
+        console.log(dim('    server/src/modules/auth/verification.service.ts'));
+        console.log(dim('    server/src/modules/auth/verification.controller.ts'));
+        console.log(dim('    client/src/features/auth/services/verification.service.ts'));
+        console.log(dim('    client/src/features/auth/hooks/useVerification.ts'));
+        console.log();
+        console.log(green('  ✓ ') + 'Files patched:');
+        console.log(dim('    auth.routes.ts, auth.schemas.ts, auth.service.ts, auth.repo.ts'));
+        console.log(dim('    rate-limit.config.ts, api-endpoints.ts, error.ts, useAuth.ts'));
+        console.log(dim('    postman/collection.json'));
+        console.log();
+        console.log(green('  ✓ ') + 'REQUIRE_USER_VERIFICATION=true in server/.env');
+        console.log();
+        console.log(dim('  Next steps:'));
+        console.log(cyan('    1 ') + 'Set ' + chalk.bold('RESEND_API_KEY') + ' in server/.env');
+        console.log(cyan('    2 ') + 'Restart the server');
+        console.log();
+      }
     });
 
   program.parse();

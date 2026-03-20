@@ -1,6 +1,6 @@
 {
   "name": "create-tigra",
-  "version": "2.6.8",
+    "version": "2.7.0",
   "type": "module",
   "description": "Create a production-ready full-stack app with Next.js 16 + Fastify 5 + Prisma + Redis",
   "bin": {
@@ -8,6 +8,8 @@
   },
   "files": [
     "bin",
+    "lib",
+    "modules",
     "template"
   ],
   "engines": {
@@ -47,6 +49,7 @@
     "commander": "^13.1.0",
     "fs-extra": "^11.3.0",
     "ora": "^8.2.0",
-    "prompts": "^2.4.2"
+    "prompts": "^2.4.2",
+    "ts-morph": "^27.0.2"
   }
 }
