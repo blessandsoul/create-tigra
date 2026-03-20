@@ -3,6 +3,11 @@ import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 
 let redis: Redis | null = null;
+let redisConnected = false;
+
+export function isRedisConnected(): boolean {
+  return redisConnected;
+}
 
 export function getRedis(): Redis {
   if (!redis) {
@@ -11,10 +16,7 @@ export function getRedis(): Redis {
       connectTimeout: env.REDIS_CONNECT_TIMEOUT,
       lazyConnect: true,
       retryStrategy: (times: number) => {
-        // Exponential backoff with max delay of 3 seconds
         if (times > env.REDIS_MAX_RETRIES) {
-          // Stop retrying after max retries
-          logger.error('[REDIS] Max retries reached, giving up');
           return null;
         }
         const delay = Math.min(times * 50, 3000);
@@ -24,15 +26,17 @@ export function getRedis(): Redis {
     });
 
     redis.on('connect', () => {
+      redisConnected = true;
       logger.info('[REDIS] Connection established');
     });
 
-    redis.on('error', (error: Error) => {
-      logger.warn({ err: error }, '[REDIS] Connection error');
+    redis.on('error', () => {
+      redisConnected = false;
+      // Suppressed — connection failure is logged once in connectRedis()
     });
 
-    redis.on('reconnecting', (delay: number) => {
-      logger.info({ delay }, '[REDIS] Reconnecting');
+    redis.on('reconnecting', () => {
+      // Suppressed — avoid noisy retry logs during startup
     });
   }
 
@@ -44,9 +48,8 @@ export async function connectRedis(): Promise<boolean> {
     const client = getRedis();
     await client.connect();
     return true;
-  } catch (error) {
-    logger.warn('[REDIS] Connection failed — server will start without Redis');
-    logger.debug(error);
+  } catch {
+    logger.warn('[REDIS] Connection failed - server will start without Redis');
     return false;
   }
 }
@@ -55,6 +58,7 @@ export async function disconnectRedis(): Promise<void> {
   if (redis) {
     await redis.quit();
     redis = null;
+    redisConnected = false;
     logger.info('[REDIS] Disconnected');
   }
 }

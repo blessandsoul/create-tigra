@@ -22,6 +22,8 @@ import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
 import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
+import { isDatabaseConnected } from '@libs/prisma.js';
+import { isRedisConnected } from '@libs/redis.js';
 import { ForbiddenError } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
@@ -136,7 +138,11 @@ export async function buildApp() {
   await fileStorageService.initialize();
 
   // --- Sync permanent IP blocks from DB to Redis ---
-  await syncBlockedIpsToRedis();
+  if (isDatabaseConnected() && isRedisConnected()) {
+    await syncBlockedIpsToRedis();
+  } else {
+    logger.warn('[IP-BLOCK] Skipped sync - DB or Redis unavailable');
+  }
 
   // --- IP Block Check (runs before everything else) ---
   app.addHook('onRequest', async (request: FastifyRequest) => {

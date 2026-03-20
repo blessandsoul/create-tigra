@@ -15,17 +15,38 @@ export const prisma =
       env.NODE_ENV === 'development'
         ? [
             { emit: 'event', level: 'query' },
-            { emit: 'stdout', level: 'warn' },
-            { emit: 'stdout', level: 'error' },
+            { emit: 'event', level: 'warn' },
+            { emit: 'event', level: 'error' },
           ]
         : [
-            { emit: 'stdout', level: 'error' },
+            { emit: 'event', level: 'error' },
             // Log slow queries in production (queries taking > 2000ms)
             { emit: 'event', level: 'query' },
           ],
     // Note: Connection pool size is configured via DATABASE_URL query params
     // Example: DATABASE_URL="mysql://...?connection_limit=50&pool_timeout=10"
   });
+
+// Track whether to suppress Prisma's internal error logs (during connection test)
+let suppressPrismaErrors = false;
+
+export function setSuppressPrismaErrors(value: boolean): void {
+  suppressPrismaErrors = value;
+}
+
+// Route Prisma errors through our logger (suppressed during connection test)
+prisma.$on('error' as never, (e: { message: string }) => {
+  if (!suppressPrismaErrors) {
+    logger.error({ prismaError: e.message }, '[DATABASE] Prisma error');
+  }
+});
+
+// Route Prisma warnings through our logger
+if (env.NODE_ENV === 'development') {
+  prisma.$on('warn' as never, (e: { message: string }) => {
+    logger.warn({ prismaWarning: e.message }, '[DATABASE] Prisma warning');
+  });
+}
 
 // Log slow queries in production (queries taking > 2000ms)
 if (env.NODE_ENV === 'production') {
@@ -63,15 +84,24 @@ export function isPrismaNotFound(error: unknown): boolean {
   );
 }
 
+let dbConnected = false;
+
+export function isDatabaseConnected(): boolean {
+  return dbConnected;
+}
+
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
+    suppressPrismaErrors = true;
     await prisma.$queryRaw`SELECT 1`;
+    dbConnected = true;
     logger.info('[DATABASE] Connection established');
     return true;
-  } catch (error) {
-    logger.warn('[DATABASE] Connection failed — server will start without DB');
-    logger.debug(error);
+  } catch {
+    logger.warn('[DATABASE] Connection failed - server will start without DB');
     return false;
+  } finally {
+    suppressPrismaErrors = false;
   }
 }
 

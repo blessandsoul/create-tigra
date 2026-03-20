@@ -62,7 +62,7 @@ export function startCleanupDeletedAccountsJob(app: FastifyInstance): void {
           } catch (fileError) {
             logger.warn(
               { err: fileError, userId: user.id },
-              'User record purged but file cleanup failed — orphaned files may remain',
+              'User record purged but file cleanup failed - orphaned files may remain',
             );
           }
 

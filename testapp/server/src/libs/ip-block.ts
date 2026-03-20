@@ -47,7 +47,7 @@ export async function syncBlockedIpsToRedis(): Promise<void> {
 
     logger.info(`[IP-BLOCK] Synced ${blockedIps.length} blocked IPs from DB to Redis`);
   } catch (error) {
-    logger.warn('[IP-BLOCK] Failed to sync blocked IPs from DB to Redis — permanent blocks may not be enforced until next restart');
+    logger.warn('[IP-BLOCK] Failed to sync blocked IPs from DB to Redis - permanent blocks may not be enforced until next restart');
     logger.debug(error);
   }
 }
@@ -111,7 +111,7 @@ export async function blockIp(
     const redis = getRedis();
     await redis.sadd(BLOCKED_IPS_KEY, ip);
   } catch {
-    logger.warn({ ip }, '[IP-BLOCK] Failed to sync block to Redis — will be synced on next restart');
+    logger.warn({ ip }, '[IP-BLOCK] Failed to sync block to Redis - will be synced on next restart');
   }
 
   logger.info({ ip, blockedBy, reason }, '[IP-BLOCK] IP permanently blocked');
@@ -133,7 +133,7 @@ export async function unblockIp(ip: string): Promise<void> {
     await redis.srem(BLOCKED_IPS_KEY, ip);
     await redis.zrem(AUTO_BLOCKED_KEY, ip);
   } catch {
-    logger.warn({ ip }, '[IP-BLOCK] Failed to sync unblock to Redis — will be synced on next restart');
+    logger.warn({ ip }, '[IP-BLOCK] Failed to sync unblock to Redis - will be synced on next restart');
   }
 
   logger.info({ ip }, '[IP-BLOCK] IP unblocked');
