@@ -19,6 +19,14 @@ let refreshTimestamp = 0;
 const REFRESH_TIMEOUT_MS = 15000;
 let failedQueue: { resolve: () => void; reject: (error: unknown) => void }[] = [];
 
+// Circuit breaker — once a refresh fails with a definitive auth error (4xx),
+// this flag is set BEFORE dispatching logout or redirecting. All subsequent
+// 401s are immediately rejected without entering the refresh flow, preventing
+// the race condition where Redux state changes trigger re-renders that fire
+// new API calls before the hard redirect completes.
+// Resets automatically on page reload (window.location.href re-initializes the module).
+let isSessionDead = false;
+
 const processQueue = (error: unknown): void => {
   failedQueue.forEach((promise) => {
     if (error) {
@@ -41,6 +49,12 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // Circuit breaker tripped — session is dead, redirect is pending.
+    // Reject immediately without attempting refresh or queuing.
+    if (isSessionDead) {
       return Promise.reject(error);
     }
 
@@ -94,6 +108,10 @@ apiClient.interceptors.response.use(
         refreshError.response.status < 500;
 
       if (isAuthFailure) {
+        // Trip the circuit breaker FIRST — prevents any subsequent 401s
+        // from re-entering this flow while the redirect is pending.
+        isSessionDead = true;
+
         const { logout } = await import('@/features/auth/store/authSlice');
         const { store } = await import('@/store');
         store.dispatch(logout());

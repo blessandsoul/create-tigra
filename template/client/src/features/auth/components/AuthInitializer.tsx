@@ -12,12 +12,21 @@ import { setUser, setInitialized } from '../store/authSlice';
 
 const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE, '/admin'];
 
+// Auth pages where getMe() should never fire — there is no session to hydrate
+// on login/register/reset-password, and calling getMe() here would trigger the
+// 401 → refresh → fail → redirect chain for no reason.
+const AUTH_PATHS: string[] = [ROUTES.LOGIN, ROUTES.REGISTER, ROUTES.RESET_PASSWORD, ROUTES.VERIFY_EMAIL];
+
 interface AuthInitializerProps {
   children: React.ReactNode;
 }
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PATHS.some((path) => pathname.startsWith(path));
+}
+
+function isAuthPage(pathname: string): boolean {
+  return AUTH_PATHS.some((path) => pathname.startsWith(path));
 }
 
 export const AuthInitializer = ({ children }: AuthInitializerProps): React.ReactElement => {
@@ -27,7 +36,15 @@ export const AuthInitializer = ({ children }: AuthInitializerProps): React.React
   const { isAuthenticated, isLoggingOut } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
-    // On public pages, skip auth hydration — just mark as initialized
+    // On auth pages (login, register, etc.), never call getMe().
+    // There is no session to hydrate, and a 401 here would trigger
+    // the refresh → fail → redirect chain, causing an infinite loop.
+    if (isAuthPage(pathname)) {
+      dispatch(setInitialized());
+      return;
+    }
+
+    // On other public pages, skip auth hydration — just mark as initialized
     if (!isProtectedPath(pathname)) {
       dispatch(setInitialized());
       return;
