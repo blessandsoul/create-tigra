@@ -5,6 +5,8 @@ import { setAuthCookies, clearAuthCookies } from '@libs/cookies.js';
 import type {
   RegisterInput,
   LoginInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
 } from './auth.schemas.js';
 import * as authService from './auth.service.js';
 
@@ -17,7 +19,14 @@ export async function register(
 
   const result = await authService.register(request.body, deviceInfo, ipAddress);
 
-  setAuthCookies(reply, result.accessToken, result.refreshToken);
+  if (result.requiresVerification) {
+    reply.status(201).send(
+      successResponse('Registration successful. Please verify your account to continue.', { user: result.user }),
+    );
+    return;
+  }
+
+  setAuthCookies(reply, result.accessToken!, result.refreshToken!);
   reply.status(201).send(successResponse('User registered successfully', { user: result.user }));
 }
 
@@ -87,4 +96,21 @@ export async function logoutAllSessions(
   reply.send(
     successResponse(`Successfully logged out from ${count} session(s)`, { count }),
   );
+}
+
+export async function forgotPassword(
+  request: FastifyRequest<{ Body: ForgotPasswordInput }>,
+  reply: FastifyReply,
+): Promise<void> {
+  await authService.forgotPassword(request.body.email);
+  // Always return success to prevent email enumeration
+  reply.send(successResponse('If an account exists with that email, a reset link has been sent', null));
+}
+
+export async function resetPassword(
+  request: FastifyRequest<{ Body: ResetPasswordInput }>,
+  reply: FastifyReply,
+): Promise<void> {
+  await authService.resetPassword(request.body.token, request.body.newPassword);
+  reply.send(successResponse('Password reset successfully', null));
 }

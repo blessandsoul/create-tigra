@@ -36,6 +36,7 @@ export async function createUser(data: {
   password: string;
   firstName: string;
   lastName: string;
+  isActive?: boolean;
 }): Promise<User> {
   return prisma.user.create({
     data,

@@ -30,3 +30,7 @@ export const getErrorCode = (error: unknown): string | undefined => {
 export const isErrorCode = (error: unknown, code: string): boolean => {
   return getErrorCode(error) === code;
 };
+
+export const ERROR_CODES = {
+  ACCOUNT_NOT_ACTIVE: 'ACCOUNT_NOT_ACTIVE',
+} as const;

@@ -22,7 +22,7 @@ const envSchema = z.object({
   REDIS_CONNECT_TIMEOUT: z.coerce.number().int().min(1000).default(10000), // ms
 
   // --- Rate Limiting ---
-  RATE_LIMIT_ENABLED: z.coerce.boolean().default(true),
+  RATE_LIMIT_ENABLED: z.string().default('true').transform((val) => val === 'true'),
   RATE_LIMIT_MULTIPLIER: z.coerce.number().min(0.1).max(100).default(1),
   RATE_LIMIT_AUTH_LOGIN_MAX: z.coerce.number().int().min(1).optional(),
   RATE_LIMIT_AUTH_REGISTER_MAX: z.coerce.number().int().min(1).optional(),
@@ -45,6 +45,11 @@ const envSchema = z.object({
   // Leave empty for same-origin deployments or local development
   COOKIE_DOMAIN: z.string().optional(),
 
+  // --- Account Activation ---
+  // When true (default), new users are created as inactive and must verify
+  // their account before they can log in. When false, users are active immediately.
+  REQUIRE_USER_VERIFICATION: z.string().default('true').transform((val) => val === 'true'),
+
   // --- CORS ---
   // In development: CORS_ORIGIN is optional (allows all origins)
   // In production: REQUIRED for security
@@ -53,6 +58,11 @@ const envSchema = z.object({
 
   // --- Logging ---
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // --- Email (Resend) ---
+  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_FROM_EMAIL: z.string().email().default('onboarding@resend.dev'),
+  CLIENT_URL: z.string().url().default('http://localhost:3000'),
 
   // --- Error Tracking (Optional) ---
   SENTRY_DSN: z.string().url().optional(),

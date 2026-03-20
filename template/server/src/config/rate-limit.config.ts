@@ -62,6 +62,14 @@ export const RATE_LIMITS = {
     max: applyMultiplier(10),
     timeWindow: '15 minutes',
   },
+  AUTH_FORGOT_PASSWORD: {
+    max: applyMultiplier(5),
+    timeWindow: '15 minutes',
+  },
+  AUTH_RESET_PASSWORD: {
+    max: applyMultiplier(10),
+    timeWindow: '15 minutes',
+  },
 
   // Users — profile management
   USERS_UPDATE_PROFILE: {

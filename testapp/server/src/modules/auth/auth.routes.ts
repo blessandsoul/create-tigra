@@ -5,6 +5,8 @@ import * as authController from './auth.controller.js';
 import {
   registerSchema,
   loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.schemas.js';
 
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
@@ -44,6 +46,28 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       rateLimit: RATE_LIMITS.AUTH_REFRESH,
     },
     handler: authController.refresh,
+  });
+
+  // Forgot password - sends reset email
+  fastify.post('/auth/forgot-password', {
+    schema: {
+      body: forgotPasswordSchema,
+    },
+    config: {
+      rateLimit: RATE_LIMITS.AUTH_FORGOT_PASSWORD,
+    },
+    handler: authController.forgotPassword,
+  });
+
+  // Reset password - validates token and sets new password
+  fastify.post('/auth/reset-password', {
+    schema: {
+      body: resetPasswordSchema,
+    },
+    config: {
+      rateLimit: RATE_LIMITS.AUTH_RESET_PASSWORD,
+    },
+    handler: authController.resetPassword,
   });
 
   // Get current user

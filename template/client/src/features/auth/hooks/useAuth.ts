@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { getErrorMessage } from '@/lib/utils/error';
+import { getErrorMessage, isErrorCode, ERROR_CODES } from '@/lib/utils/error';
 import { ROUTES } from '@/lib/constants/routes';
 import { authService } from '../services/auth.service';
 import { setUser, setLoggingOut, logout as logoutAction } from '../store/authSlice';
@@ -42,6 +42,10 @@ export const useAuth = (): UseAuthReturn => {
       router.push(redirectTo);
     },
     onError: (error) => {
+      if (isErrorCode(error, ERROR_CODES.ACCOUNT_NOT_ACTIVE)) {
+        toast.error('Your account is not yet activated. Please verify your account to continue.');
+        return;
+      }
       toast.error(getErrorMessage(error));
     },
   });
@@ -49,6 +53,11 @@ export const useAuth = (): UseAuthReturn => {
   const registerMutation = useMutation({
     mutationFn: (data: IRegisterRequest) => authService.register(data),
     onSuccess: (data) => {
+      if (!data.user.isActive) {
+        toast.success('Account created! Please verify your account to continue.');
+        router.push(ROUTES.VERIFY_ACCOUNT);
+        return;
+      }
       dispatch(setUser(data.user));
       toast.success('Account created successfully');
       router.push(ROUTES.DASHBOARD);

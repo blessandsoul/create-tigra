@@ -66,8 +66,11 @@ export async function authenticate(
     select: { isActive: true, deletedAt: true },
   });
 
-  if (!user || !user.isActive || user.deletedAt) {
+  if (!user || user.deletedAt) {
     throw new UnauthorizedError('Account is deactivated or deleted');
+  }
+  if (!user.isActive) {
+    throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
   }
 }
 

@@ -36,8 +36,8 @@ class AuthService {
     return response.data.data;
   }
 
-  async requestPasswordReset(email: string): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.AUTH.REQUEST_PASSWORD_RESET, { email });
+  async forgotPassword(email: string): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, { email });
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
