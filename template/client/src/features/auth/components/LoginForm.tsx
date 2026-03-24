@@ -1,8 +1,10 @@
 'use client';
 
 import type React from 'react';
+import { Suspense } from 'react';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -22,8 +24,11 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-export const LoginForm = (): React.ReactElement => {
+const LoginFormInner = (): React.ReactElement => {
   const { login, isLoggingIn } = useAuth();
+  const searchParams = useSearchParams();
+  const from = searchParams.get('from');
+  const redirectTo = from && from.startsWith('/') && !from.startsWith('//') ? from : undefined;
 
   const {
     register,
@@ -34,7 +39,7 @@ export const LoginForm = (): React.ReactElement => {
   });
 
   const onSubmit = (data: LoginFormData): void => {
-    login(data);
+    login(data, redirectTo);
   };
 
   return (
@@ -103,5 +108,13 @@ export const LoginForm = (): React.ReactElement => {
         </Link>
       </p>
     </div>
+  );
+};
+
+export const LoginForm = (): React.ReactElement => {
+  return (
+    <Suspense>
+      <LoginFormInner />
+    </Suspense>
   );
 };

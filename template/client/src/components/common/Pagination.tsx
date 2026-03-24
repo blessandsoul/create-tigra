@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useCallback } from 'react';
+import { Suspense, useCallback } from 'react';
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -13,7 +13,7 @@ interface PaginationProps {
   totalPages: number;
 }
 
-export const Pagination = ({ page, totalPages }: PaginationProps): React.ReactElement => {
+const PaginationInner = ({ page, totalPages }: PaginationProps): React.ReactElement => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -51,5 +51,13 @@ export const Pagination = ({ page, totalPages }: PaginationProps): React.ReactEl
         <ChevronRight className="h-4 w-4" />
       </Button>
     </div>
+  );
+};
+
+export const Pagination = ({ page, totalPages }: PaginationProps): React.ReactElement => {
+  return (
+    <Suspense>
+      <PaginationInner page={page} totalPages={totalPages} />
+    </Suspense>
   );
 };

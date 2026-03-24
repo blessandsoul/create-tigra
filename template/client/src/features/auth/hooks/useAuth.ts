@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 import { useMutation } from '@tanstack/react-query';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -18,7 +18,7 @@ interface UseAuthReturn {
   user: IUser | null;
   isAuthenticated: boolean;
   isInitializing: boolean;
-  login: (data: ILoginRequest) => void;
+  login: (data: ILoginRequest, redirectTo?: string) => void;
   register: (data: IRegisterRequest) => void;
   logout: () => Promise<void>;
   isLoggingIn: boolean;
@@ -29,17 +29,15 @@ interface UseAuthReturn {
 export const useAuth = (): UseAuthReturn => {
   const dispatch = useAppDispatch();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, isAuthenticated, isInitializing, isLoggingOut } = useAppSelector((state) => state.auth);
+  const pendingRedirectRef = useRef<string>(ROUTES.DASHBOARD);
 
   const loginMutation = useMutation({
     mutationFn: (data: ILoginRequest) => authService.login(data),
     onSuccess: (data) => {
       dispatch(setUser(data.user));
       toast.success('Signed in successfully');
-      const from = searchParams.get('from');
-      const redirectTo = from && from.startsWith('/') && !from.startsWith('//') ? from : ROUTES.DASHBOARD;
-      router.push(redirectTo);
+      router.push(pendingRedirectRef.current);
     },
     onError: (error) => {
       if (isErrorCode(error, ERROR_CODES.ACCOUNT_NOT_ACTIVE)) {
@@ -83,7 +81,12 @@ export const useAuth = (): UseAuthReturn => {
     user,
     isAuthenticated,
     isInitializing,
-    login: loginMutation.mutate,
+    login: (data: ILoginRequest, redirectTo?: string) => {
+      if (redirectTo) {
+        pendingRedirectRef.current = redirectTo;
+      }
+      loginMutation.mutate(data);
+    },
     register: registerMutation.mutate,
     logout,
     isLoggingIn: loginMutation.isPending,

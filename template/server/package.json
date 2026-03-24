@@ -19,6 +19,7 @@
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
     "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
     "redis:flush": "tsx scripts/flush-redis.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
