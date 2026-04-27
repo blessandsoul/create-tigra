@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { getErrorMessage } from '@/lib/utils/error';
@@ -81,6 +82,7 @@ interface UseUpdateUserStatusReturn {
 
 export const useUpdateUserStatus = (): UseUpdateUserStatusReturn => {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const mutation = useMutation({
     mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
@@ -90,6 +92,7 @@ export const useUpdateUserStatus = (): UseUpdateUserStatusReturn => {
       toast.success(`User ${action} successfully`);
       queryClient.invalidateQueries({ queryKey: adminKeys.users() });
       queryClient.invalidateQueries({ queryKey: adminKeys.stats() });
+      router.refresh();
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
@@ -111,6 +114,7 @@ interface UseUpdateUserRoleReturn {
 
 export const useUpdateUserRole = (): UseUpdateUserRoleReturn => {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const mutation = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: 'USER' | 'ADMIN' }) =>
@@ -119,6 +123,7 @@ export const useUpdateUserRole = (): UseUpdateUserRoleReturn => {
       toast.success('User role updated successfully');
       queryClient.invalidateQueries({ queryKey: adminKeys.users() });
       queryClient.invalidateQueries({ queryKey: adminKeys.stats() });
+      router.refresh();
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));

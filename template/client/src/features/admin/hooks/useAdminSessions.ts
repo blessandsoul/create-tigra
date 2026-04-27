@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { getErrorMessage } from '@/lib/utils/error';
@@ -48,6 +49,7 @@ interface UseForceExpireSessionReturn {
 
 export const useForceExpireSession = (): UseForceExpireSessionReturn => {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const mutation = useMutation({
     mutationFn: (sessionId: string) => adminService.deleteSession(sessionId),
@@ -55,6 +57,7 @@ export const useForceExpireSession = (): UseForceExpireSessionReturn => {
       toast.success('Session expired successfully');
       queryClient.invalidateQueries({ queryKey: adminKeys.sessions() });
       queryClient.invalidateQueries({ queryKey: adminKeys.stats() });
+      router.refresh();
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));

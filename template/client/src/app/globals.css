@@ -88,8 +88,16 @@
     transition-duration: 200ms;
     transition-timing-function: ease-out;
   }
+  html {
+    @apply bg-background;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+    touch-action: manipulation;
   }
 }

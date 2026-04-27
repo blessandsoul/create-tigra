@@ -7,11 +7,10 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { toast } from 'sonner';
 
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useAppSelector } from '@/store/hooks';
 import { ROUTES } from '@/lib/constants/routes';
 import { isErrorCode, ERROR_CODES } from '@/lib/utils/error';
-import { authService } from '../services/auth.service';
-import { setUser, setInitialized } from '../store/authSlice';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE, '/admin'];
 
@@ -32,53 +31,37 @@ function isAuthPage(pathname: string): boolean {
   return AUTH_PATHS.some((path) => pathname.startsWith(path));
 }
 
+interface HttpLikeError {
+  response?: { status?: number };
+}
+
 export const AuthInitializer = ({ children }: AuthInitializerProps): React.ReactElement => {
-  const dispatch = useAppDispatch();
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, isLoggingOut } = useAppSelector((state) => state.auth);
+  const { isLoggingOut } = useAppSelector((state) => state.auth);
+
+  // Skip getMe() on auth pages and during logout.
+  // React Query handles deduping, refetch-on-focus, and invalidation —
+  // any mutation that touches the current user (profile update, role change,
+  // avatar upload, email verification) should call:
+  //   queryClient.invalidateQueries({ queryKey: authKeys.me() })
+  // to refresh Redux state automatically.
+  const enabled = !isAuthPage(pathname) && !isLoggingOut;
+
+  const { error } = useCurrentUser({ enabled });
 
   useEffect(() => {
-    // On auth pages (login, register, etc.), never call getMe().
-    // There is no session to hydrate, and a 401 here would trigger
-    // the refresh → fail → redirect chain, causing an infinite loop.
-    if (isAuthPage(pathname)) {
-      dispatch(setInitialized());
-      return;
+    if (!error) return;
+    if (!isProtectedPath(pathname)) return;
+
+    const status = (error as HttpLikeError)?.response?.status;
+    if (status === 401 || status === 403) {
+      if (isErrorCode(error, ERROR_CODES.ACCOUNT_NOT_ACTIVE)) {
+        toast.error('Your account is not yet activated. Please verify your account.');
+      }
+      router.push(ROUTES.LOGIN);
     }
-
-    // On other public pages, skip auth hydration — just mark as initialized
-    if (!isProtectedPath(pathname)) {
-      dispatch(setInitialized());
-      return;
-    }
-
-    if (isAuthenticated || isLoggingOut) return;
-
-    let cancelled = false;
-
-    authService
-      .getMe()
-      .then((user) => {
-        if (!cancelled) dispatch(setUser(user));
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        dispatch(setInitialized());
-        // Only redirect on auth errors (401/403), not network failures
-        const status = error?.response?.status;
-        if (status === 401 || status === 403) {
-          if (isErrorCode(error, ERROR_CODES.ACCOUNT_NOT_ACTIVE)) {
-            toast.error('Your account is not yet activated. Please verify your account.');
-          }
-          router.push(ROUTES.LOGIN);
-        }
-      });
-
-    return (): void => {
-      cancelled = true;
-    };
-  }, [dispatch, pathname, isAuthenticated, isLoggingOut, router]);
+  }, [error, pathname, router]);
 
   return <>{children}</>;
 };

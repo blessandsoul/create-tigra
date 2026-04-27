@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type React from 'react';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
@@ -19,6 +19,12 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: APP_NAME,
   description: 'A full-stack application built with Next.js and Fastify',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

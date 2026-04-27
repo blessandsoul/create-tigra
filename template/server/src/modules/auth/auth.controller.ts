@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { successResponse } from '@shared/responses/successResponse.js';
-import { UnauthorizedError } from '@shared/errors/errors.js';
+import { UnauthorizedError, ForbiddenError } from '@shared/errors/errors.js';
 import { setAuthCookies, clearAuthCookies } from '@libs/cookies.js';
 import type {
   RegisterInput,
@@ -49,13 +49,24 @@ export async function refresh(
 ): Promise<void> {
   const refreshToken = request.cookies.refresh_token;
   if (!refreshToken) {
+    clearAuthCookies(reply);
     throw new UnauthorizedError('Refresh token not provided', 'MISSING_REFRESH_TOKEN');
   }
 
-  const tokens = await authService.refresh(refreshToken);
-
-  setAuthCookies(reply, tokens.accessToken, tokens.refreshToken);
-  reply.send(successResponse('Token refreshed successfully', null));
+  try {
+    const tokens = await authService.refresh(refreshToken);
+    setAuthCookies(reply, tokens.accessToken, tokens.refreshToken);
+    reply.send(successResponse('Token refreshed successfully', null));
+  } catch (error) {
+    // Session is definitively dead (refresh token revoked, user gone, inactive).
+    // Clear all auth cookies so the browser stops replaying them — otherwise the
+    // client keeps retrying refresh and middleware keeps redirecting, producing
+    // an infinite loop that trips the rate limiter.
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      clearAuthCookies(reply);
+    }
+    throw error;
+  }
 }
 
 export async function logout(

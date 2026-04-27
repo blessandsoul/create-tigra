@@ -11,6 +11,9 @@ const apiOrigin = (() => {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    staleTimes: { dynamic: 0, static: 0 },
+  },
   async headers() {
     return [
       {
@@ -26,7 +29,7 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' blob: data: https:",
+              `img-src 'self' blob: data: https: ${apiOrigin}`,
               "font-src 'self'",
               "object-src 'none'",
               "base-uri 'self'",

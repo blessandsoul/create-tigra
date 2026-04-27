@@ -25,11 +25,14 @@
 Defaults in `app/providers.tsx`:
 
 ```typescript
-staleTime: 5 * 60 * 1000    // 5 min
-gcTime: 10 * 60 * 1000      // 10 min
-refetchOnWindowFocus: false
+staleTime: 30 * 1000         // 30s — short enough that back-navigation refetches
+gcTime: 5 * 60 * 1000        // 5 min
+refetchOnWindowFocus: true   // catch cross-tab edits
+refetchOnMount: true         // always refetch stale data on mount
 retry: 1
 ```
+
+**Why these values matter**: With a long `staleTime` (e.g. 5 min) and `refetchOnWindowFocus: false`, navigating back to a list page after editing a record on another page will show stale data until the user hard-refreshes. Keep `staleTime` short and let invalidation + remount refetch do their job.
 
 ### Query Key Factory Pattern
 
@@ -45,8 +48,34 @@ export const itemKeys = {
 
 ### Mutations
 
-On success: invalidate related queries, show toast, navigate if needed.
+On success:
+1. **`queryClient.invalidateQueries({ queryKey: ... })`** — refreshes any client-fetched data (React Query).
+2. **`router.refresh()`** — refreshes any Server-Component-rendered data on the next route the user navigates to. Without this, the Next.js Router Cache will serve stale RSC payloads on back-navigation, and your edit will not appear until a hard refresh.
+3. Show a toast.
+4. Navigate if needed.
+
 On error: `toast.error(getErrorMessage(error))`.
+
+**Always call both `invalidateQueries` AND `router.refresh()`** unless you are 100% certain no Server Component on any reachable route reads the mutated data. The two caches are independent — invalidating one does not touch the other.
+
+```typescript
+const router = useRouter();
+const queryClient = useQueryClient();
+
+const mutation = useMutation({
+  mutationFn: (data) => itemService.updateItem(id, data),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: itemKeys.all });
+    router.refresh();
+    toast.success('Item updated');
+  },
+  onError: (error) => toast.error(getErrorMessage(error)),
+});
+```
+
+### Next.js Router Cache
+
+`next.config.ts` sets `experimental.staleTimes: { dynamic: 0, static: 0 }` to disable client-side Router Cache reuse. **Never raise these values** — doing so reintroduces the back-navigation stale-data bug across every page that uses Server Components for data fetching.
 
 ---
 
@@ -61,7 +90,17 @@ State shape:
 { user: IUser | null; isAuthenticated: boolean; isInitializing: boolean; isLoggingOut: boolean }
 ```
 
-**Not persisted to localStorage** — auth state is hydrated on page load by `AuthInitializer` calling `getMe()`. Tokens are stored in httpOnly cookies (not accessible from JS).
+**Not persisted to localStorage** — auth state is hydrated by `AuthInitializer`, which calls the `useCurrentUser()` hook. `useCurrentUser()` is a React Query wrapper around `authService.getMe()` that syncs the result into Redux via a side effect. Tokens are stored in httpOnly cookies (not accessible from JS).
+
+**Refreshing the current user**: any mutation that changes the logged-in user's own data (profile update, role change, avatar upload, email verification, subscription change, etc.) MUST invalidate the auth query so Redux picks up the new values:
+
+```typescript
+import { authKeys } from '@/features/auth/hooks/useCurrentUser';
+
+queryClient.invalidateQueries({ queryKey: authKeys.me() });
+```
+
+Without this, Redux will hold the stale snapshot from initial page load until the next window-focus refetch (30s staleTime), or until logout/hard refresh. Never write directly to the auth slice from outside the auth feature — always go through invalidation.
 
 ---
 

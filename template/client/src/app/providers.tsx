@@ -17,9 +17,10 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000,
-            gcTime: 10 * 60 * 1000,
-            refetchOnWindowFocus: false,
+            staleTime: 30 * 1000,
+            gcTime: 5 * 60 * 1000,
+            refetchOnWindowFocus: true,
+            refetchOnMount: true,
             retry: 1,
           },
         },
@@ -29,7 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
   return (
     <ReduxProvider store={store}>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="light">
+        <ThemeProvider attribute="class" defaultTheme="light" enableColorScheme={false}>
           <AuthInitializer>
             {children}
           </AuthInitializer>

@@ -4,7 +4,6 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
-import compress from '@fastify/compress';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
@@ -67,14 +66,9 @@ export async function buildApp() {
   // Enhanced security headers for production
   await app.register(helmet, {
     global: true,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
 
-  // Response compression (gzip/brotli) for performance
-  await app.register(compress, {
-    global: true,
-    threshold: 1024, // Only compress responses > 1KB
-    encodings: ['gzip', 'deflate'],
-  });
 
   // Rate limiting: Redis-backed when available, in-memory fallback
   if (RATE_LIMIT_ENABLED) {

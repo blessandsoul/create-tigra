@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { env } from '@config/env.js';
 import { prisma } from '@libs/prisma.js';
 import { UnauthorizedError, ForbiddenError, BadRequestError } from '@shared/errors/errors.js';
+import { clearAuthCookies } from '@libs/cookies.js';
 import type { JwtPayload, UserRole } from '@shared/types/index.js';
 
 let app: FastifyInstance | null = null;
@@ -52,7 +53,7 @@ export function getRefreshTokenExpiresAt(): Date {
 
 export async function authenticate(
   request: FastifyRequest,
-  _reply: FastifyReply,
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     await request.jwtVerify();
@@ -60,16 +61,22 @@ export async function authenticate(
     throw new UnauthorizedError('Invalid or expired token');
   }
 
-  // Verify user still exists, is active, and not soft-deleted
+  // Verify user still exists, is active, and not soft-deleted.
+  // When the session is definitively dead (user gone/deleted/inactive), clear auth
+  // cookies on the response so the browser stops replaying stale credentials.
+  // Without this, middleware keeps seeing the (still-unexpired) JWT cookie and
+  // bounces /login → /dashboard → 401 → /login in an infinite loop.
   const user = await prisma.user.findUnique({
     where: { id: request.user.userId },
     select: { isActive: true, deletedAt: true },
   });
 
   if (!user || user.deletedAt) {
+    clearAuthCookies(reply);
     throw new UnauthorizedError('Account is deactivated or deleted');
   }
   if (!user.isActive) {
+    clearAuthCookies(reply);
     throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
   }
 }

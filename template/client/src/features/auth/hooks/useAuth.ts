@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from 'react';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -29,12 +29,14 @@ interface UseAuthReturn {
 export const useAuth = (): UseAuthReturn => {
   const dispatch = useAppDispatch();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isAuthenticated, isInitializing, isLoggingOut } = useAppSelector((state) => state.auth);
   const pendingRedirectRef = useRef<string>(ROUTES.DASHBOARD);
 
   const loginMutation = useMutation({
     mutationFn: (data: ILoginRequest) => authService.login(data),
     onSuccess: (data) => {
+      queryClient.clear();
       dispatch(setUser(data.user));
       toast.success('Signed in successfully');
       router.push(pendingRedirectRef.current);
@@ -56,6 +58,7 @@ export const useAuth = (): UseAuthReturn => {
         router.push(ROUTES.VERIFY_ACCOUNT);
         return;
       }
+      queryClient.clear();
       dispatch(setUser(data.user));
       toast.success('Account created successfully');
       router.push(ROUTES.DASHBOARD);
@@ -72,10 +75,11 @@ export const useAuth = (): UseAuthReturn => {
     } catch {
       // Proceed with local logout even if server call fails
     } finally {
+      queryClient.clear();
       dispatch(logoutAction());
       router.push(ROUTES.LOGIN);
     }
-  }, [dispatch, router]);
+  }, [dispatch, router, queryClient]);
 
   return {
     user,

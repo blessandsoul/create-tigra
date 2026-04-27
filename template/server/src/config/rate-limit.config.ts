@@ -27,6 +27,7 @@ const MULTIPLIER = env.RATE_LIMIT_MULTIPLIER;
  * Ensures minimum of 1 if rate limiting is enabled.
  */
 function applyMultiplier(max: number): number {
+  if (!RATE_LIMIT_ENABLED) return 1_000_000;
   return Math.max(1, Math.round(max * MULTIPLIER));
 }
 
