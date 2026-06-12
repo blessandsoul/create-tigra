@@ -1,6 +1,6 @@
 import type { FastifyReply } from 'fastify';
 import { env } from '@config/env.js';
-import { parseDurationMs } from '@libs/auth.js';
+import { parseDurationMs } from '@libs/duration.js';
 
 const isProduction = env.NODE_ENV === 'production';
 

@@ -4,7 +4,13 @@ import { env } from '@config/env.js';
 import { prisma } from '@libs/prisma.js';
 import { UnauthorizedError, ForbiddenError, BadRequestError } from '@shared/errors/errors.js';
 import { clearAuthCookies } from '@libs/cookies.js';
+import { parseDurationMs } from '@libs/duration.js';
 import type { JwtPayload, UserRole } from '@shared/types/index.js';
+
+// Re-export so existing consumers of `parseDurationMs` from '@libs/auth.js'
+// keep working. The implementation lives in the import-free leaf module
+// duration.ts to avoid the cookies.ts ↔ auth.ts circular import (TDZ crash).
+export { parseDurationMs } from '@libs/duration.js';
 
 let app: FastifyInstance | null = null;
 
@@ -28,22 +34,6 @@ export function signAccessToken(payload: JwtPayload): string {
 
 export function generateRefreshToken(): string {
   return uuidv4();
-}
-
-export function parseDurationMs(duration: string, fallbackMs: number): number {
-  const match = duration.match(/^(\d+)([smhd])$/);
-  if (!match) return fallbackMs;
-
-  const value = parseInt(match[1], 10);
-  const unit = match[2];
-  const multipliers: Record<string, number> = {
-    s: 1000,
-    m: 60 * 1000,
-    h: 60 * 60 * 1000,
-    d: 24 * 60 * 60 * 1000,
-  };
-
-  return value * multipliers[unit];
 }
 
 export function getRefreshTokenExpiresAt(): Date {

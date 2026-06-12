@@ -22,16 +22,26 @@ vi.mock('axios', () => ({
     create: vi.fn(() => ({
       interceptors: {
         request: {
-          use: vi.fn((onFulfilled: any, onRejected: any) => {
-            captured.requestFulfilled = onFulfilled;
-            captured.requestRejected = onRejected;
-          }),
+          use: vi.fn(
+            (
+              onFulfilled: (c: InternalAxiosRequestConfig) => InternalAxiosRequestConfig,
+              onRejected: (e: unknown) => never,
+            ) => {
+              captured.requestFulfilled = onFulfilled;
+              captured.requestRejected = onRejected;
+            },
+          ),
         },
         response: {
-          use: vi.fn((onFulfilled: any, onRejected: any) => {
-            captured.responseFulfilled = onFulfilled;
-            captured.responseRejected = onRejected;
-          }),
+          use: vi.fn(
+            (
+              onFulfilled: (r: AxiosResponse) => AxiosResponse,
+              onRejected: (e: unknown) => never,
+            ) => {
+              captured.responseFulfilled = onFulfilled;
+              captured.responseRejected = onRejected;
+            },
+          ),
         },
       },
     })),
@@ -404,7 +414,11 @@ describe('httpClient', () => {
 
     it('should not log request headers (may contain Authorization)', () => {
       captured.requestFulfilled!(
-        makeConfig({ method: 'get', url: '/me', headers: { Authorization: 'Bearer token123' } as any }),
+        makeConfig({
+          method: 'get',
+          url: '/me',
+          headers: { Authorization: 'Bearer token123' } as unknown as InternalAxiosRequestConfig['headers'],
+        }),
       );
       const logCall = vi.mocked(logger.debug).mock.calls[0][0] as Record<string, unknown>;
       expect(logCall).not.toHaveProperty('headers');

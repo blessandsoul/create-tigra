@@ -93,6 +93,7 @@ export async function deleteRefreshTokensByUserId(userId: string): Promise<void>
   });
 }
 
+/** @deprecated Lockout moved to Redis email+IP keys in auth.service.ts; kept for back-compat, slated for removal. */
 export async function incrementFailedAttempts(userId: string): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
@@ -102,6 +103,7 @@ export async function incrementFailedAttempts(userId: string): Promise<void> {
   });
 }
 
+/** @deprecated Lockout moved to Redis email+IP keys in auth.service.ts; kept for back-compat, slated for removal. */
 export async function setAccountLock(userId: string, lockedUntil: Date): Promise<void> {
   await prisma.user.update({
     where: { id: userId },

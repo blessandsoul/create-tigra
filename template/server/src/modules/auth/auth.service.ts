@@ -21,6 +21,18 @@ const PASSWORD_RESET_TTL = 3600; // 1 hour in seconds
 const PASSWORD_RESET_PREFIX = 'pw-reset:';
 const PASSWORD_RESET_USER_PREFIX = 'pw-reset-user:';
 
+// --- Account lockout (scoped to email + IP) ---
+// Failed-login attempts are tracked in Redis keyed by the (email, IP) PAIR.
+// Keying by email alone let anyone lock a victim out remotely by spamming bad
+// passwords at the victim's email (lockout DoS). Scoped to email+IP, an
+// attacker only ever locks out their own address; distributed attempts are
+// still throttled by the per-IP rate limit on the login route.
+// Redis failures fail OPEN (no lockout) — consistent with ip-block.ts:
+// availability over lockout, and rate limiting still applies.
+const LOGIN_FAIL_PREFIX = 'login-fail:';
+const LOGIN_LOCK_PREFIX = 'login-lock:';
+const LOGIN_FAIL_WINDOW_SECONDS = 60 * 60; // failed attempts expire after 1 hour
+
 // Account lockout configuration
 const LOCKOUT_THRESHOLDS = [
   { attempts: 5, durationMs: 15 * 60 * 1000 },   // 5 failures → 15 min
@@ -35,6 +47,55 @@ function getLockoutDuration(failedAttempts: number): number | null {
     }
   }
   return null;
+}
+
+function lockoutKey(prefix: string, email: string, ipAddress?: string): string {
+  return `${prefix}${email.toLowerCase()}:${ipAddress ?? 'unknown'}`;
+}
+
+async function isLoginLocked(email: string, ipAddress?: string): Promise<boolean> {
+  try {
+    const locked = await getRedis().exists(lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress));
+    return locked === 1;
+  } catch {
+    return false; // fail open — Redis down must not block all logins
+  }
+}
+
+async function recordFailedLogin(email: string, ipAddress?: string): Promise<void> {
+  try {
+    const redis = getRedis();
+    const failKey = lockoutKey(LOGIN_FAIL_PREFIX, email, ipAddress);
+
+    const attempts = await redis.incr(failKey);
+    if (attempts === 1) {
+      await redis.expire(failKey, LOGIN_FAIL_WINDOW_SECONDS);
+    }
+
+    const lockDurationMs = getLockoutDuration(attempts);
+    if (lockDurationMs) {
+      await redis.set(
+        lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress),
+        '1',
+        'EX',
+        Math.ceil(lockDurationMs / 1000),
+      );
+    }
+  } catch {
+    // Non-critical: don't break the login error path if tracking fails
+    logger.warn('[AUTH] Failed to record failed login attempt');
+  }
+}
+
+async function clearFailedLogins(email: string, ipAddress?: string): Promise<void> {
+  try {
+    await getRedis().del(
+      lockoutKey(LOGIN_FAIL_PREFIX, email, ipAddress),
+      lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress),
+    );
+  } catch {
+    // Non-critical: keys expire on their own
+  }
 }
 
 interface SanitizedUser {
@@ -167,11 +228,22 @@ export async function login(
       throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
+    // Same email+IP lockout as the normal path — the restore flow must not be
+    // a brute-force side door around the lockout.
+    if (await isLoginLocked(input.email, ipAddress)) {
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
     // Verify password before restoring — don't restore on wrong password
     const validPassword = await verifyPassword(input.password, deletedUser.password);
     if (!validPassword) {
+      await recordFailedLogin(input.email, ipAddress);
       throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
+
+    // Successful restore-login — clear the email+IP failure counter, same as
+    // the normal path.
+    await clearFailedLogins(input.email, ipAddress);
 
     // Restore account: clears deletedAt, sets isActive = true, resets lockout
     await authRepo.restoreUser(deletedUser.id);
@@ -184,7 +256,14 @@ export async function login(
       throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
     }
 
-    // Check account lockout
+    // Check account lockout — scoped to this email+IP pair (Redis), so an
+    // attacker spamming bad passwords only locks out their OWN address and
+    // cannot remotely lock the real user out (lockout DoS).
+    if (await isLoginLocked(input.email, ipAddress)) {
+      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    // DB-level lock (legacy data or manual admin lock) is still honored.
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
@@ -192,20 +271,13 @@ export async function login(
     const valid = await verifyPassword(input.password, user.password);
 
     if (!valid) {
-      // Increment failed attempts
-      const newAttempts = user.failedLoginAttempts + 1;
-      await authRepo.incrementFailedAttempts(user.id);
-
-      // Check if we need to lock the account
-      const lockDuration = getLockoutDuration(newAttempts);
-      if (lockDuration) {
-        await authRepo.setAccountLock(user.id, new Date(Date.now() + lockDuration));
-      }
-
+      await recordFailedLogin(input.email, ipAddress);
       throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    // Successful login — reset failed attempts
+    // Successful login — clear the email+IP failure counter and any stale
+    // DB-level lockout state from before lockout moved to Redis.
+    await clearFailedLogins(input.email, ipAddress);
     if (user.failedLoginAttempts > 0 || user.lockedUntil) {
       await authRepo.resetFailedAttempts(user.id);
     }
@@ -274,6 +346,25 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
   });
 
   if (!rotated) {
+    // REUSE DETECTED: the token existed when we looked it up but was consumed
+    // by a concurrent request before we could rotate it — two parties presented
+    // the same single-use token. We cannot tell which one is the attacker, and
+    // whichever redeemed it first already holds a freshly rotated valid token.
+    // Revoke the entire token family: every refresh token and session for this
+    // user. Both legit client and attacker must re-authenticate.
+    //
+    // NOTE: this covers the *detectable* reuse path. Refresh tokens are opaque
+    // random UUIDs (no JWT claims), so a token that is not found in the DB at
+    // all (deleted in an earlier rotation) cannot be attributed to a user, and
+    // the initial not-found lookup above can only reject it. Full replay
+    // attribution would require tombstoning consumed tokens (e.g. a revokedAt
+    // column) instead of deleting them — a schema change out of scope here.
+    logger.warn(
+      { userId: user.id },
+      '[AUTH] Refresh token reuse detected — revoking all sessions and refresh tokens for user',
+    );
+    await authRepo.deleteRefreshTokensByUserId(user.id);
+    await sessionRepository.deleteAllUserSessions(user.id);
     throw new UnauthorizedError('Refresh token already used', 'INVALID_REFRESH_TOKEN');
   }
 

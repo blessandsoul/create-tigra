@@ -13,6 +13,7 @@
  * - Lazy cleanup: expired auto-blocks are removed on check, no separate cleanup job needed
  */
 
+import { env } from '@config/env.js';
 import { prisma } from '@libs/prisma.js';
 import { getRedis } from '@libs/redis.js';
 import { logger } from '@libs/logger.js';
@@ -23,10 +24,15 @@ const BLOCKED_IPS_KEY = 'blocked_ips';
 const AUTO_BLOCKED_KEY = 'auto_blocked_ips';
 const VIOLATION_PREFIX = 'rl_violations:';
 
-// Auto-block thresholds
-const AUTO_BLOCK_THRESHOLD = 10;         // violations before auto-block
-const AUTO_BLOCK_WINDOW_SECONDS = 300;   // 5-minute sliding window
-const AUTO_BLOCK_DURATION_SECONDS = 3600; // block for 1 hour
+// Auto-block thresholds — env-configurable (see .env.example).
+// The threshold default is deliberately high (20): auto-block must catch
+// SUSTAINED abuse, not a single burst. Rate-limit counting happens before
+// validation, so a retry-looping but legitimate client (or a NAT'd office
+// sharing one egress IP) can rack up violations quickly — see the self-ban
+// interaction note in src/config/rate-limit.config.ts before lowering it.
+const AUTO_BLOCK_THRESHOLD = env.IP_AUTO_BLOCK_THRESHOLD;                 // violations before auto-block (default 20)
+const AUTO_BLOCK_WINDOW_SECONDS = env.IP_AUTO_BLOCK_WINDOW_SECONDS;       // sliding window (default 300 = 5 min)
+const AUTO_BLOCK_DURATION_SECONDS = env.IP_AUTO_BLOCK_DURATION_SECONDS;   // block duration (default 3600 = 1 hour)
 
 /**
  * Sync all permanent blocked IPs from DB to Redis.

@@ -1,4 +1,4 @@
-import Fastify, { type FastifyError, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -21,6 +21,7 @@ import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
 import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
+import { isOriginAllowed } from '@libs/origin-check.js';
 import { ForbiddenError } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
@@ -31,15 +32,18 @@ import {
 // Import types to register Fastify augmentations
 import type {} from '@shared/types/index.js';
 
-export async function buildApp() {
+export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
     // Trust proxy headers (X-Forwarded-For) for accurate client IP behind Nginx/load balancer
     trustProxy: env.NODE_ENV === 'production',
     // Graceful shutdown configuration
     forceCloseConnections: true, // Force close idle connections on shutdown
-    requestTimeout: 30000, // 30s request timeout
-    connectionTimeout: 60000, // 60s connection timeout
+    // Env-configurable timeouts (defaults: 30s request, 60s connection).
+    // Long-running routes (LLM calls, exports) may need 180s+ — raise the
+    // reverse proxy timeout to match. See REQUEST_TIMEOUT_MS in .env.example.
+    requestTimeout: env.REQUEST_TIMEOUT_MS,
+    connectionTimeout: env.CONNECTION_TIMEOUT_MS,
     keepAliveTimeout: 5000, // 5s keep-alive timeout
     // Request body size limits (prevent DoS attacks)
     bodyLimit: 1048576, // 1MB default limit (1024 * 1024)
@@ -133,26 +137,54 @@ export async function buildApp() {
   // --- Sync permanent IP blocks from DB to Redis ---
   await syncBlockedIpsToRedis();
 
+  // Monitoring endpoints exempt from IP blocking and request logging.
+  // Health probes (Coolify/Docker/K8s/load balancers) come from infrastructure
+  // IPs that must NEVER be blocked — a blocked probe IP would mark a healthy
+  // container as dead and restart-loop it. Exact match on the path (query
+  // string stripped) so the exemption cannot be widened by crafted URLs.
+  // These paths must match the route registrations below.
+  const monitoringPaths = new Set(['/api/v1/health', '/api/v1/ready', '/api/v1/live']);
+
   // --- IP Block Check (runs before everything else) ---
   app.addHook('onRequest', async (request: FastifyRequest) => {
+    if (monitoringPaths.has(request.url.split('?')[0])) {
+      return; // never block health probes
+    }
     if (await isIpBlocked(request.ip)) {
       throw new ForbiddenError('Access denied', 'IP_BLOCKED');
     }
   });
 
-  // --- Request/Response Logging ---
-  const skipLogPaths = new Set(['/api/v1/health', '/api/v1/ready', '/api/v1/live']);
+  // --- CSRF defense-in-depth: Origin check on state-changing methods ---
+  // With sameSite=none cookies (cross-origin deployments), the browser attaches
+  // auth cookies to cross-site requests. If a browser sends an Origin header on
+  // a state-changing request, it must be same-origin or a configured CORS
+  // origin. Requests WITHOUT an Origin header (curl, Postman, server-to-server,
+  // health probes) are allowed — they carry no ambient cookies and are not
+  // CSRF vectors. See src/libs/origin-check.ts for the full rationale.
+  const stateChangingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+  const allowAllOrigins = corsOrigin === true;
+  const allowedOrigins = new Set<string>(
+    Array.isArray(corsOrigin) ? corsOrigin : typeof corsOrigin === 'string' ? [corsOrigin] : [],
+  );
 
+  app.addHook('onRequest', async (request: FastifyRequest) => {
+    if (!stateChangingMethods.has(request.method)) return;
+    if (isOriginAllowed(request.headers.origin, request.headers.host, allowedOrigins, allowAllOrigins)) return;
+    throw new ForbiddenError('Origin not allowed', 'ORIGIN_NOT_ALLOWED');
+  });
+
+  // --- Request/Response Logging ---
   app.addHook('preHandler', async (request) => {
     const pathname = request.url.split('?')[0];
-    if (!skipLogPaths.has(pathname)) {
+    if (!monitoringPaths.has(pathname)) {
       markRequestStart(request);
     }
   });
 
   app.addHook('onResponse', async (request, reply) => {
     const pathname = request.url.split('?')[0];
-    if (!skipLogPaths.has(pathname)) {
+    if (!monitoringPaths.has(pathname)) {
       logRequestLine(request, reply);
     }
   });

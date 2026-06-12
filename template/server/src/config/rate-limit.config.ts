@@ -9,6 +9,22 @@
  * - RATE_LIMIT_MULTIPLIER: multiply all max values (default: 1, set 10 for dev)
  * - RATE_LIMIT_AUTH_LOGIN_MAX: override login max
  * - RATE_LIMIT_AUTH_REGISTER_MAX: override register max
+ *
+ * ── Self-ban interaction with IP auto-block (read before tightening limits) ──
+ * Every rate-limit exceedance records ONE violation against the client IP
+ * (app.ts `onExceeded` → recordRateLimitViolation). An IP that accumulates
+ * IP_AUTO_BLOCK_THRESHOLD violations (default 20) within
+ * IP_AUTO_BLOCK_WINDOW_SECONDS (default 300s) is auto-blocked for
+ * IP_AUTO_BLOCK_DURATION_SECONDS (default 1h) — for EVERY route.
+ *
+ * Rate limits are counted BEFORE validation, so a legitimate client stuck in a
+ * retry loop on a 400/422 response still burns quota; and NAT'd offices share
+ * one counter per IP. When tuning a route, keep
+ *   (realistic retries per window) × (windows per 5 min) well below the
+ * auto-block threshold, or a legit retry pattern self-bans for an hour.
+ * Example: AUTH_LOGIN at 10/15min can produce at most a handful of violations
+ * per 5-minute window — safely below 20. A hypothetical 5/10s limit could
+ * produce 30 violations in 5 minutes and trip the auto-block on its own.
  */
 
 import { env } from '@config/env.js';

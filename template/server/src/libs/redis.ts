@@ -10,7 +10,7 @@ export function getRedis(): Redis {
       maxRetriesPerRequest: env.REDIS_MAX_RETRIES,
       connectTimeout: env.REDIS_CONNECT_TIMEOUT,
       lazyConnect: true,
-      retryStrategy: (times: number) => {
+      retryStrategy: (times: number): number | null => {
         // Exponential backoff with max delay of 3 seconds
         if (times > env.REDIS_MAX_RETRIES) {
           // Stop retrying after max retries
