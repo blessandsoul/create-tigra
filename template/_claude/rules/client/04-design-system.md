@@ -339,6 +339,28 @@ Link:    transition-colors duration-150 active:opacity-70 md:hover:text-primary
 - **Sticky action bars**: Form submit buttons, checkout CTAs — `sticky bottom-0` on mobile.
 - **No hamburger menus** for ≤5 items. Use bottom tab bar instead.
 
+### BottomNav Overlap — Fixed Bottom Elements
+
+When a page has its own `fixed bottom-0` element (e.g., sticky order bar, floating CTA), it **will be hidden behind BottomNav** on mobile. The BottomNav is `fixed bottom-0 z-50` with a height of `4rem` (64px).
+
+**Define the CSS variable** in the BottomNav component:
+```css
+:root {
+  --bottom-nav-height: 4rem;
+}
+```
+
+**Every fixed bottom element on a page** must offset itself above BottomNav on mobile:
+```
+bottom-[var(--bottom-nav-height)] md:bottom-0
+```
+Or the shorthand equivalent:
+```
+bottom-16 md:bottom-0
+```
+
+This is not optional — without it, BottomNav covers the element and users cannot tap it on mobile.
+
 ---
 
 ## Images
@@ -383,3 +405,4 @@ Link:    transition-colors duration-150 active:opacity-70 md:hover:text-primary
 - Reduce shadow visibility in dark mode (use subtle light borders instead).
 - Consider `brightness-90` on images in dark mode.
 - Add `suppressHydrationWarning` to `<html>` tag.
+- **Hydration guard for conditional theme renders**: `useTheme()` returns `undefined` on the server. Any component that renders *different JSX* based on `theme` (e.g. showing a Sun icon OR a Moon icon — not both) will throw a hydration mismatch. Either render both icons and style the active one (see `components/common/ThemeToggle.tsx`), or add a `mounted` guard: `const [mounted, setMounted] = useState(false); useEffect(() => setMounted(true), []);` and return `null`/a placeholder until `mounted` is true.

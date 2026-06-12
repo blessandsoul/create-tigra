@@ -44,7 +44,7 @@ Includes `.claude/` rules for Claude Code with project-specific conventions, arc
 
 ## Prerequisites
 
-- **Node.js** 18+
+- **Node.js** 22.12+
 - **Docker** (for MySQL and Redis)
 
 ## After Scaffolding
@@ -72,8 +72,15 @@ npm run dev
 
 - Server: http://localhost:8000
 - Client: http://localhost:3000
-- phpMyAdmin: http://localhost:8080
-- Redis Commander: http://localhost:8081
+- phpMyAdmin: http://localhost:8080 (optional — see below)
+- Redis Commander: http://localhost:8081 (optional — see below)
+
+The admin UIs (phpMyAdmin, Redis Commander) are behind the docker-compose `tools` profile and do **not** start with plain `docker compose up -d`. Start them with:
+
+```bash
+cd my-app/server
+docker compose --profile tools up -d
+```
 
 ## License
 

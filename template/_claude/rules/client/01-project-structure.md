@@ -133,3 +133,15 @@ export const CURRENCIES = { USD: 'USD', EUR: 'EUR' } as const;
 
 Protected paths: `/dashboard`, `/profile`, `/admin` — redirect to `/login` if no token.
 Auth paths: `/login`, `/register` — redirect to `/dashboard` if already authenticated.
+
+When creating a new page, always add it to `protectedPaths` and `config.matcher` in `middleware.ts` if it requires authentication. If you are unsure whether a page should be protected, **ask the user** — do not guess.
+
+### Deleting a Route
+
+When removing a page/route, you MUST update **all three** locations:
+
+1. **Delete the page file**: `app/<route>/page.tsx` (and the folder if empty)
+2. **Remove from `routes.ts`**: Delete the entry in `lib/constants/routes.ts`
+3. **Remove from `middleware.ts`**: Delete from `protectedPaths` array AND `config.matcher` array
+
+Missing any of these leaves dead references or broken middleware matches.

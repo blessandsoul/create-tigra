@@ -43,3 +43,7 @@ testapp
 tigra_logs.md
 .gitnexus
 drb/
+
+# Local agent-runner artifacts
+.agents/
+.codex/

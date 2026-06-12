@@ -75,7 +75,7 @@ const mutation = useMutation({
 
 ### Next.js Router Cache
 
-`next.config.ts` sets `experimental.staleTimes: { dynamic: 0, static: 0 }` to disable client-side Router Cache reuse. **Never raise these values** — doing so reintroduces the back-navigation stale-data bug across every page that uses Server Components for data fetching.
+`next.config.ts` sets `experimental.staleTimes: { dynamic: 0, static: 30 }` to minimize client-side Router Cache reuse. `static: 30` is the **Next 16.2+ minimum** — the config schema rejects values below 30, and an invalid value is silently ignored (re-enabling the default Router Cache). `dynamic: 0` is what protects data pages. **Never raise these values above these minimums** — doing so reintroduces the back-navigation stale-data bug across every page that uses Server Components for data fetching.
 
 ---
 

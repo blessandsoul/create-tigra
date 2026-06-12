@@ -134,11 +134,17 @@ Include: node_modules, dist, .env, .env.local, .env*.local, *.log, .prisma
 #### `docker-compose.yml`
 Create a Docker Compose file with these services:
 1. **mysql** - MySQL 8.0, port 3306, database name = `$ARGUMENTS`, root password = `rootpassword`, volume for data persistence, healthcheck
-2. **phpmyadmin** - Latest, port 8080, linked to mysql
+2. **phpmyadmin** - Latest, port 8080, linked to mysql, behind the `tools` profile
 3. **redis** - Redis 7 Alpine, port 6379, volume for data persistence, healthcheck
-4. **redis-commander** - Redis Commander UI, port 8081, linked to redis
+4. **redis-commander** - Redis Commander UI, port 8081, linked to redis, behind the `tools` profile
 
 Use a named network for all services. Add restart policies.
+
+**Security requirements (dev attack surface):**
+- Bind ALL published ports to localhost (`127.0.0.1:<port>:<container-port>`), never `0.0.0.0` — these are dev credentials (root password, unpassworded Redis).
+- Put the admin UIs (**phpmyadmin**, **redis-commander**) behind `profiles: ["tools"]` so they do NOT start by default:
+  - `docker compose up -d` → MySQL + Redis only
+  - `docker compose --profile tools up -d` → also starts phpMyAdmin + Redis Commander
 
 ---
 
