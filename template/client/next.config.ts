@@ -9,10 +9,20 @@ const apiOrigin = (() => {
   }
 })();
 
+// 'unsafe-eval' is required by Next.js dev mode (HMR/react-refresh) but must
+// NOT ship to production. 'unsafe-inline' stays in both modes — the Next.js
+// inline runtime requires it unless a full nonce infrastructure is added.
+const isDev = process.env.NODE_ENV === "development";
+const scriptSrc = `script-src 'self'${isDev ? " 'unsafe-eval'" : ""} 'unsafe-inline'`;
+
 const nextConfig: NextConfig = {
   output: "standalone",
   experimental: {
-    staleTimes: { dynamic: 0, static: 0 },
+    // Next 16.2+ rejects staleTimes.static below 30 (config schema enforces gte(30));
+    // an invalid value is ignored entirely, silently re-enabling the Router Cache.
+    // 30s is the closest allowed to "never serve stale RSC payloads on back-navigation".
+    // dynamic: 0 (still unconstrained) is what protects data pages — never raise it.
+    staleTimes: { dynamic: 0, static: 30 },
   },
   async headers() {
     return [
@@ -27,7 +37,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               `img-src 'self' blob: data: https: ${apiOrigin}`,
               "font-src 'self'",

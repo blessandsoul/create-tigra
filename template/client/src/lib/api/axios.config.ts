@@ -108,15 +108,30 @@ apiClient.interceptors.response.use(
         refreshError.response.status < 500;
 
       if (isAuthFailure) {
-        // Trip the circuit breaker FIRST — prevents any subsequent 401s
-        // from re-entering this flow while the redirect is pending.
-        isSessionDead = true;
+        // The bootstrap probe (AuthInitializer's getMe) runs on EVERY page,
+        // including public ones. For an anonymous visitor, getMe 401 →
+        // refresh 401 is the NORMAL "not logged in" outcome — not a dead
+        // session. The probe must fail silently to "anonymous": clear any
+        // stale Redux state, but never trip the circuit breaker, clear the
+        // session cookie, or hard-redirect a visitor off a public page.
+        // (On protected pages, AuthInitializer handles the redirect itself.)
+        // Note: a genuine request queued behind a probe-initiated refresh is
+        // rejected via processQueue without tripping the breaker or
+        // redirecting — AuthInitializer covers the redirect on protected pages.
+        const isBootstrapProbe = originalRequest.url === API_ENDPOINTS.AUTH.ME;
+
+        if (!isBootstrapProbe) {
+          // A genuine authenticated action failed mid-session — the session
+          // is dead. Trip the circuit breaker FIRST — prevents any subsequent
+          // 401s from re-entering this flow while the redirect is pending.
+          isSessionDead = true;
+        }
 
         const { logout } = await import('@/features/auth/store/authSlice');
         const { store } = await import('@/store');
         store.dispatch(logout());
 
-        if (typeof window !== 'undefined') {
+        if (!isBootstrapProbe && typeof window !== 'undefined') {
           // Clear session indicator so middleware won't let user through
           // to protected pages — prevents redirect loops
           document.cookie = 'auth_session=; Max-Age=0; path=/; SameSite=Strict';

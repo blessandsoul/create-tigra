@@ -36,12 +36,13 @@ function isLoopbackUrl(src: ImageProps['src']): boolean {
   }
 }
 
-export const SafeImage = (props: ImageProps): React.ReactElement => {
+export const SafeImage = ({ alt, ...props }: ImageProps): React.ReactElement => {
   const shouldSkipOptimization = isLoopbackUrl(props.src);
 
   return (
     <Image
       {...props}
+      alt={alt}
       unoptimized={props.unoptimized || shouldSkipOptimization}
     />
   );

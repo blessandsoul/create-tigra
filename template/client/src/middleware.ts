@@ -16,6 +16,13 @@ function isTokenExpired(token: string): boolean {
 
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
+
+  // NOTE: This middleware only checks COOKIE PRESENCE (and a best-effort,
+  // unverified exp claim) for UX-level routing — redirecting users who are
+  // obviously logged out away from protected pages. It does NOT verify the
+  // JWT signature and is NOT a security boundary. Real authorization happens
+  // server-side on every API call; a forged cookie gets past this middleware
+  // but every API request it makes will be rejected with 401/403.
   const accessToken = request.cookies.get('access_token')?.value;
   const authSession = request.cookies.get('auth_session')?.value;
 
