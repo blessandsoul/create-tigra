@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# CI only — no deploy/CD. A push to main triggers the Coolify production
+# build out-of-band via its own webhook; this workflow never deploys.
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: server (typecheck · lint · test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: template/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --include=optional
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+
+  client:
+    name: client (typecheck · lint · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: template/client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --include=optional
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+
+  cli-smoke:
+    name: cli-smoke (scaffold a project end-to-end)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install CLI dependencies
+        run: npm ci
+      - name: CLI --help
+        run: node bin/create-tigra.js --help
+      - name: Scaffold a smoke app non-interactively
+        run: |
+          # The CLI exits 1 if the email-verification prompt is abandoned on a
+          # closed stdin, so we MUST pipe an answer. A single newline takes the
+          # default (No), which is what we want for the smoke scaffold.
+          smoke_dir="$(mktemp -d)"
+          cd "$smoke_dir"
+          printf '\n' | node "$GITHUB_WORKSPACE/bin/create-tigra.js" ci-smoke
+          echo "SMOKE_APP=$smoke_dir/ci-smoke" >> "$GITHUB_ENV"
+      - name: Assert .env.example keeps the JWT placeholder (never the real secret)
+        run: |
+          app="$SMOKE_APP"
+          grep -q 'CHANGE_ME_generate_with_openssl_rand_hex_48' "$app/server/.env.example" \
+            || { echo "::error::server/.env.example lost the CHANGE_ME JWT placeholder"; exit 1; }
+      - name: Assert .env got a real 96-char hex JWT secret
+        run: |
+          app="$SMOKE_APP"
+          secret="$(grep -oE '^JWT_SECRET=[a-f0-9]+' "$app/server/.env" | cut -d= -f2)"
+          len="${#secret}"
+          echo "Generated JWT_SECRET length: $len"
+          [ "$len" -eq 96 ] \
+            || { echo "::error::server/.env JWT_SECRET is not a 96-char hex string (got len=$len)"; exit 1; }
+      - name: Assert no template placeholders survived the scaffold
+        run: |
+          app="$SMOKE_APP"
+          if grep -rEl '\{\{(PROJECT_NAME|PROJECT_NAME_SNAKE|PROJECT_DISPLAY_NAME|DATABASE_NAME|JWT_SECRET|MYSQL_PORT|PHPMYADMIN_PORT|REDIS_PORT|REDIS_COMMANDER_PORT)\}\}' "$app"; then
+            echo "::error::unreplaced {{TEMPLATE}} placeholders remain in the scaffold"
+            exit 1
+          fi
+          echo "No unreplaced placeholders found."
