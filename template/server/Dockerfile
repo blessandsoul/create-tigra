@@ -23,6 +23,18 @@ RUN if [ -f pnpm-lock.yaml ]; then \
       npm ci --omit=dev; \
     fi
 
+# Add the Prisma CLI to the production node_modules so the runtime image can
+# run `npx prisma migrate deploy` at container start (see CMD in stage 3).
+# `prisma` is a devDependency (correct for local dev), so the prod-only install
+# above does NOT include it — without this step, npx would try to download the
+# CLI from the registry on every container boot. Pinned to the exact
+# @prisma/client version the lockfile installed, so CLI and client never drift.
+# --no-save keeps package.json and the lockfile untouched. Because this stage
+# runs on the same Alpine (musl) base as the runtime stage, the engine binaries
+# downloaded here are the correct ones for production.
+RUN npm install --no-save --no-audit --no-fund \
+      "prisma@$(node -p "require('@prisma/client/package.json').version")"
+
 # ===================================================================
 # Stage 2: Build (compile TypeScript)
 # ===================================================================
@@ -69,7 +81,9 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
-# Copy production dependencies from dependencies stage
+# Copy production dependencies from dependencies stage.
+# Includes the Prisma CLI (+ its engines) installed in stage 1, which the
+# CMD below needs for `npx prisma migrate deploy`.
 COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
 
 # Copy generated Prisma client from builder stage (not present in prod deps)
@@ -91,12 +105,22 @@ USER nodejs
 # Expose port (matches default PORT in env.ts; override via PORT env var)
 EXPOSE 8000
 
-# Health check for container orchestration
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+# Health check for container orchestration.
+# start-period is 60s because CMD runs `prisma migrate deploy` BEFORE the server
+# starts listening — a slow migration must not be counted as unhealthy, or
+# Coolify restart-loops the container mid-migration.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
   CMD node -e "const p=process.env.PORT||8000;require('http').get('http://localhost:'+p+'/api/v1/live',(r)=>{process.exit(r.statusCode===200?0:1)})"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the application
-CMD ["node", "dist/server.js"]
+# Start the application — apply any pending Prisma migrations first, then boot.
+# Runs inside Coolify on every container start, where DATABASE_URL is reachable
+# (it isn't from CI, which is why migrations belong here and not in a workflow).
+# `migrate deploy` is idempotent: it applies only pending migrations and exits 0
+# when there is nothing to do. Requirements, all satisfied above:
+#   - prisma CLI in ./node_modules (installed in stage 1, copied with node_modules)
+#   - ./prisma/schema.prisma + ./prisma/migrations (copied from builder)
+# `exec` replaces the shell so node receives signals from dumb-init directly.
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/server.js"]
