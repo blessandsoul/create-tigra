@@ -17,6 +17,10 @@ const VERSION = packageJson.version;
 
 const TEMPLATE_DIR = path.join(__dirname, '..', 'template');
 
+// Non-secret placeholder written into the COMMITTED server/.env.example.
+// The real secret replaces it only in the git-ignored server/.env.
+const JWT_SECRET_PLACEHOLDER = 'CHANGE_ME_generate_with_openssl_rand_hex_48';
+
 // Files that contain template variables and need replacement
 const FILES_TO_REPLACE = [
   'server/package.json',
@@ -24,6 +28,7 @@ const FILES_TO_REPLACE = [
   'server/docker-compose.yml',
   'client/package.json',
   'client/.env.example',
+  'client/.env.example.production',
   'server/postman/collection.json',
   'server/postman/environment.json',
 ];
@@ -121,6 +126,43 @@ function replaceVariables(content, variables) {
     result = result.replaceAll(`{{${key}}}`, value);
   }
   return result;
+}
+
+// When stdin is closed/non-interactive, `prompts` never settles its promise:
+// the event loop drains and Node exits 0 mid-await — no scaffold, no error.
+// That silently "succeeds" in CI. Track the in-flight prompt and fail loudly.
+let activePromptMessage = null;
+
+process.on('exit', (code) => {
+  if (activePromptMessage !== null && code === 0) {
+    // writeSync: stderr writes via console.error can be lost in an 'exit'
+    // handler when stderr is a pipe (async on Windows).
+    fs.writeSync(
+      2,
+      `\n  Aborted: the prompt "${activePromptMessage}" was not answered ` +
+        `(stdin is closed or non-interactive).\n` +
+        `  Run in an interactive terminal, or pipe answers via stdin.\n\n`,
+    );
+    process.exitCode = 1;
+  }
+});
+
+async function ask(question) {
+  activePromptMessage = question.message;
+  const response = await prompts(question, {
+    onCancel: () => {
+      console.error(chalk.red('\n  Cancelled.\n'));
+      process.exit(1);
+    },
+  });
+  activePromptMessage = null;
+  if (response[question.name] === undefined) {
+    console.error(
+      chalk.red(`\n  Aborted: no answer received for "${question.message}".\n`),
+    );
+    process.exit(1);
+  }
+  return response;
 }
 
 function registerAddCommand(program) {
@@ -248,20 +290,12 @@ async function main() {
       let projectName = projectNameArg;
 
       if (!projectName) {
-        const response = await prompts(
-          {
-            type: 'text',
-            name: 'projectName',
-            message: 'What is your project name?',
-            validate: validateProjectName,
-          },
-          {
-            onCancel: () => {
-              console.log(chalk.red('\n  Cancelled.\n'));
-              process.exit(1);
-            },
-          }
-        );
+        const response = await ask({
+          type: 'text',
+          name: 'projectName',
+          message: 'What is your project name?',
+          validate: validateProjectName,
+        });
         projectName = response.projectName;
       }
 
@@ -286,34 +320,30 @@ async function main() {
       }
 
       // Ask about email verification
-      const { enableVerification } = await prompts(
-        {
-          type: 'toggle',
-          name: 'enableVerification',
-          message: 'Enable email verification for new users?',
-          initial: false,
-          active: 'Yes',
-          inactive: 'No',
-          hint: 'Users must verify email before accessing the app',
-        },
-        {
-          onCancel: () => {
-            console.log(chalk.red('\n  Cancelled.\n'));
-            process.exit(1);
-          },
-        }
-      );
+      const { enableVerification } = await ask({
+        type: 'toggle',
+        name: 'enableVerification',
+        message: 'Enable email verification for new users?',
+        initial: false,
+        active: 'Yes',
+        inactive: 'No',
+        hint: 'Users must verify email before accessing the app',
+      });
 
       // Generate random port offset (1-200) so multiple projects don't conflict
       const portOffset = crypto.randomInt(1, 201);
 
-      // Derive all variables
+      // Derive all variables.
+      // SECURITY: everything in this map is written into COMMITTED files
+      // (.env.example, docker-compose.yml, ...) — never put a real secret here.
+      // JWT_SECRET gets an instructional placeholder; the real secret is
+      // generated below and written ONLY to the git-ignored .env.
       const variables = {
         PROJECT_NAME: projectName,
         PROJECT_NAME_SNAKE: toSnakeCase(projectName),
         PROJECT_DISPLAY_NAME: toTitleCase(projectName),
         DATABASE_NAME: `${toSnakeCase(projectName)}_db`,
-        JWT_SECRET: crypto.randomBytes(48).toString('hex'),
+        JWT_SECRET: JWT_SECRET_PLACEHOLDER,
         MYSQL_PORT: String(3306 + portOffset),
         PHPMYADMIN_PORT: String(8080 + portOffset),
         REDIS_PORT: String(6379 + portOffset),
@@ -337,12 +367,21 @@ async function main() {
           }
         }
 
-        // Generate .env from .env.example (so users don't have to copy manually)
+        // Generate .env from .env.example (so users don't have to copy manually).
+        // The real JWT secret is injected HERE and only here — .env is
+        // git-ignored, while .env.example is committed and must keep the
+        // CHANGE_ME placeholder.
+        const jwtSecret = crypto.randomBytes(48).toString('hex');
         for (const envExample of ['server/.env.example', 'client/.env.example']) {
           const examplePath = path.join(targetDir, envExample);
           const envPath = path.join(targetDir, envExample.replace('.env.example', '.env'));
           if (await fs.pathExists(examplePath)) {
-            await fs.copy(examplePath, envPath);
+            const content = await fs.readFile(examplePath, 'utf-8');
+            await fs.writeFile(
+              envPath,
+              content.replaceAll(JWT_SECRET_PLACEHOLDER, jwtSecret),
+              'utf-8',
+            );
           }
         }
 
@@ -423,8 +462,9 @@ async function main() {
       console.log();
       console.log(dim('  App           ') + cyan('http://localhost:3000'));
       console.log(dim('  API           ') + cyan('http://localhost:8000'));
-      console.log(dim('  phpMyAdmin    ') + cyan(`http://localhost:${variables.PHPMYADMIN_PORT}`));
-      console.log(dim('  Redis CMD     ') + cyan(`http://localhost:${variables.REDIS_COMMANDER_PORT}`));
+      console.log(dim('  DB/Redis UIs  ') + 'optional — start with ' + cyan('npm run docker:tools'));
+      console.log(dim('    phpMyAdmin  ') + cyan(`http://localhost:${variables.PHPMYADMIN_PORT}`));
+      console.log(dim('    Redis CMD   ') + cyan(`http://localhost:${variables.REDIS_COMMANDER_PORT}`));
       console.log();
       console.log(line);
       console.log();
