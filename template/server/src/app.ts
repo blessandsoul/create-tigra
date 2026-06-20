@@ -12,6 +12,7 @@ import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { markRequestStart, logRequestLine } from '@libs/requestLogger.js';
 import { initAuth } from '@libs/auth.js';
+import { registerQueryCounter } from '@libs/query-counter.js';
 import { isAppError } from '@shared/errors/AppError.js';
 import { successResponse, errorResponse } from '@shared/responses/successResponse.js';
 import { authRoutes } from '@modules/auth/auth.routes.js';
@@ -112,6 +113,10 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Initialize auth helpers after JWT plugin is registered
   initAuth(app);
+
+  // Dev-only: count Prisma queries per request → X-Query-Count header (N+1 signal for perf-tester).
+  // No-op in production. Registered early so its onRequest store is entered before any query runs.
+  registerQueryCounter(app);
 
   // File upload handling (multipart/form-data)
   await app.register(multipart, {
