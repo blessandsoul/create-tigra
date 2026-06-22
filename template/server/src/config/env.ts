@@ -45,6 +45,13 @@ const envSchema = z.object({
   // --- Rate Limiting ---
   RATE_LIMIT_ENABLED: optionalEnv(z.string().default('true').transform((val) => val === 'true')),
   RATE_LIMIT_MULTIPLIER: optionalEnv(z.coerce.number().min(0.1).max(100).default(1)),
+
+  // When true, derive the client IP for rate-limiting / IP-blocking from the
+  // Cloudflare `CF-Connecting-IP` header instead of the socket/X-Forwarded-For
+  // IP (which is a Cloudflare edge IP behind the proxy — see src/libs/client-ip.ts).
+  // Default false: the header is client-spoofable, so enable this ONLY when the
+  // origin accepts traffic exclusively via Cloudflare.
+  TRUST_CLOUDFLARE: optionalEnv(z.string().default('false').transform((val) => val === 'true')),
   RATE_LIMIT_AUTH_LOGIN_MAX: optionalEnv(z.coerce.number().int().min(1).optional()),
   RATE_LIMIT_AUTH_REGISTER_MAX: optionalEnv(z.coerce.number().int().min(1).optional()),
 
