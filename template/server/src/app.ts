@@ -12,6 +12,7 @@ import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { markRequestStart, logRequestLine } from '@libs/requestLogger.js';
 import { initAuth } from '@libs/auth.js';
+import { registerQueryCounter } from '@libs/query-counter.js';
 import { isAppError } from '@shared/errors/AppError.js';
 import { successResponse, errorResponse } from '@shared/responses/successResponse.js';
 import { authRoutes } from '@modules/auth/auth.routes.js';
@@ -21,6 +22,7 @@ import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
 import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
+import { getClientIp } from '@libs/client-ip.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
 import { ForbiddenError } from '@shared/errors/errors.js';
 import {
@@ -84,8 +86,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       redis: redisStore,
       nameSpace: 'rl:',
       skipOnError: true, // Gracefully degrade if Redis fails mid-request
-      onExceeded: (request: { ip: string }) => {
-        recordRateLimitViolation(request.ip);
+      // Key the limiter on the real client IP (Cloudflare-aware) so users behind
+      // a shared CF edge IP aren't counted as one — see src/libs/client-ip.ts.
+      keyGenerator: (request: FastifyRequest) => getClientIp(request),
+      onExceeded: (request: FastifyRequest) => {
+        recordRateLimitViolation(getClientIp(request));
       },
     });
   } else {
@@ -112,6 +117,10 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Initialize auth helpers after JWT plugin is registered
   initAuth(app);
+
+  // Dev-only: count Prisma queries per request → X-Query-Count header (N+1 signal for perf-tester).
+  // No-op in production. Registered early so its onRequest store is entered before any query runs.
+  registerQueryCounter(app);
 
   // File upload handling (multipart/form-data)
   await app.register(multipart, {
@@ -150,7 +159,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (monitoringPaths.has(request.url.split('?')[0])) {
       return; // never block health probes
     }
-    if (await isIpBlocked(request.ip)) {
+    if (await isIpBlocked(getClientIp(request))) {
       throw new ForbiddenError('Access denied', 'IP_BLOCKED');
     }
   });
