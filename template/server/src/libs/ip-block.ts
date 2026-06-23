@@ -18,6 +18,7 @@ import { prisma } from '@libs/prisma.js';
 import { getRedis } from '@libs/redis.js';
 import { logger } from '@libs/logger.js';
 import { ConflictError } from '@shared/errors/errors.js';
+import { isPrivateOrReservedIp } from '@libs/url-safety.js';
 
 // Redis keys
 const BLOCKED_IPS_KEY = 'blocked_ips';
@@ -183,6 +184,13 @@ export async function getBlockedIps(): Promise<{
  * @param ip - IP address that violated rate limit
  */
 export async function recordRateLimitViolation(ip: string): Promise<void> {
+  // Never auto-block infrastructure addresses (loopback / private / link-local /
+  // Traefik-Docker internal). A shared proxy IP getting auto-blocked would lock
+  // out every real user behind it. Public client IPs proceed as normal.
+  if (isPrivateOrReservedIp(ip)) {
+    return;
+  }
+
   try {
     const redis = getRedis();
     const key = `${VIOLATION_PREFIX}${ip}`;

@@ -21,6 +21,8 @@ import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
 import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
+import { getClientIp } from '@libs/client-ip.js';
+import { isAuthPath } from '@libs/auth-path.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
 import { ForbiddenError } from '@shared/errors/errors.js';
 import {
@@ -84,8 +86,17 @@ export async function buildApp(): Promise<FastifyInstance> {
       redis: redisStore,
       nameSpace: 'rl:',
       skipOnError: true, // Gracefully degrade if Redis fails mid-request
-      onExceeded: (request: { ip: string }) => {
-        recordRateLimitViolation(request.ip);
+      // Key on the REAL client IP (CF-Connecting-IP behind Cloudflare when
+      // TRUST_CLOUDFLARE is set, else the left-most X-Forwarded-For entry), not
+      // the shared proxy/edge IP. Per-route configs define no keyGenerator of
+      // their own, so they all inherit this.
+      keyGenerator: (request: FastifyRequest) => getClientIp(request),
+      onExceeded: (request: FastifyRequest) => {
+        // Auth routes keep their own per-route limit + account lockout; don't let
+        // them arm the IP-wide auto-ban (a mistyped password must not self-ban the
+        // whole API). Record the violation on the real client IP.
+        if (isAuthPath(request)) return;
+        recordRateLimitViolation(getClientIp(request));
       },
     });
   } else {
@@ -150,7 +161,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (monitoringPaths.has(request.url.split('?')[0])) {
       return; // never block health probes
     }
-    if (await isIpBlocked(request.ip)) {
+    if (await isIpBlocked(getClientIp(request))) {
       throw new ForbiddenError('Access denied', 'IP_BLOCKED');
     }
   });

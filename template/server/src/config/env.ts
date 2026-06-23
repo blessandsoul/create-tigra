@@ -57,6 +57,14 @@ const envSchema = z.object({
   IP_AUTO_BLOCK_WINDOW_SECONDS: optionalEnv(z.coerce.number().int().min(1).default(300)),
   IP_AUTO_BLOCK_DURATION_SECONDS: optionalEnv(z.coerce.number().int().min(1).default(3600)),
 
+  // --- Reverse Proxy / Cloudflare ---
+  // Trust the CF-Connecting-IP header as the real client IP for rate-limit /
+  // IP-block decisions (see src/libs/client-ip.ts). Enable ONLY when the origin
+  // accepts traffic EXCLUSIVELY via Cloudflare (orange-cloud) — otherwise the
+  // header is spoofable. Default false = use request.ip. The X-Forwarded-For
+  // fallback in client-ip.ts protects grey-cloud / Traefik regardless of this.
+  TRUST_CLOUDFLARE: optionalEnv(z.string().default('false').transform((val) => val === 'true')),
+
   // --- File Upload ---
   MAX_FILE_SIZE_MB: optionalEnv(z.coerce.number().min(1).max(100).default(10)),
 
