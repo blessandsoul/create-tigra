@@ -23,6 +23,7 @@ import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
 import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
 import { getClientIp } from '@libs/client-ip.js';
+import { isAuthPath } from '@libs/auth-path.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
 import { ForbiddenError } from '@shared/errors/errors.js';
 import {
@@ -90,6 +91,9 @@ export async function buildApp(): Promise<FastifyInstance> {
       // a shared CF edge IP aren't counted as one — see src/libs/client-ip.ts.
       keyGenerator: (request: FastifyRequest) => getClientIp(request),
       onExceeded: (request: FastifyRequest) => {
+        // Auth routes keep their own per-route limit + account lockout; don't let
+        // a mistyped password arm the IP-wide auto-ban.
+        if (isAuthPath(request)) return;
         recordRateLimitViolation(getClientIp(request));
       },
     });
