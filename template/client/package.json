@@ -8,11 +8,13 @@
     "start": "next start",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
+    "audit": "npm audit --audit-level=high",
     "generate:env": "node -e \"import('fs').then(f=>{if(f.existsSync('.env'))console.log('.env already exists, skipping');else{f.copyFileSync('.env.example','.env');console.log('.env created from .env.example')}})\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@reduxjs/toolkit": "^2.11.2",
+    "@sentry/nextjs": "^10.62.0",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.5",
     "class-variance-authority": "^0.7.1",

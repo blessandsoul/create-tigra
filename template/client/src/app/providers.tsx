@@ -11,7 +11,15 @@ import { Toaster } from 'sonner';
 import { store } from '@/store';
 import { AuthInitializer } from '@/features/auth/components/AuthInitializer';
 
-export function Providers({ children }: { children: React.ReactNode }): React.ReactElement {
+export function Providers({
+  children,
+  nonce,
+}: {
+  children: React.ReactNode;
+  // Per-request CSP nonce from middleware (via the root layout). Forwarded to
+  // next-themes so its inline anti-FOUC script is allowed under 'strict-dynamic'.
+  nonce?: string;
+}): React.ReactElement {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -30,7 +38,12 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
   return (
     <ReduxProvider store={store}>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableColorScheme={false}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableColorScheme={false}
+          nonce={nonce}
+        >
           <AuthInitializer>
             {children}
           </AuthInitializer>

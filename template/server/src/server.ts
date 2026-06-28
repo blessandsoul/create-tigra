@@ -1,3 +1,9 @@
+// Initialize Sentry as early as possible — before the app (and its routes) are
+// imported/built — so error capture is active before any request is handled.
+// Inert no-op when SENTRY_DSN is unset. See src/libs/observability/sentry.ts.
+import { initSentry } from '@libs/observability/sentry.js';
+initSentry();
+
 import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { testDatabaseConnection, disconnectPrisma } from '@libs/prisma.js';

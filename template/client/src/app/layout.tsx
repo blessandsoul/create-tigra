@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import type { Metadata, Viewport } from 'next';
 import type React from 'react';
 import { Inter, JetBrains_Mono } from 'next/font/google';
@@ -27,15 +28,21 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>): React.ReactElement {
+}>): Promise<React.ReactElement> {
+  // Read the per-request nonce set by middleware. next-themes injects an inline
+  // anti-FOUC <script> via dangerouslySetInnerHTML that Next does NOT auto-nonce,
+  // so under our 'strict-dynamic' CSP it must be passed the nonce explicitly or
+  // the browser refuses it (causing a flash / hydration mismatch).
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <Providers>{children}</Providers>
+        <Providers nonce={nonce}>{children}</Providers>
       </body>
     </html>
   );
