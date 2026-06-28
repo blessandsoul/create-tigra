@@ -17,6 +17,17 @@ services:
     image: mysql:8.0
     container_name: {{PROJECT_NAME}}-mysql
     restart: unless-stopped
+    # Local-dev resource bounds. mem_limit is a cgroup ceiling (a runaway container is
+    # OOM-killed in isolation instead of wedging the whole WSL2/Docker engine); the flags
+    # dev-tune MySQL 8 to a small, fast-warming footprint. Production reaches MySQL as a
+    # separate Coolify resource via DATABASE_URL — none of this touches prod.
+    mem_limit: 900m
+    command:
+      - --innodb-buffer-pool-size=128M    # default is fine for dev; keeps RSS small
+      - --performance-schema=OFF          # saves ~hundreds of MB on its own
+      - --skip-name-resolve               # no reverse-DNS per connection (faster, leaner)
+      - --max-connections=60              # well above DATABASE_POOL_MAX (10) + headroom
+      - --innodb-flush-log-at-trx-commit=2 # dev durability/throughput trade — not for prod
     ports:
       - '127.0.0.1:${MYSQL_PORT:-{{MYSQL_PORT}}}:3306'
     environment:
@@ -57,6 +68,12 @@ services:
     image: redis:7-alpine
     container_name: {{PROJECT_NAME}}-redis
     restart: unless-stopped
+    # Local-dev resource bounds. Layer two ceilings: Redis's own --maxmemory (150mb) trips
+    # FIRST and refuses writes loudly (noeviction — create-tigra also keeps rate-limit/queue
+    # keys in Redis, so silent LRU eviction would be a dev data-loss trap), while the 200m
+    # cgroup mem_limit sits above it as a hard backstop. --save "" drops RDB snapshot fork/IO.
+    mem_limit: 200m
+    command: ['redis-server', '--maxmemory', '150mb', '--maxmemory-policy', 'noeviction', '--save', '']
     ports:
       - '127.0.0.1:${REDIS_PORT:-{{REDIS_PORT}}}:6379'
     volumes:

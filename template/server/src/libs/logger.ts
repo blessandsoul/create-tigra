@@ -3,6 +3,21 @@ import { env } from '@config/env.js';
 
 export const logger = pino({
   level: env.LOG_LEVEL,
+  // Never let secrets reach the logs. Covers auth/cookie headers (raw and under
+  // the `req` serializer) plus any password/token/secret field at any depth.
+  // `remove: true` drops the key entirely rather than emitting "[Redacted]".
+  redact: {
+    paths: [
+      'req.headers.authorization',
+      'req.headers.cookie',
+      'headers.authorization',
+      'headers.cookie',
+      '*.password',
+      '*.token',
+      '*.secret',
+    ],
+    remove: true,
+  },
   ...(env.NODE_ENV !== 'production' && {
     transport: {
       target: 'pino-pretty',

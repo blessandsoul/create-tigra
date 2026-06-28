@@ -7,7 +7,7 @@
 # ===================================================================
 # Stage 1: Dependencies (cached layer)
 # ===================================================================
-FROM node:20-alpine AS dependencies
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS dependencies
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ RUN if [ -f pnpm-lock.yaml ]; then \
 # ===================================================================
 # Stage 2: Build (compile Next.js)
 # ===================================================================
-FROM node:20-alpine AS builder
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
 
 WORKDIR /app
 
@@ -54,7 +54,7 @@ RUN npm run build
 # ===================================================================
 # Stage 3: Production Runtime
 # ===================================================================
-FROM node:20-alpine AS production
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
