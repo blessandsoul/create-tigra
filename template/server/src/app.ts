@@ -6,10 +6,10 @@ import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { randomUUID } from 'node:crypto';
 import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
+import { Sentry } from '@libs/observability/sentry.js';
 import { markRequestStart, logRequestLine } from '@libs/requestLogger.js';
 import { initAuth } from '@libs/auth.js';
 import { registerQueryCounter } from '@libs/query-counter.js';
@@ -18,6 +18,7 @@ import { successResponse, errorResponse } from '@shared/responses/successRespons
 import { authRoutes } from '@modules/auth/auth.routes.js';
 import { usersRoutes } from '@modules/users/users.routes.js';
 import { adminRoutes } from '@modules/admin/admin.routes.js';
+import { filesRoutes } from '@modules/files/files.routes.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
@@ -38,6 +39,10 @@ import type {} from '@shared/types/index.js';
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
+    // Request-id correlation: honour an inbound X-Request-Id (set by a reverse
+    // proxy / upstream service) so logs and Sentry events share one id across
+    // hops; otherwise mint a UUID. Works even with logger:false.
+    genReqId: (req) => (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
     // Trust proxy headers (X-Forwarded-For) for accurate client IP behind Nginx/load balancer
     trustProxy: env.NODE_ENV === 'production',
     // Graceful shutdown configuration
@@ -134,18 +139,21 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
   });
 
-  // Static file serving for uploads
-  // Get __dirname equivalent in ES modules
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
+  // Initialize file storage (create both upload tiers) BEFORE mounting static,
+  // so the public root exists when @fastify/static checks it.
+  await fileStorageService.initialize();
 
+  // Static file serving for uploads — PUBLIC tier ONLY.
+  // SECURITY: the root is scoped to UPLOAD_PUBLIC_DIR (uploads/public), NOT the
+  // whole uploads/ tree. The PRIVATE tier (uploads/private) lives OUTSIDE this
+  // root and is unreachable through /uploads/* — it is served only by the
+  // auth-gated, owner-scoped route GET /api/v1/files/:filename (filesRoutes).
+  // The public avatar URL shape is unchanged: serving UPLOAD_PUBLIC_DIR at
+  // prefix '/uploads/' keeps avatars at /uploads/users/{id}/avatar/x.webp.
   await app.register(fastifyStatic, {
-    root: path.join(__dirname, '..', 'uploads'),
+    root: fileStorageService.getPublicDir(),
     prefix: '/uploads/',
   });
-
-  // Initialize file storage (create directories)
-  await fileStorageService.initialize();
 
   // --- Sync permanent IP blocks from DB to Redis ---
   await syncBlockedIpsToRedis();
@@ -157,6 +165,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   // string stripped) so the exemption cannot be widened by crafted URLs.
   // These paths must match the route registrations below.
   const monitoringPaths = new Set(['/api/v1/health', '/api/v1/ready', '/api/v1/live']);
+
+  // --- Request-id echo: surface request.id on the response so a client/proxy
+  // can correlate a failed call with the server log + Sentry event. Runs first
+  // so the header is present even when a later hook short-circuits (IP block,
+  // origin check). request.id is the genReqId value (inbound X-Request-Id or UUID).
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id);
+  });
 
   // --- IP Block Check (runs before everything else) ---
   app.addHook('onRequest', async (request: FastifyRequest) => {
@@ -241,8 +257,10 @@ export async function buildApp(): Promise<FastifyInstance> {
       return reply.status(error.statusCode).send(errorResponse(errorInfo.code, errorInfo.message));
     }
 
-    // Unexpected error — log and return generic 500
+    // Unexpected error — capture in Sentry (safe no-op when SDK uninitialized),
+    // then log and return a generic 500. reqId ties the event to the log line.
     const requestId = request.id || 'unknown';
+    Sentry.captureException(error, { extra: { reqId: requestId } });
     logger.error(
       {
         err: error,
@@ -306,6 +324,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/v1' });
   await app.register(usersRoutes, { prefix: '/api/v1' });
   await app.register(adminRoutes, { prefix: '/api/v1' });
+  await app.register(filesRoutes, { prefix: '/api/v1' });
 
   // --- Background Jobs ---
   registerJobs(app);

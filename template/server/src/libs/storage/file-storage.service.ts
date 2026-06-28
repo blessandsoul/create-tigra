@@ -2,11 +2,25 @@
  * File Storage Service
  *
  * Handles local file system operations for user-uploaded files.
- * Directory structure: uploads/users/{userId}/<media-type>/
+ *
+ * ── Two-tier storage (security: closes the @fastify/static over-exposure) ──────
+ * PUBLIC tier  (UPLOAD_PUBLIC_DIR, default <cwd>/uploads/public):
+ *   uploads/public/users/{userId}/<media-type>/ — avatars and other assets meant
+ *   to be world-readable. THIS is the only directory @fastify/static serves at
+ *   /uploads/, so a private file can never leak through the static mount.
+ * PRIVATE tier (UPLOAD_PRIVATE_DIR, default <cwd>/uploads/private):
+ *   uploads/private/users/{userId}/ — sensitive files. Lives OUTSIDE the static
+ *   root and is reachable ONLY through the auth-gated, owner-scoped streaming
+ *   route GET /api/v1/files/:filename (see src/modules/files/).
+ *
+ * The public avatar URL shape is UNCHANGED — `/uploads/users/{id}/avatar/x.webp`
+ * — because the static mount serves UPLOAD_PUBLIC_DIR at prefix `/uploads/`, so
+ * the file just moves one level down on disk (under public/) with no URL churn.
  */
 
 import fs from 'fs/promises';
 import path from 'path';
+import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { InternalError } from '@shared/errors/errors.js';
 import { generateAvatarFilename } from './filename-sanitizer.js';
@@ -15,28 +29,53 @@ import { generateAvatarFilename } from './filename-sanitizer.js';
  * File Storage Service
  *
  * Manages local file storage with per-user directories and SEO-friendly naming.
- * All user media lives under uploads/users/{userId}/ for easy per-user cleanup.
+ * All user media lives under {tier}/users/{userId}/ for easy per-user cleanup.
  */
 class FileStorageService {
-  private readonly uploadDir: string;
-  private readonly usersDir: string;
+  /** PUBLIC tier root — served as static files at /uploads/ (world-readable). */
+  private readonly publicDir: string;
+  /** PRIVATE tier root — NEVER served statically; auth-gated route only. */
+  private readonly privateDir: string;
+  /** {publicDir}/users — per-user public media. */
+  private readonly publicUsersDir: string;
+  /** {privateDir}/users — per-user private media. */
+  private readonly privateUsersDir: string;
 
   constructor() {
-    // Base upload directory: server/uploads
-    this.uploadDir = path.join(process.cwd(), 'uploads');
-    // Users media directory: server/uploads/users
-    this.usersDir = path.join(this.uploadDir, 'users');
+    // Env-driven base paths, optional with <cwd>/uploads/{public,private}
+    // defaults so a clean env still boots (see src/config/env.ts).
+    this.publicDir = env.UPLOAD_PUBLIC_DIR ?? path.join(process.cwd(), 'uploads', 'public');
+    this.privateDir = env.UPLOAD_PRIVATE_DIR ?? path.join(process.cwd(), 'uploads', 'private');
+    this.publicUsersDir = path.join(this.publicDir, 'users');
+    this.privateUsersDir = path.join(this.privateDir, 'users');
+  }
+
+  /** PUBLIC tier root — read by app.ts to scope the @fastify/static mount. */
+  getPublicDir(): string {
+    return this.publicDir;
+  }
+
+  /** PRIVATE tier root — read by the files route for path-containment checks. */
+  getPrivateDir(): string {
+    return this.privateDir;
   }
 
   /**
-   * Gets the base directory for a user's media
+   * Gets the base PUBLIC directory for a user's media
    */
   private getUserDir(userId: string): string {
-    return path.join(this.usersDir, userId);
+    return path.join(this.publicUsersDir, userId);
   }
 
   /**
-   * Gets the avatar directory for a user
+   * Gets the PRIVATE per-user directory
+   */
+  private getUserPrivateDir(userId: string): string {
+    return path.join(this.privateUsersDir, userId);
+  }
+
+  /**
+   * Gets the avatar directory for a user (PUBLIC tier)
    */
   private getUserAvatarDir(userId: string): string {
     return path.join(this.getUserDir(userId), 'avatar');
@@ -190,6 +229,88 @@ class FileStorageService {
   }
 
   /**
+   * Sanitizes a single-segment filename for safe disk storage.
+   *
+   * Strips every path component (returns only the basename) and rejects any
+   * remaining traversal/separator/null-byte chars, so the result can never
+   * escape the user's private directory. This is a storage-side guard; the
+   * files route applies its OWN validation + path-containment check on read.
+   *
+   * @throws InternalError on an empty or unusable name
+   */
+  private sanitizePrivateFilename(filename: string): string {
+    // Reject obvious traversal/separator/null-byte input up front.
+    if (!filename || filename.includes('\0') || filename.includes('/') || filename.includes('\\')) {
+      throw new InternalError('Invalid private filename', 'INVALID_FILENAME');
+    }
+    // Collapse to the basename and drop any leading dots so `..`/`.` can't slip
+    // through; keep a conservative allowlist (letters, digits, . _ -).
+    const base = path.basename(filename).replace(/^\.+/, '');
+    const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!cleaned) {
+      throw new InternalError('Invalid private filename', 'INVALID_FILENAME');
+    }
+    return cleaned;
+  }
+
+  /**
+   * Saves a PRIVATE file for a user (PRIVATE tier — never served statically).
+   *
+   * Writes to UPLOAD_PRIVATE_DIR/users/{userId}/<sanitized-filename>. The file
+   * is reachable ONLY through the auth-gated, owner-scoped route
+   * GET /api/v1/files/:filename — there is no static mount over this tier.
+   *
+   * @param userId - User's unique ID (the owner; scopes the directory)
+   * @param filename - Desired filename (sanitized to a safe single segment)
+   * @param buffer - File contents
+   * @returns The sanitized filename and the owner-scoped absolute path
+   */
+  async savePrivateFile(
+    userId: string,
+    filename: string,
+    buffer: Buffer
+  ): Promise<{ filename: string; path: string }> {
+    try {
+      const safeName = this.sanitizePrivateFilename(filename);
+      const userDir = this.getUserPrivateDir(userId);
+      await this.ensureDirectoryExists(userDir);
+
+      const filePath = path.join(userDir, safeName);
+      await fs.writeFile(filePath, buffer);
+
+      logger.info({
+        msg: 'Private file saved successfully',
+        userId,
+        filename: safeName,
+        fileSize: buffer.length,
+      });
+
+      return { filename: safeName, path: filePath };
+    } catch (error) {
+      if (error instanceof InternalError) throw error;
+      logger.error({ err: error, msg: 'Failed to save private file', userId });
+      throw new InternalError('Failed to save private file', 'FILE_SAVE_FAILED');
+    }
+  }
+
+  /**
+   * Resolves the absolute path of a PRIVATE file for a user.
+   *
+   * Owner-scoped by construction: the path is derived from the supplied userId
+   * (the AUTHENTICATED user at the call site) — never a client-supplied owner.
+   * Returns the path WITHOUT touching disk; the caller checks existence and
+   * re-asserts path containment before streaming.
+   *
+   * @param userId - User's unique ID (the owner)
+   * @param filename - File name within the user's private directory
+   * @returns Absolute file path under UPLOAD_PRIVATE_DIR/users/{userId}/
+   */
+  getPrivateFilePath(userId: string, filename: string): string {
+    const safeName = this.sanitizePrivateFilename(filename);
+    return path.join(this.getUserPrivateDir(userId), safeName);
+  }
+
+  /**
    * Checks if a file exists
    *
    * @param filePath - Full file path
@@ -239,14 +360,21 @@ class FileStorageService {
   /**
    * Initializes the upload directory structure
    *
-   * Creates base uploads directory and users subdirectory if they don't exist.
-   * Should be called at application startup.
+   * Creates BOTH tiers (public + private) and their per-user subdirectories if
+   * they don't exist. Should be called at application startup. Creating the
+   * public dir up front matters because @fastify/static is mounted on it.
    */
   async initialize(): Promise<void> {
     try {
-      await this.ensureDirectoryExists(this.uploadDir);
-      await this.ensureDirectoryExists(this.usersDir);
-      logger.info({ msg: 'File storage initialized', uploadDir: this.uploadDir });
+      await this.ensureDirectoryExists(this.publicDir);
+      await this.ensureDirectoryExists(this.publicUsersDir);
+      await this.ensureDirectoryExists(this.privateDir);
+      await this.ensureDirectoryExists(this.privateUsersDir);
+      logger.info({
+        msg: 'File storage initialized',
+        publicDir: this.publicDir,
+        privateDir: this.privateDir,
+      });
     } catch (error) {
       logger.error({ err: error, msg: 'Failed to initialize file storage' });
       throw new InternalError('Failed to initialize file storage', 'STORAGE_INIT_FAILED');

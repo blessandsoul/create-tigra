@@ -6,7 +6,7 @@
 # ===================================================================
 # Stage 1: Dependencies (cached layer)
 # ===================================================================
-FROM node:20-alpine AS dependencies
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS dependencies
 
 # Install production dependencies only
 WORKDIR /app
@@ -38,7 +38,7 @@ RUN npm install --no-save --no-audit --no-fund \
 # ===================================================================
 # Stage 2: Build (compile TypeScript)
 # ===================================================================
-FROM node:20-alpine AS builder
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
 
 # Override NODE_ENV to ensure devDependencies are installed.
 # Coolify may inject NODE_ENV=production as a build arg, which causes npm ci
@@ -70,7 +70,7 @@ RUN npm run build
 # ===================================================================
 # Stage 3: Production Runtime
 # ===================================================================
-FROM node:20-alpine AS production
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
@@ -96,8 +96,10 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 # Copy Prisma files (needed for migrations)
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 
-# Create uploads directory with correct ownership (must be before USER nodejs)
-RUN mkdir -p /app/uploads && chown nodejs:nodejs /app/uploads
+# Create BOTH upload tiers with correct ownership (must be before USER nodejs).
+# public/ is served as static files at /uploads/; private/ is served ONLY via
+# the auth-gated route GET /api/v1/files/:filename. See file-storage.service.ts.
+RUN mkdir -p /app/uploads/public /app/uploads/private && chown -R nodejs:nodejs /app/uploads
 
 # Switch to non-root user
 USER nodejs

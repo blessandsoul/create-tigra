@@ -116,6 +116,12 @@ export const RATE_LIMITS = {
     timeWindow: '1 minute',
   },
 
+  // Files — auth-gated private file streaming
+  FILES_GET: {
+    max: applyMultiplier(100),
+    timeWindow: '1 minute',
+  },
+
   // Admin routes
   ADMIN_DEFAULT: {
     max: applyMultiplier(30),

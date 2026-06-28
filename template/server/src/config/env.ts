@@ -67,6 +67,17 @@ const envSchema = z.object({
   // --- File Upload ---
   MAX_FILE_SIZE_MB: optionalEnv(z.coerce.number().min(1).max(100).default(10)),
 
+  // --- Two-tier upload storage (see src/libs/storage/file-storage.service.ts) ---
+  // PUBLIC tier: served as static files at /uploads/ — viewable by ANYONE,
+  //   including unauthenticated users (e.g. social-style avatars). @fastify/static
+  //   is scoped to ONLY this directory so it can never serve a private file.
+  // PRIVATE tier: lives OUTSIDE the static root and is served ONLY through the
+  //   auth-gated streaming route GET /api/v1/files/:filename (owner-scoped).
+  // Both optional with sensible <cwd>/uploads/{public,private} defaults so a
+  // clean env still boots; the storage service resolves the defaults at runtime.
+  UPLOAD_PUBLIC_DIR: optionalEnv(z.string().optional()),
+  UPLOAD_PRIVATE_DIR: optionalEnv(z.string().optional()),
+
   // --- JWT Authentication ---
   JWT_SECRET: z
     .string()
@@ -118,8 +129,14 @@ const envSchema = z.object({
   RESEND_FROM_EMAIL: optionalEnv(z.string().email().default('onboarding@resend.dev')),
   CLIENT_URL: optionalEnv(z.string().url().default('http://localhost:3000')),
 
-  // --- Error Tracking (Optional) ---
+  // --- Error Tracking (Optional, Sentry) ---
+  // All inert without SENTRY_DSN — Sentry init becomes a no-op (see
+  // src/libs/observability/sentry.ts). Never hardcode a DSN.
   SENTRY_DSN: optionalEnv(z.string().url().optional()),
+  // Fraction of transactions sampled for performance tracing (0..1).
+  SENTRY_TRACES_SAMPLE_RATE: optionalEnv(z.coerce.number().min(0).max(1).default(0.1)),
+  // Environment tag attached to Sentry events; defaults to NODE_ENV when unset.
+  SENTRY_ENVIRONMENT: optionalEnv(z.string().optional()),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -145,6 +162,10 @@ if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+export const env = {
+  ...parsed.data,
+  // Default the Sentry environment tag to NODE_ENV when not explicitly set.
+  SENTRY_ENVIRONMENT: parsed.data.SENTRY_ENVIRONMENT ?? parsed.data.NODE_ENV,
+};
 
 export type Env = z.infer<typeof envSchema>;
