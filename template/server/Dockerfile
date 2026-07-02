@@ -1,7 +1,11 @@
+# syntax=docker/dockerfile:1
 # ===================================================================
 # Multi-stage Dockerfile for Production Deployment
 # Optimized for Coolify, Docker Compose, and Kubernetes
 # ===================================================================
+# BuildKit cache mounts (--mount=type=cache) keep the npm download cache warm
+# ACROSS builds, so a lockfile-change rebuild re-installs without re-downloading.
+# Requires the `# syntax` line above; auto-enabled on Docker 23+ / any BuildKit.
 
 # ===================================================================
 # Stage 1: Dependencies (cached layer)
@@ -15,7 +19,8 @@ WORKDIR /app
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 
 # Install dependencies (use the lockfile that exists)
-RUN if [ -f pnpm-lock.yaml ]; then \
+RUN --mount=type=cache,target=/root/.npm \
+    if [ -f pnpm-lock.yaml ]; then \
       npm install -g pnpm && pnpm install --prod --frozen-lockfile; \
     elif [ -f yarn.lock ]; then \
       yarn install --production --frozen-lockfile; \
@@ -32,7 +37,7 @@ RUN if [ -f pnpm-lock.yaml ]; then \
 # --no-save keeps package.json and the lockfile untouched. Because this stage
 # runs on the same Alpine (musl) base as the runtime stage, the engine binaries
 # downloaded here are the correct ones for production.
-RUN npm install --no-save --no-audit --no-fund \
+RUN --mount=type=cache,target=/root/.npm npm install --no-save --no-audit --no-fund \
       "prisma@$(node -p "require('@prisma/client/package.json').version")"
 
 # ===================================================================
@@ -50,7 +55,8 @@ WORKDIR /app
 # Copy package files and install ALL dependencies (including dev)
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 
-RUN if [ -f pnpm-lock.yaml ]; then \
+RUN --mount=type=cache,target=/root/.npm \
+    if [ -f pnpm-lock.yaml ]; then \
       npm install -g pnpm && pnpm install --frozen-lockfile; \
     elif [ -f yarn.lock ]; then \
       yarn install --frozen-lockfile; \
