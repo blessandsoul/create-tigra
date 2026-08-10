@@ -82,6 +82,10 @@ cd my-app/server
 docker compose --profile tools up -d
 ```
 
+## Security and Migration Notes
+
+- [Account deactivation login reactivation: issue, fix, and existing-project migration](docs/account-deactivation-login-reactivation.md)
+
 ## License
 
 MIT

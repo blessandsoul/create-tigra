@@ -13,18 +13,6 @@ export async function findDeletedUserByEmail(email: string): Promise<User | null
   });
 }
 
-export async function restoreUser(userId: string): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      deletedAt: null,
-      isActive: true,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    },
-  });
-}
-
 export async function findUserById(id: string): Promise<User | null> {
   return prisma.user.findUnique({
     where: { id, deletedAt: null },

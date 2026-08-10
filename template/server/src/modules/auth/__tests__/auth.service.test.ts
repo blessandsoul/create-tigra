@@ -137,6 +137,9 @@ describe('Auth Service', () => {
 
       // Act & Assert
       await expect(authService.register(validRegisterInput)).rejects.toThrow(ConflictError);
+      await expect(authService.register(validRegisterInput)).rejects.toThrow(
+        'An account with this email was recently deleted and cannot be registered yet.',
+      );
       expect(authRepo.createUser).not.toHaveBeenCalled();
     });
   });
@@ -193,12 +196,33 @@ describe('Auth Service', () => {
     it('should throw UnauthorizedError if user not found', async () => {
       // Arrange
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
-      vi.mocked(authRepo.findDeletedUserByEmail).mockResolvedValue(null);
 
       // Act & Assert
       await expect(authService.login(validLoginInput)).rejects.toThrow(UnauthorizedError);
       await expect(authService.login(validLoginInput)).rejects.toThrow('Invalid email or password');
+      expect(authRepo.findDeletedUserByEmail).not.toHaveBeenCalled();
       expect(verifyPassword).not.toHaveBeenCalled();
+    });
+
+    it('should not restore or authenticate a soft-deleted account with correct credentials', async () => {
+      // findUserByEmail excludes soft-deleted records, so login must stop before
+      // password verification, token creation, or session creation.
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
+      vi.mocked(authRepo.findDeletedUserByEmail).mockResolvedValue({
+        ...testUsers.validUser,
+        deletedAt: new Date('2024-02-01T00:00:00Z'),
+        isActive: false,
+      });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+
+      await expect(authService.login(validLoginInput)).rejects.toThrow(UnauthorizedError);
+      await expect(authService.login(validLoginInput)).rejects.toThrow('Invalid email or password');
+      expect(authRepo.findDeletedUserByEmail).not.toHaveBeenCalled();
+      expect(verifyPassword).not.toHaveBeenCalled();
+      expect(authLib.signAccessToken).not.toHaveBeenCalled();
+      expect(authLib.generateRefreshToken).not.toHaveBeenCalled();
+      expect(sessionRepository.createSession).not.toHaveBeenCalled();
+      expect(authRepo.createRefreshToken).not.toHaveBeenCalled();
     });
 
     it('should throw ForbiddenError if account is not activated', async () => {
@@ -322,46 +346,6 @@ describe('Auth Service', () => {
 
       // Assert
       expect(result.accessToken).toBe('access');
-    });
-  });
-
-  describe('login — soft-deleted account restore path (lockout)', () => {
-    const loginInput = { email: 'test@example.com', password: 'WrongPassword!' };
-    const attackerIp = '203.0.113.7';
-    const softDeletedUser = {
-      ...testUsers.validUser,
-      deletedAt: new Date('2024-02-01T00:00:00Z'),
-      isActive: false,
-    };
-
-    it('should record a failed attempt against the email+IP pair on wrong password for a soft-deleted account', async () => {
-      // Arrange
-      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
-      vi.mocked(authRepo.findDeletedUserByEmail).mockResolvedValue(softDeletedUser);
-      vi.mocked(verifyPassword).mockResolvedValue(false);
-      mockRedis.incr.mockResolvedValue(3); // below the first lockout threshold
-
-      // Act & Assert
-      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toThrow(
-        'Invalid email or password',
-      );
-      expect(mockRedis.incr).toHaveBeenCalledWith(`login-fail:test@example.com:${attackerIp}`);
-      expect(authRepo.restoreUser).not.toHaveBeenCalled();
-    });
-
-    it('should reject a locked email+IP pair on the soft-delete path before verifying the password', async () => {
-      // Arrange
-      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
-      vi.mocked(authRepo.findDeletedUserByEmail).mockResolvedValue(softDeletedUser);
-      mockRedis.exists.mockResolvedValue(1); // lock key present for this pair
-
-      // Act & Assert
-      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toThrow(
-        'Invalid email or password',
-      );
-      expect(mockRedis.exists).toHaveBeenCalledWith(`login-lock:test@example.com:${attackerIp}`);
-      expect(verifyPassword).not.toHaveBeenCalled();
-      expect(authRepo.restoreUser).not.toHaveBeenCalled();
     });
   });
 

@@ -157,11 +157,11 @@ export async function register(
     throw new ConflictError('Email already registered', 'EMAIL_ALREADY_EXISTS');
   }
 
-  // Check if a soft-deleted account exists with this email — direct them to login to restore
+  // Keep the email reserved while the soft-deleted account is retained.
   const deletedUser = await authRepo.findDeletedUserByEmail(input.email);
   if (deletedUser) {
     throw new ConflictError(
-      'An account with this email was recently deleted. Log in to restore it.',
+      'An account with this email was recently deleted and cannot be registered yet.',
       'EMAIL_ALREADY_EXISTS',
     );
   }
@@ -219,68 +219,40 @@ export async function login(
   deviceInfo?: string,
   ipAddress?: string,
 ): Promise<AuthResult> {
-  let user = await authRepo.findUserByEmail(input.email);
-
-  // If no active user found, check for a soft-deleted account that can be restored
+  const user = await authRepo.findUserByEmail(input.email);
   if (!user) {
-    const deletedUser = await authRepo.findDeletedUserByEmail(input.email);
-    if (!deletedUser) {
-      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
+    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+  }
 
-    // Same email+IP lockout as the normal path — the restore flow must not be
-    // a brute-force side door around the lockout.
-    if (await isLoginLocked(input.email, ipAddress)) {
-      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
+  // Distinct error for inactive accounts so the client can show proper messaging
+  if (!user.isActive) {
+    throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
+  }
 
-    // Verify password before restoring — don't restore on wrong password
-    const validPassword = await verifyPassword(input.password, deletedUser.password);
-    if (!validPassword) {
-      await recordFailedLogin(input.email, ipAddress);
-      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
+  // Check account lockout — scoped to this email+IP pair (Redis), so an
+  // attacker spamming bad passwords only locks out their OWN address and
+  // cannot remotely lock the real user out (lockout DoS).
+  if (await isLoginLocked(input.email, ipAddress)) {
+    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+  }
 
-    // Successful restore-login — clear the email+IP failure counter, same as
-    // the normal path.
-    await clearFailedLogins(input.email, ipAddress);
+  // DB-level lock (legacy data or manual admin lock) is still honored.
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+  }
 
-    // Restore account: clears deletedAt, sets isActive = true, resets lockout
-    await authRepo.restoreUser(deletedUser.id);
-    user = { ...deletedUser, deletedAt: null, isActive: true, failedLoginAttempts: 0, lockedUntil: null };
-  } else {
-    // Normal login flow for active accounts
+  const valid = await verifyPassword(input.password, user.password);
 
-    // Distinct error for inactive accounts so the client can show proper messaging
-    if (!user.isActive) {
-      throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
-    }
+  if (!valid) {
+    await recordFailedLogin(input.email, ipAddress);
+    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
+  }
 
-    // Check account lockout — scoped to this email+IP pair (Redis), so an
-    // attacker spamming bad passwords only locks out their OWN address and
-    // cannot remotely lock the real user out (lockout DoS).
-    if (await isLoginLocked(input.email, ipAddress)) {
-      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
-
-    // DB-level lock (legacy data or manual admin lock) is still honored.
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
-
-    const valid = await verifyPassword(input.password, user.password);
-
-    if (!valid) {
-      await recordFailedLogin(input.email, ipAddress);
-      throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-    }
-
-    // Successful login — clear the email+IP failure counter and any stale
-    // DB-level lockout state from before lockout moved to Redis.
-    await clearFailedLogins(input.email, ipAddress);
-    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-      await authRepo.resetFailedAttempts(user.id);
-    }
+  // Successful login — clear the email+IP failure counter and any stale
+  // DB-level lockout state from before lockout moved to Redis.
+  await clearFailedLogins(input.email, ipAddress);
+  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+    await authRepo.resetFailedAttempts(user.id);
   }
 
   const accessToken = signAccessToken({
