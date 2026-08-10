@@ -1,28 +1,30 @@
 /**
- * Server/Edge runtime instrumentation — env-gated Sentry, INERT by default.
+ * Server/Edge runtime instrumentation.
  *
- * Next.js calls `register()` once per server runtime at startup. We init Sentry
- * ONLY when a DSN is present (a server `SENTRY_DSN`, or the public DSN shared
- * with the browser), so with no DSN this is a clean no-op and `next build`
- * succeeds with zero Sentry credentials.
- *
- * NOTE: we deliberately do NOT wrap next.config.ts with `withSentryConfig`.
- * That adds build-time source-map upload which requires a SENTRY_AUTH_TOKEN and
- * would couple `next build` to credentials. Source-map upload is the opt-in
- * upgrade — add `withSentryConfig` + an auth token when you want it. This setup
- * stays purely runtime + env-gated.
+ * Keep local dev cold: importing @sentry/nextjs at module top-level makes Next
+ * compile the Sentry SDK before the first page, even with no DSN.
  */
-import * as Sentry from '@sentry/nextjs';
+type SentryNext = typeof import('@sentry/nextjs');
+type RequestErrorHandler = SentryNext['captureRequestError'];
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN ?? process.env.SENTRY_DSN;
+const sentryEnabled = process.env.NODE_ENV === 'production' && Boolean(dsn);
 
 const tracesSampleRate = process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
   ? Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE)
   : 0.1;
 
+let sentryPromise: Promise<SentryNext> | null = null;
+
+function loadSentry(): Promise<SentryNext | null> {
+  if (!sentryEnabled) return Promise.resolve(null);
+  sentryPromise ??= import('@sentry/nextjs');
+  return sentryPromise;
+}
+
 export async function register(): Promise<void> {
-  // No DSN → stay inert.
-  if (!dsn) return;
+  const Sentry = await loadSentry();
+  if (!Sentry || !dsn) return;
 
   if (process.env.NEXT_RUNTIME === 'nodejs' || process.env.NEXT_RUNTIME === 'edge') {
     Sentry.init({
@@ -33,6 +35,8 @@ export async function register(): Promise<void> {
   }
 }
 
-// Capture errors from Server Components, route handlers, and middleware.
-// Safe no-op when Sentry was never initialized (no DSN).
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError = (async (...args: Parameters<RequestErrorHandler>) => {
+  const Sentry = await loadSentry();
+  if (!Sentry) return;
+  return Sentry.captureRequestError(...args);
+}) as RequestErrorHandler;

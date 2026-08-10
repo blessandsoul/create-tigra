@@ -1,30 +1,38 @@
 /**
- * Browser (client) instrumentation — env-gated Sentry, INERT by default.
+ * Browser instrumentation.
  *
- * Next.js 15.3+/16 loads this module in the browser before the app hydrates.
- * We init Sentry ONLY when the public DSN is set, so with no DSN this file is a
- * no-op and ships nothing that phones home.
- *
- * `process.env.NEXT_PUBLIC_*` is inlined at build time by Next — reference it
- * literally (not via a computed key) so the value is statically replaced.
- *
- * Like the server side, this stays runtime + env-gated: we do NOT wrap
- * next.config.ts with `withSentryConfig` (that would couple `next build` to a
- * source-map upload auth token). withSentryConfig is the opt-in upgrade.
+ * Keep local dev cold: do not import @sentry/nextjs unless production has a
+ * public DSN. This avoids compiling the Sentry SDK for every local dev server.
  */
-import * as Sentry from '@sentry/nextjs';
+type SentryNext = typeof import('@sentry/nextjs');
+type RouterTransitionStart = SentryNext['captureRouterTransitionStart'];
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+const sentryEnabled = process.env.NODE_ENV === 'production' && Boolean(dsn);
 
-if (dsn) {
-  Sentry.init({
-    dsn,
-    tracesSampleRate: process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
-      ? Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE)
-      : 0.1,
+let sentryPromise: Promise<SentryNext> | null = null;
+
+function loadSentry(): Promise<SentryNext | null> {
+  if (!sentryEnabled || !dsn) return Promise.resolve(null);
+
+  sentryPromise ??= import('@sentry/nextjs').then((Sentry) => {
+    Sentry.init({
+      dsn,
+      tracesSampleRate: process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
+        ? Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE)
+        : 0.1,
+    });
+
+    return Sentry;
   });
+
+  return sentryPromise;
 }
 
-// Instruments App Router navigations for tracing. Harmless when Sentry is
-// uninitialized (no DSN).
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+void loadSentry();
+
+export const onRouterTransitionStart = ((...args: Parameters<RouterTransitionStart>) => {
+  void loadSentry().then((Sentry) => {
+    Sentry?.captureRouterTransitionStart(...args);
+  });
+}) as RouterTransitionStart;
