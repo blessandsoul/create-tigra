@@ -65,7 +65,7 @@ jobs:
         run: npm ci
       - name: CLI --help
         run: node bin/create-tigra.js --help
-      - name: Assert npm package includes Codex security guidance
+      - name: Assert npm package includes Codex guidance
         run: |
           npm pack --dry-run --json > "$RUNNER_TEMP/npm-pack.json"
           PACK_JSON="$RUNNER_TEMP/npm-pack.json" node --input-type=module -e '
@@ -74,6 +74,7 @@ jobs:
             const files = new Set(pack.files.map(({ path }) => path));
             const required = [
               "template/AGENTS.md",
+              "template/client/AGENTS.md",
               "template/server/AGENTS.md",
               "template/.agents/skills/security-audit/SKILL.md",
               "template/.agents/skills/security-audit/LICENSE",
@@ -90,13 +91,25 @@ jobs:
           cd "$smoke_dir"
           printf '\n' | node "$GITHUB_WORKSPACE/bin/create-tigra.js" ci-smoke
           echo "SMOKE_APP=$smoke_dir/ci-smoke" >> "$GITHUB_ENV"
-      - name: Assert generated app includes Codex security guidance
+      - name: Assert generated app includes Codex guidance
         run: |
           app="$SMOKE_APP"
           test -f "$app/AGENTS.md"
+          test -f "$app/client/AGENTS.md"
           test -f "$app/server/AGENTS.md"
           test -f "$app/.agents/skills/security-audit/SKILL.md"
           test -f "$app/.agents/skills/security-audit/LICENSE"
+      - name: Assert root-scoped font variables are installed on html
+        run: |
+          layout="$SMOKE_APP/client/src/app/layout.tsx"
+          # The :root font preset cannot resolve next/font variables introduced
+          # only on body, so guard the generated element placement explicitly.
+          grep -Fq 'className={`${inter.variable} ${jetbrainsMono.variable}`}' "$layout"
+          grep -Fq '<body className="font-sans antialiased">' "$layout"
+          if grep -Eq '<body[^>]*\.variable' "$layout"; then
+            echo "::error::next/font variable classes must be applied to html, not body"
+            exit 1
+          fi
       - name: Assert .env.example keeps the JWT placeholder (never the real secret)
         run: |
           app="$SMOKE_APP"

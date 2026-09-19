@@ -11,6 +11,7 @@ Every implementation change MUST include a human-readability pass. Add or update
 - `server/prisma/schema.prisma` is the database-schema source of truth. Use Prisma migrations for schema changes.
 - `server/src/config/env.ts` and `client/src/lib/env.ts` define valid environment variables. Keep the corresponding `.env.example` files synchronized without real credentials.
 - Shared route/API constants, response helpers, and security middleware are canonical; extend them instead of creating competing shapes or duplicate policy.
+- Client font preset tokens are declared on `:root`. Apply every referenced `next/font` variable class to `<html>`, never only to `<body>`, so the root-scoped Tailwind tokens can resolve it.
 
 ## Naming
 

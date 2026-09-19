@@ -40,8 +40,15 @@ export default async function RootLayout({
   const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+    // The font preset consumes these next/font variables from :root. Keep the
+    // generated classes on <html>; variables introduced only on <body> cannot
+    // resolve the root-scoped Tailwind font tokens.
+    <html
+      lang="en"
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans antialiased">
         <Providers nonce={nonce}>{children}</Providers>
       </body>
     </html>

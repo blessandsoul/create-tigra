@@ -12,6 +12,7 @@
 - Server-rendered page data belongs in Server Components; client-fetched server data belongs in React Query; Redux is limited to the authenticated-user lifecycle; local and URL state stay local or in search params.
 - `src/lib/constants/routes.ts` and `api-endpoints.ts` own application and API paths.
 - `src/styles/themes/default.css` owns color values. Components use semantic Tailwind tokens; do not hardcode palette values or create competing theme variables.
+- If a `next/font` CSS variable is referenced by a token declared on `:root`, apply that font's generated variable class to `<html>`. Never attach it only to `<body>`, where it cannot resolve the root-scoped token.
 - `src/middleware.ts` is the single source of truth for security headers and nonce-based CSP. Do not add a second CSP in `next.config.ts`.
 
 ## Security and deployment

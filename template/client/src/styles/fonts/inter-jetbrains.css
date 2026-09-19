@@ -5,8 +5,10 @@
  *
  * To switch fonts:
  * 1. Update the font imports in layout.tsx (next/font/google)
- * 2. Create a new preset file (or edit this one) with matching font-family names
- * 3. Update the import in globals.css to point to your preset
+ * 2. Apply every referenced next/font variable class to <html>, because these
+ *    preset tokens are declared on :root and cannot resolve body-only variables
+ * 3. Create a new preset file (or edit this one) with matching font-family names
+ * 4. Update the import in globals.css to point to your preset
  */
 
 :root {
