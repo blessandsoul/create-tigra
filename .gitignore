@@ -19,11 +19,13 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Claude Code local settings
-.claude/settings.local.json
-
-# Developer role (personal per developer)
+# Local selection used only when the Codex role skill is explicitly invoked.
 .developer-role
+
+# Machine-local state retained with the inert Claude archive.
+archive/claude-code/2026-08-26/repository/.claude/settings.local.json
+archive/claude-code/2026-08-26/repository/.developer-role
+archive/claude-code/2026-08-26/repository/.codex/
 
 # Playwright MCP artifacts
 .playwright-mcp/
@@ -44,6 +46,7 @@ tigra_logs.md
 .gitnexus
 drb/
 
-# Local agent-runner artifacts
-.agents/
+# Machine-local Codex state for this scaffold checkout. The generated-project
+# skills under template/.agents/ remain versioned and are not matched here.
+/.agents/
 .codex/

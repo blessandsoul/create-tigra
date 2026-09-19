@@ -38,9 +38,11 @@ npx create-tigra my-app
 | Testing | Vitest with 80% coverage thresholds |
 | Dev tools | Docker Compose (MySQL, phpMyAdmin, Redis, Redis Commander) |
 
-### AI-Powered Development
+### Codex Development
 
-Includes `.claude/` rules for Claude Code with project-specific conventions, architecture patterns, and coding standards for both client and server.
+Includes concise Codex-native `AGENTS.md` guidance at the project root and scoped guidance inside `client/` and `server/`. Generated projects also include Cloudflare's MIT-licensed `security-audit` repository skill. Meaningful server changes must use its focused guidance and, when the Codex Security plugin is installed, complete a `security-diff-scan` of the working-tree patch before completion.
+
+The security workflow falls back to the bundled skill when Codex Security is unavailable, while full or deep repository audits remain explicit operations rather than an automatic cost on every edit.
 
 ## Prerequisites
 

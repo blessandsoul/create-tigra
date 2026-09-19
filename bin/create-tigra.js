@@ -104,10 +104,10 @@ async function copyTemplate(templateDir, targetDir) {
       continue;
     }
 
-    // Handle dotfile renaming: gitignore -> .gitignore, _claude -> .claude
+    // The repository stores the gitignore without a leading dot so npm reliably
+    // includes it in the published template; generated projects receive the dotfile.
     let destName = entry.name;
     if (entry.name === 'gitignore') destName = '.gitignore';
-    if (entry.name === '_claude') destName = '.claude';
 
     const destPath = path.join(targetDir, destName);
 
@@ -403,20 +403,6 @@ async function main() {
             }
           }
         }
-
-        // Create .developer-role file (default: fullstack = no restrictions)
-        const developerRoleContent = [
-          'fullstack',
-          '# Available roles (change the first line to switch):',
-          '#',
-          '#   frontend   - Can edit client/ only. Cannot edit server/ files. Can read everything.',
-          '#   backend    - Can edit server/ only. Cannot edit client/ files. Can read everything.',
-          '#   fullstack  - Can edit everything. No restrictions.',
-          '#',
-          '# You can also switch roles using the /role command in Claude.',
-          '',
-        ].join('\n');
-        await fs.writeFile(path.join(targetDir, '.developer-role'), developerRoleContent, 'utf-8');
 
         spinner.succeed('Project scaffolded successfully!');
       } catch (error) {

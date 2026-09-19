@@ -59,7 +59,9 @@ On error: `toast.error(getErrorMessage(error))`.
 **Always call both `invalidateQueries` AND `router.refresh()`** unless you are 100% certain no Server Component on any reachable route reads the mutated data. The two caches are independent — invalidating one does not touch the other.
 
 ```typescript
-const router = useRouter();
+import { useAppRouter } from '@/hooks/useAppRouter';
+
+const router = useAppRouter();
 const queryClient = useQueryClient();
 
 const mutation = useMutation({

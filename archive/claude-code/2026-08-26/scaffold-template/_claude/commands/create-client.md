@@ -58,12 +58,14 @@ src/
 │   ├── not-found.tsx           # 404 page
 │   ├── (auth)/
 │   │   ├── layout.tsx          # Auth layout (centered, minimal)
+│   │   ├── loading.tsx         # Immediate auth-route fallback
 │   │   ├── login/
 │   │   │   └── page.tsx        # Login page
 │   │   └── register/
 │   │       └── page.tsx        # Register page
 │   └── (main)/
 │       ├── layout.tsx          # Main layout with Header/Footer
+│       ├── loading.tsx         # Immediate main-route fallback
 │       └── dashboard/
 │           └── page.tsx        # Dashboard page (protected)
 ├── components/
@@ -73,6 +75,9 @@ src/
 │   │   ├── Footer.tsx
 │   │   └── MainLayout.tsx
 │   └── common/
+│       ├── AppLink.tsx
+│       ├── SmoothNavigationProvider.tsx
+│       ├── RouteLoadingShell.tsx
 │       ├── LoadingSpinner.tsx
 │       ├── EmptyState.tsx
 │       ├── Pagination.tsx
@@ -91,6 +96,7 @@ src/
 │       └── types/
 │           └── auth.types.ts
 ├── hooks/
+│   ├── useAppRouter.ts
 │   ├── useDebounce.ts
 │   ├── useLocalStorage.ts
 │   └── useMediaQuery.ts
@@ -131,7 +137,7 @@ Set up the full Tailwind config as specified in `04-design-system.md`:
 Implement the FULL CSS variable system from `04-design-system.md`:
 - `:root` with ALL light mode variables (background, foreground, primary, secondary, muted, accent, destructive, popover, card, border, input, ring, radius, brand colors, semantic colors: success, warning, info)
 - `.dark` with ALL dark mode variables
-- Base layer: `border-border` on all elements, `bg-background text-foreground` on body
+- Base layer: `border-border` on all elements, `bg-background text-foreground` on body, and `scroll-behavior: smooth` on `html` so anchor and route scrolling is never an abrupt jump
 
 #### `next.config.ts`
 - Add security headers from `05-security.md`: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, X-XSS-Protection
@@ -378,11 +384,11 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useMutation } from '@tanstack/react-query';
 import { authService } from '../services/auth.service';
 import { setCredentials, logout as logoutAction } from '../store/authSlice';
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 
 export const useAuth = () => {
   const dispatch = useAppDispatch();
-  const router = useRouter();
+  const router = useAppRouter();
   const { user, isAuthenticated, tokens } = useAppSelector((state) => state.auth);
 
   const loginMutation = useMutation({
@@ -430,6 +436,7 @@ import { Provider as ReduxProvider } from 'react-redux';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 import { useState } from 'react';
+import { SmoothNavigationProvider } from '@/components/common/SmoothNavigationProvider';
 import { store } from '@/store';
 
 export function Providers({ children }: { children: React.ReactNode }): React.ReactElement {
@@ -451,7 +458,7 @@ export function Providers({ children }: { children: React.ReactNode }): React.Re
     <ReduxProvider store={store}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
+          <SmoothNavigationProvider>{children}</SmoothNavigationProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
         <ReactQueryDevtools initialIsOpen={false} />
@@ -471,8 +478,14 @@ Root layout:
 #### `src/app/(main)/layout.tsx`
 Main layout with Header and Footer wrapping children in a flex column min-h-screen structure.
 
+#### `src/app/(main)/loading.tsx`
+Render `RouteLoadingShell` inside the persistent main layout. It is the default streaming fallback for main routes and the place to substitute a layout-matching skeleton later. `SmoothNavigationProvider` supplies immediate feedback even when this boundary cannot stream during a deep sibling navigation.
+
 #### `src/app/(auth)/layout.tsx`
 Auth layout: centered, minimal — flex items-center justify-center min-h-screen.
+
+#### `src/app/(auth)/loading.tsx`
+Render a full-height `RouteLoadingShell` as the default streaming fallback for auth routes.
 
 ---
 
@@ -492,11 +505,17 @@ Server component, simple footer with copyright.
 #### `src/components/common/LoadingSpinner.tsx`
 Using Lucide `Loader2` icon with spin animation. Accept `size` prop.
 
+#### `src/components/common/AppLink.tsx`
+Internal-link wrapper around `next/link`. It sets `scroll={false}` and starts the shared client-side smooth scroll through `SmoothNavigationProvider` before navigation.
+
+#### `src/hooks/useAppRouter.ts`
+Wrapper around `useRouter` for programmatic navigation. Its `push` and `replace` methods disable Next.js instant scrolling and start the same smooth transition as `AppLink`; all other router methods pass through unchanged.
+
 #### `src/components/common/EmptyState.tsx`
 ```typescript
 import { FileQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
+import { AppLink } from '@/components/common/AppLink';
 
 interface EmptyStateProps {
   title: string;
@@ -517,7 +536,7 @@ export const EmptyState = ({
     <p className="mb-4 text-muted-foreground">{description}</p>
     {actionLabel && actionHref && (
       <Button asChild>
-        <Link href={actionHref}>{actionLabel}</Link>
+        <AppLink href={actionHref}>{actionLabel}</AppLink>
       </Button>
     )}
   </div>
@@ -528,10 +547,11 @@ export const EmptyState = ({
 ```typescript
 'use client';
 
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback } from 'react';
+import { useAppRouter } from '@/hooks/useAppRouter';
 
 interface PaginationProps {
   page: number;
@@ -539,7 +559,7 @@ interface PaginationProps {
 }
 
 export const Pagination = ({ page, totalPages }: PaginationProps): React.ReactElement => {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -754,7 +774,7 @@ Simple home page (Server Component). Welcome message with links to login/registe
 Simple dashboard page placeholder (Server Component). Shows "Welcome to your dashboard."
 
 #### `src/app/loading.tsx`
-Global loading component with LoadingSpinner.
+Full-height root streaming fallback for routes outside the standard `(main)` and `(auth)` groups. Immediate client-side feedback comes from `SmoothNavigationProvider`; route-level loading files can replace the generic shell with tailored skeletons where useful.
 
 #### `src/app/error.tsx`
 Client component global error boundary:
@@ -873,6 +893,6 @@ After creating all files:
 - Import order: React/Next → third-party → UI → local → hooks → services → types → utils
 - Forms: validate with Zod client-side AND server-side
 - Never prefix secrets with `NEXT_PUBLIC_`
-- Use `next/image` for images, `next/link` for navigation
+- Use `next/image` for images, `AppLink` for internal links, and `useAppRouter` for programmatic navigation
 - Pair background with foreground colors (`bg-primary text-primary-foreground`)
 - All interactive elements need hover/active/focus-visible states

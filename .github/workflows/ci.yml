@@ -65,6 +65,22 @@ jobs:
         run: npm ci
       - name: CLI --help
         run: node bin/create-tigra.js --help
+      - name: Assert npm package includes Codex security guidance
+        run: |
+          npm pack --dry-run --json > "$RUNNER_TEMP/npm-pack.json"
+          PACK_JSON="$RUNNER_TEMP/npm-pack.json" node --input-type=module -e '
+            import fs from "node:fs";
+            const [pack] = JSON.parse(fs.readFileSync(process.env.PACK_JSON, "utf8"));
+            const files = new Set(pack.files.map(({ path }) => path));
+            const required = [
+              "template/AGENTS.md",
+              "template/server/AGENTS.md",
+              "template/.agents/skills/security-audit/SKILL.md",
+              "template/.agents/skills/security-audit/LICENSE",
+            ];
+            const missing = required.filter((path) => !files.has(path));
+            if (missing.length > 0) throw new Error(`npm package is missing: ${missing.join(", ")}`);
+          '
       - name: Scaffold a smoke app non-interactively
         run: |
           # The CLI exits 1 if the email-verification prompt is abandoned on a
@@ -74,6 +90,13 @@ jobs:
           cd "$smoke_dir"
           printf '\n' | node "$GITHUB_WORKSPACE/bin/create-tigra.js" ci-smoke
           echo "SMOKE_APP=$smoke_dir/ci-smoke" >> "$GITHUB_ENV"
+      - name: Assert generated app includes Codex security guidance
+        run: |
+          app="$SMOKE_APP"
+          test -f "$app/AGENTS.md"
+          test -f "$app/server/AGENTS.md"
+          test -f "$app/.agents/skills/security-audit/SKILL.md"
+          test -f "$app/.agents/skills/security-audit/LICENSE"
       - name: Assert .env.example keeps the JWT placeholder (never the real secret)
         run: |
           app="$SMOKE_APP"

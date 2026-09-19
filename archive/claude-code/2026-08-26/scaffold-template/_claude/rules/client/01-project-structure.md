@@ -12,18 +12,20 @@ src/
 │   ├── providers.tsx       # Client providers (Redux, React Query)
 │   ├── globals.css         # Global styles
 │   ├── (auth)/             # Auth route group
+│   │   ├── loading.tsx     # Immediate auth-route fallback
 │   │   ├── login/page.tsx
 │   │   ├── register/page.tsx
 │   │   └── layout.tsx
 │   ├── (main)/             # Main route group
 │   │   ├── layout.tsx      # Header/Footer layout
+│   │   ├── loading.tsx     # Immediate nested-route fallback
 │   │   └── <domain>/       # Domain-specific routes
 │   ├── dashboard/          # Protected routes
 │   └── admin/              # Admin routes
 ├── components/
 │   ├── ui/                 # shadcn/ui components
 │   ├── layout/             # Header, Footer, Sidebar, MainLayout
-│   └── common/             # LoadingSpinner, ErrorBoundary, Pagination, EmptyState
+│   └── common/             # AppLink, route loading/navigation, shared states
 ├── features/               # Feature modules (domain-driven)
 │   └── <domain>/
 │       ├── components/
@@ -37,7 +39,7 @@ src/
 │   │   └── default.css      # Claude-inspired warm palette (HEX)
 │   └── fonts/              # Font presets (switch in globals.css import)
 │       └── inter-jetbrains.css  # Default — Inter + JetBrains Mono
-├── hooks/                  # Global hooks (useDebounce, useLocalStorage, useMediaQuery)
+├── hooks/                  # Global hooks (useAppRouter, useDebounce, useLocalStorage, useMediaQuery)
 ├── lib/
 │   ├── api/                # axios.config.ts, api.types.ts
 │   ├── constants/          # routes.ts, api-endpoints.ts, app.constants.ts
@@ -63,7 +65,7 @@ src/
 
 ## Import Order
 
-1. React / Next.js (`useState`, `useRouter`, `Image`, `Link`)
+1. React / Next.js (`useState`, `Image`, `usePathname`)
 2. Third-party (`@tanstack/react-query`, `sonner`)
 3. UI components (`@/components/ui/*`)
 4. Local components
@@ -71,6 +73,8 @@ src/
 6. Services
 7. Types (always `import type`)
 8. Utils (`cn`, `formatDate`)
+
+Use `AppLink` for internal links and `useAppRouter` for programmatic navigation so Next.js cannot bypass the global smooth-scroll behavior.
 
 ## Constants
 
