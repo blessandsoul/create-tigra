@@ -1,10 +1,9 @@
 import type React from 'react';
 
-import Link from 'next/link';
-
 import { FileQuestion } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AppLink } from '@/components/common/AppLink';
 import { ROUTES } from '@/lib/constants/routes';
 
 export default function NotFound(): React.ReactElement {
@@ -16,7 +15,7 @@ export default function NotFound(): React.ReactElement {
         The page you&apos;re looking for doesn&apos;t exist or has been moved.
       </p>
       <Button asChild>
-        <Link href={ROUTES.HOME}>Go home</Link>
+        <AppLink href={ROUTES.HOME}>Go home</AppLink>
       </Button>
     </div>
   );

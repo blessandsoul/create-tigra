@@ -1,10 +1,10 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { useAppDispatch } from '@/store/hooks';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { getErrorMessage, isErrorCode, ERROR_CODES } from '@/lib/utils/error';
 import { ROUTES } from '@/lib/constants/routes';
 import { verificationService } from '../services/verification.service';
@@ -16,7 +16,7 @@ interface UseSendVerificationReturn {
 }
 
 export const useSendVerification = (): UseSendVerificationReturn => {
-  const router = useRouter();
+  const router = useAppRouter();
 
   const mutation = useMutation({
     mutationFn: (email: string) => verificationService.sendVerification(email),
@@ -46,7 +46,7 @@ interface UseVerifyAccountReturn {
 
 export const useVerifyAccount = (): UseVerifyAccountReturn => {
   const dispatch = useAppDispatch();
-  const router = useRouter();
+  const router = useAppRouter();
 
   const mutation = useMutation({
     mutationFn: (token: string) => verificationService.verifyAccount(token),

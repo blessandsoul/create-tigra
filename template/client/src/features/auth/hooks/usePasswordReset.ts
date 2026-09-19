@@ -1,9 +1,9 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { ROUTES } from '@/lib/constants/routes';
 import { getErrorMessage } from '@/lib/utils/error';
 import { authService } from '../services/auth.service';
@@ -36,7 +36,7 @@ interface UseResetPasswordReturn {
 }
 
 export const useResetPassword = (): UseResetPasswordReturn => {
-  const router = useRouter();
+  const router = useAppRouter();
 
   const mutation = useMutation({
     mutationFn: (data: { token: string; newPassword: string }) =>

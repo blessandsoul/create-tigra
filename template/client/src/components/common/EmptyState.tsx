@@ -1,9 +1,9 @@
 import type React from 'react';
 
-import Link from 'next/link';
 import { FileQuestion } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AppLink } from './AppLink';
 
 interface EmptyStateProps {
   title: string;
@@ -24,7 +24,7 @@ export const EmptyState = ({
     <p className="mb-4 text-muted-foreground">{description}</p>
     {actionLabel && actionHref && (
       <Button asChild>
-        <Link href={actionHref}>{actionLabel}</Link>
+        <AppLink href={actionHref}>{actionLabel}</AppLink>
       </Button>
     )}
   </div>

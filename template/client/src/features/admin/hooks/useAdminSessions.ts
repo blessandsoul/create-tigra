@@ -1,9 +1,9 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { getErrorMessage } from '@/lib/utils/error';
 import { adminService } from '../services/admin.service';
 import { adminKeys } from './useAdminUsers';
@@ -49,7 +49,7 @@ interface UseForceExpireSessionReturn {
 
 export const useForceExpireSession = (): UseForceExpireSessionReturn => {
   const queryClient = useQueryClient();
-  const router = useRouter();
+  const router = useAppRouter();
 
   const mutation = useMutation({
     mutationFn: (sessionId: string) => adminService.deleteSession(sessionId),

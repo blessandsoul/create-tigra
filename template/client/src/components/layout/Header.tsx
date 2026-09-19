@@ -3,11 +3,11 @@
 import type React from 'react';
 import { useState, useCallback, useEffect, useRef } from 'react';
 
-import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { Sun, Moon, Menu, X, LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { AppLink } from '@/components/common/AppLink';
 import { useAppSelector } from '@/store/hooks';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { APP_NAME } from '@/lib/constants/app.constants';
@@ -50,18 +50,18 @@ export const Header = (): React.ReactElement => {
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
       <div className="container mx-auto flex h-16 items-center justify-between px-4 md:px-6 lg:px-8">
-        <Link
+        <AppLink
           href={ROUTES.HOME}
           className="text-xl font-bold tracking-tight transition-colors duration-150 active:opacity-70 md:hover:text-primary"
         >
           {APP_NAME}
-        </Link>
+        </AppLink>
 
         <nav className="hidden items-center gap-2 md:flex">
           {isAuthenticated ? (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link href={ROUTES.DASHBOARD}>Dashboard</Link>
+                <AppLink href={ROUTES.DASHBOARD}>Dashboard</AppLink>
               </Button>
               <span className="text-sm text-muted-foreground">
                 {user?.firstName}
@@ -79,10 +79,10 @@ export const Header = (): React.ReactElement => {
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link href={ROUTES.LOGIN}>Sign in</Link>
+                <AppLink href={ROUTES.LOGIN}>Sign in</AppLink>
               </Button>
               <Button size="sm" asChild>
-                <Link href={ROUTES.REGISTER}>Get started</Link>
+                <AppLink href={ROUTES.REGISTER}>Get started</AppLink>
               </Button>
             </>
           )}
@@ -134,9 +134,9 @@ export const Header = (): React.ReactElement => {
             {isAuthenticated ? (
               <>
                 <Button variant="ghost" className="w-full justify-start" asChild>
-                  <Link href={ROUTES.DASHBOARD} onClick={closeMobileMenu}>
+                  <AppLink href={ROUTES.DASHBOARD} onClick={closeMobileMenu}>
                     Dashboard
-                  </Link>
+                  </AppLink>
                 </Button>
                 <Button
                   variant="ghost"
@@ -154,14 +154,14 @@ export const Header = (): React.ReactElement => {
             ) : (
               <>
                 <Button variant="ghost" className="w-full justify-start" asChild>
-                  <Link href={ROUTES.LOGIN} onClick={closeMobileMenu}>
+                  <AppLink href={ROUTES.LOGIN} onClick={closeMobileMenu}>
                     Sign in
-                  </Link>
+                  </AppLink>
                 </Button>
                 <Button className="w-full" asChild>
-                  <Link href={ROUTES.REGISTER} onClick={closeMobileMenu}>
+                  <AppLink href={ROUTES.REGISTER} onClick={closeMobileMenu}>
                     Get started
-                  </Link>
+                  </AppLink>
                 </Button>
               </>
             )}

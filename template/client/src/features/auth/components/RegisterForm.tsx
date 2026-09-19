@@ -2,7 +2,6 @@
 
 import type React from 'react';
 
-import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,6 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AppLink } from '@/components/common/AppLink';
 import { useAuth } from '../hooks/useAuth';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
@@ -166,12 +166,12 @@ export const RegisterForm = (): React.ReactElement => {
 
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{' '}
-        <Link
+        <AppLink
           href={ROUTES.LOGIN}
           className="font-medium text-primary transition-colors duration-150 active:opacity-70 md:hover:text-primary/80"
         >
           Sign in
-        </Link>
+        </AppLink>
       </p>
     </div>
   );

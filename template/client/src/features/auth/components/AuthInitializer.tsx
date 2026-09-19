@@ -3,11 +3,12 @@
 import type React from 'react';
 import { useEffect } from 'react';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 import { toast } from 'sonner';
 
 import { useAppSelector } from '@/store/hooks';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { ROUTES } from '@/lib/constants/routes';
 import { isErrorCode, ERROR_CODES } from '@/lib/utils/error';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -37,7 +38,7 @@ interface HttpLikeError {
 
 export const AuthInitializer = ({ children }: AuthInitializerProps): React.ReactElement => {
   const pathname = usePathname();
-  const router = useRouter();
+  const router = useAppRouter();
   const { isLoggingOut } = useAppSelector((state) => state.auth);
 
   // Skip getMe() on auth pages and during logout.

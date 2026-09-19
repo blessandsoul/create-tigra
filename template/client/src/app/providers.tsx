@@ -8,6 +8,7 @@ import { Provider as ReduxProvider } from 'react-redux';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 
+import { SmoothNavigationProvider } from '@/components/common/SmoothNavigationProvider';
 import { store } from '@/store';
 import { AuthInitializer } from '@/features/auth/components/AuthInitializer';
 
@@ -44,9 +45,11 @@ export function Providers({
           enableColorScheme={false}
           nonce={nonce}
         >
-          <AuthInitializer>
-            {children}
-          </AuthInitializer>
+          <SmoothNavigationProvider>
+            <AuthInitializer>
+              {children}
+            </AuthInitializer>
+          </SmoothNavigationProvider>
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </QueryClientProvider>

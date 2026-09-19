@@ -91,6 +91,7 @@
   html {
     @apply bg-background;
     overflow-x: hidden;
+    scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
@@ -99,5 +100,8 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     overflow-x: hidden;
     touch-action: manipulation;
+  }
+  html[data-smooth-navigation="pending"] body {
+    min-height: var(--smooth-navigation-min-height);
   }
 }

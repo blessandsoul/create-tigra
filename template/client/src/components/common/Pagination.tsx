@@ -3,10 +3,11 @@
 import type React from 'react';
 import { Suspense, useCallback } from 'react';
 
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useAppRouter } from '@/hooks/useAppRouter';
 
 interface PaginationProps {
   page: number;
@@ -14,7 +15,7 @@ interface PaginationProps {
 }
 
 const PaginationInner = ({ page, totalPages }: PaginationProps): React.ReactElement => {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 

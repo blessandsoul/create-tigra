@@ -3,10 +3,10 @@
 import { useCallback, useRef } from 'react';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { getErrorMessage, isErrorCode, ERROR_CODES } from '@/lib/utils/error';
 import { ROUTES } from '@/lib/constants/routes';
 import { authService } from '../services/auth.service';
@@ -28,7 +28,7 @@ interface UseAuthReturn {
 
 export const useAuth = (): UseAuthReturn => {
   const dispatch = useAppDispatch();
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { user, isAuthenticated, isInitializing, isLoggingOut } = useAppSelector((state) => state.auth);
   const pendingRedirectRef = useRef<string>(ROUTES.DASHBOARD);
