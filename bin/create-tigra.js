@@ -23,6 +23,7 @@ const JWT_SECRET_PLACEHOLDER = 'CHANGE_ME_generate_with_openssl_rand_hex_48';
 
 // Files that contain template variables and need replacement
 const FILES_TO_REPLACE = [
+  'AGENTS.md',
   'server/package.json',
   'server/.env.example',
   'server/docker-compose.yml',

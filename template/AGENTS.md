@@ -4,6 +4,22 @@
 
 Every implementation change MUST include a human-readability pass. Add or update concise comments or doc comments for important functionality and for non-obvious contracts, invariants, edge cases, business rules, security boundaries, deployment constraints, performance choices, and workarounds. Explain why and what must remain true; do not narrate obvious syntax. Keep comments accurate and remove stale ones.
 
+<!-- project-facts:start -->
+## Project facts
+
+> Maintained by the `seed-project-facts` skill: run it once to fill the TODOs. This section is the source of truth for this project: keep it true. If your work changes any line (deployment, URLs, hosting, databases, Redis, integrations, rules), update it and the seed-plugins registry row in the same change. If it conflicts with reality, trust reality, fix it, and tell Tornike. No secrets here.
+
+- **Name:** {{PROJECT_NAME}}
+- **Purpose:** TODO
+- **Production:** TODO (client URL / server URL, or "not deployed")
+- **Hosting:** TODO (Coolify instance, or none)
+- **Local MySQL:** `{{DATABASE_NAME}}` on TODO (central-mysql | per-project container)
+- **Production MySQL:** TODO (`db` on shared MySQL on <instance> | dedicated Coolify MySQL | none)
+- **Redis:** TODO (local yes/no / production yes/no)
+- **Talks to:** TODO
+- **Special rules:** none
+<!-- project-facts:end -->
+
 ## Architecture and sources of truth
 
 - `client/` is a Next.js App Router application; `server/` is a Fastify API backed by Prisma/MySQL and Redis. They deploy independently.
