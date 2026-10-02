@@ -36,8 +36,8 @@ Every implementation change MUST include a human-readability pass. Add or update
 ## Required server security workflow
 
 - For every meaningful server implementation, bug fix, refactor, dependency update, or configuration change, use the repository-local `security-audit` skill in guidance mode while designing and reviewing the change. Treat authentication, authorization, validation, database access, outbound requests, uploads, cookies, CORS/origin handling, rate limits, environment configuration, and deployment behavior as security-sensitive surfaces.
-- Before completion, use the Codex Security plugin's `codex-security:security-diff-scan` skill to review the current working-tree patch when that plugin skill is available. Scope the review to the changed server behavior and the supporting code needed to establish impact; do not expand it into an unrelated repository audit.
-- If Codex Security is unavailable, perform an equivalent focused patch review with the bundled `security-audit` skill and explicitly report that the plugin scan was unavailable. Do not skip the security gate silently.
+- Before completion, review the current working-tree patch with the agent's own security scan when available: in Codex use the Codex Security plugin's `codex-security:security-diff-scan` skill; in Claude Code run `/security-review`. Scope the review to the changed server behavior and the supporting code needed to establish impact; do not expand it into an unrelated repository audit.
+- If that scan is unavailable, perform an equivalent focused patch review with the bundled `security-audit` skill and explicitly report that the scan was unavailable. Do not skip the security gate silently.
 - A full or deep repository audit remains explicit work: do not start one merely because ordinary server code changed. Fix confirmed in-scope findings, rerun affected checks, and disclose any unresolved or unverified security concern before claiming completion.
 - Documentation-only, comment-only, and formatting-only changes may skip the patch scan when they cannot affect runtime behavior, permissions, deployment, or security policy.
 

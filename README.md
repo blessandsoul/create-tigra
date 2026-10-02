@@ -40,7 +40,7 @@ npx create-tigra my-app
 
 ### Codex Development
 
-Includes concise Codex-native `AGENTS.md` guidance at the project root and scoped guidance inside `client/` and `server/`. Generated projects also include Cloudflare's MIT-licensed `security-audit` repository skill. Meaningful server changes must use its focused guidance and, when the Codex Security plugin is installed, complete a `security-diff-scan` of the working-tree patch before completion.
+Includes concise `AGENTS.md` guidance at the project root and scoped guidance inside `client/` and `server/`, with matching `CLAUDE.md` files that import them so Claude Code reads the same rules. Generated projects also include Cloudflare's MIT-licensed `security-audit` repository skill (in `.agents/skills/` for Codex, with a thin pointer in `.claude/skills/` for Claude Code). Meaningful server changes must use its focused guidance and, before completion, scan the working-tree patch: `security-diff-scan` when the Codex Security plugin is installed, or `/security-review` in Claude Code.
 
 The security workflow falls back to the bundled skill when Codex Security is unavailable, while full or deep repository audits remain explicit operations rather than an automatic cost on every edit.
 
