@@ -20,7 +20,14 @@ model User {
   lastName      String
   avatarUrl     String?   // SEO-friendly path: /uploads/users/{userId}/avatar/{firstName-lastName}-avatar.webp
   role          UserRole  @default(USER)
+  // Admin ban switch ONLY: false = deactivated by an admin (or soft-deleted).
+  // Never use it to mean "email not verified" — that is emailVerifiedAt. Mixing
+  // the two let a banned user re-activate themselves through the verify link.
   isActive      Boolean   @default(true)
+  // Set when the user proves ownership of their email (or an admin approves
+  // them). Null = not verified; login requires it only while
+  // REQUIRE_USER_VERIFICATION is on.
+  emailVerifiedAt DateTime?
   deletedAt     DateTime?
 
   // Account lockout
@@ -51,6 +58,10 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // A refresh token lives only as long as its session: deleting the session
+  // (logout, admin force-expire, the expiry cleanup job) deletes its tokens, so
+  // a login can never outlive the session record users and admins see.
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   // Performance indexes for token operations and cleanup
   @@index([userId])
@@ -70,7 +81,8 @@ model Session {
   expiresAt    DateTime
   createdAt    DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
 
   // Performance indexes for session queries
   @@index([userId])
@@ -83,12 +95,16 @@ model BlockedIp {
   id        String   @id @default(uuid())
   ip        String   @unique @db.VarChar(45)
   reason    String?  @db.VarChar(500)
-  blockedBy String
+  // Admin who created the block. Nullable + SetNull: deleting that admin (the
+  // 30-day account purge) must neither fail nor remove the block — the block
+  // stays in force, only "who blocked it" is lost. With a required relation the
+  // database refused the delete and the purge got stuck on that admin forever.
+  blockedBy String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [blockedBy], references: [id])
+  user User? @relation(fields: [blockedBy], references: [id], onDelete: SetNull)
 
   @@map("blocked_ips")
 }

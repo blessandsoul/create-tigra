@@ -161,7 +161,10 @@ export async function performHealthCheck(): Promise<HealthCheckResult> {
     status = 'unhealthy'; // Critical: DB is required
   } else if (
     database.status === 'degraded' ||
-    redis.status === 'degraded' ||
+    // Redis down is non-fatal (the app keeps serving and reconnects on its
+    // own), but rate limits, IP blocks and login lockout are off meanwhile, so
+    // monitoring must see it instead of a green "healthy".
+    redis.status !== 'up' ||
     memory.status === 'degraded'
   ) {
     status = 'degraded';

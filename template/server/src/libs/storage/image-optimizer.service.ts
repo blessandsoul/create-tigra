@@ -2,12 +2,40 @@
  * Image Optimization Service
  *
  * Handles image processing, optimization, and validation using Sharp.
+ *
+ * Safety rules for user-uploaded images (avatars are public):
+ *  - PRIVACY: the output carries NO metadata. sharp strips EXIF/XMP/IPTC by
+ *    default; never call `.withMetadata()` / `.keepMetadata()` here — it keeps
+ *    the uploader's GPS location, device and capture time in a public file.
+ *    Orientation is applied to the pixels first (autoOrient) so photos don't
+ *    end up sideways once the orientation tag is gone.
+ *  - MEMORY: a small file can describe a huge picture (a one-colour 16k×16k
+ *    PNG is ~100 KB but ~1 GB once decoded). The upload size limit only bounds
+ *    the compressed bytes, so we also cap the decoded pixel count BEFORE
+ *    decoding, accept only real JPEG/PNG/WebP/HEIF content (judged from the
+ *    bytes, not the client's filename or MIME type), and time out slow work.
  */
 
 import sharp from 'sharp';
 import { FILE_UPLOAD_CONSTANTS } from './file-validator.js';
 import { ValidationError, InternalError } from '@shared/errors/errors.js';
 import { logger } from '@libs/logger.js';
+
+/**
+ * Largest image we agree to decode: 50 megapixels. Covers 48 MP phone photos
+ * (8064×6048); normal photos are 12–24 MP. Bounds decode memory to roughly
+ * 200 MB per upload instead of sharp's default ~1 GB (268 MP).
+ */
+export const MAX_INPUT_PIXELS = 50_000_000;
+
+/** Formats sharp detects from the file's bytes that we accept for avatars. */
+export const ALLOWED_INPUT_FORMATS = ['jpeg', 'png', 'webp', 'heif'] as const;
+
+/** Hard stop for a single image's processing time. */
+const PROCESSING_TIMEOUT_SECONDS = 10;
+
+/** sharp options shared by the probe and the pipeline so both enforce the same limit. */
+const INPUT_OPTIONS = { limitInputPixels: MAX_INPUT_PIXELS, autoOrient: true } as const;
 
 /**
  * Image Optimizer Service
@@ -19,28 +47,32 @@ class ImageOptimizerService {
    * Optimizes an image for avatar use
    *
    * Process:
-   * 1. Resize to max 512x512 (preserves aspect ratio)
-   * 2. Convert to WebP format for best compression
-   * 3. Compress to ~85% quality
-   * 4. Strip EXIF metadata for privacy
+   * 1. Check the real format and the pixel count before decoding
+   * 2. Apply EXIF orientation to the pixels
+   * 3. Resize to max 512x512 (preserves aspect ratio)
+   * 4. Convert to WebP (~85% quality) with ALL metadata stripped
    *
    * @param buffer - Original image buffer
    * @returns Optimized image buffer in WebP format
-   * @throws ValidationError if image is invalid
-   * @throws InternalError if optimization fails
-   *
-   * @example
-   * ```typescript
-   * const optimized = await imageOptimizerService.optimizeAvatar(imageBuffer);
-   * ```
+   * @throws ValidationError if the image is invalid, too large or an unsupported format
+   * @throws InternalError if optimization fails unexpectedly
    */
   async optimizeAvatar(buffer: Buffer): Promise<Buffer> {
     try {
-      // Validate that buffer contains a valid image
-      const metadata = await sharp(buffer).metadata();
+      // Reads only the header: cheap, and enforces the pixel limit up front.
+      const metadata = await sharp(buffer, INPUT_OPTIONS).metadata();
 
       if (!metadata.width || !metadata.height) {
         throw new ValidationError('Unable to read image dimensions', 'INVALID_IMAGE');
+      }
+      if (!metadata.format || !(ALLOWED_INPUT_FORMATS as readonly string[]).includes(metadata.format)) {
+        throw new ValidationError(
+          'Image format is not supported. Use JPEG, PNG or WebP.',
+          'UNSUPPORTED_IMAGE_FORMAT',
+        );
+      }
+      if (metadata.width * metadata.height > MAX_INPUT_PIXELS) {
+        throw new ValidationError('Image dimensions are too large', 'IMAGE_TOO_LARGE');
       }
 
       logger.info({
@@ -50,22 +82,17 @@ class ImageOptimizerService {
         originalDimensions: `${metadata.width}x${metadata.height}`,
       });
 
-      // Optimize image
-      const optimized = await sharp(buffer)
+      const optimized = await sharp(buffer, INPUT_OPTIONS)
+        .timeout({ seconds: PROCESSING_TIMEOUT_SECONDS })
         // Resize to max 512x512, preserve aspect ratio
         .resize(FILE_UPLOAD_CONSTANTS.AVATAR_MAX_DIMENSION, FILE_UPLOAD_CONSTANTS.AVATAR_MAX_DIMENSION, {
           fit: 'inside', // Preserve aspect ratio, fit within bounds
           withoutEnlargement: true, // Don't upscale smaller images
         })
-        // Convert to WebP with quality optimization
+        // Convert to WebP. No withMetadata(): the output keeps no EXIF/GPS/XMP.
         .webp({
           quality: 85, // Balance between quality and file size
           effort: 4, // Compression effort (0-6, higher = better compression but slower)
-        })
-        // Strip EXIF metadata for privacy
-        .withMetadata({
-          exif: {},
-          icc: undefined,
         })
         .toBuffer();
 
@@ -77,65 +104,33 @@ class ImageOptimizerService {
 
       return optimized;
     } catch (error) {
-      // Handle Sharp-specific errors
-      if (error instanceof Error) {
-        if (error.message.includes('Input buffer contains unsupported image format')) {
-          throw new ValidationError('Image format is not supported', 'UNSUPPORTED_IMAGE_FORMAT');
-        }
-
-        if (error.message.includes('Input file is missing')) {
-          throw new ValidationError('Invalid image data', 'INVALID_IMAGE');
-        }
-      }
-
-      // Re-throw ValidationError as-is
       if (error instanceof ValidationError) {
         throw error;
+      }
+
+      // sharp rejects bad input with plain Errors; map them to client errors.
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        if (message.includes('pixel limit')) {
+          throw new ValidationError('Image dimensions are too large', 'IMAGE_TOO_LARGE');
+        }
+        if (message.includes('timeout')) {
+          throw new ValidationError('Image is too complex to process', 'IMAGE_TOO_COMPLEX');
+        }
+        if (
+          message.includes('unsupported image format') ||
+          message.includes('input file is missing') ||
+          message.includes('bad seek') ||
+          message.includes('corrupt') ||
+          message.includes('heif')
+        ) {
+          throw new ValidationError('Invalid or unsupported image', 'INVALID_IMAGE');
+        }
       }
 
       // Wrap unexpected errors
       logger.error({ err: error, msg: 'Image optimization failed' });
       throw new InternalError('Failed to optimize image', 'IMAGE_OPTIMIZATION_FAILED');
-    }
-  }
-
-  /**
-   * Validates that a buffer contains a valid image
-   *
-   * @param buffer - Buffer to validate
-   * @returns True if buffer is a valid image
-   * @throws ValidationError if buffer is invalid
-   *
-   * @example
-   * ```typescript
-   * await imageOptimizerService.validateImageBuffer(buffer);
-   * ```
-   */
-  async validateImageBuffer(buffer: Buffer): Promise<boolean> {
-    try {
-      const metadata = await sharp(buffer).metadata();
-
-      if (!metadata.format || !metadata.width || !metadata.height) {
-        throw new ValidationError('Buffer does not contain a valid image', 'INVALID_IMAGE');
-      }
-
-      // Check if format is supported
-      const supportedFormats = ['jpeg', 'png', 'webp', 'gif', 'heif'];
-      if (!supportedFormats.includes(metadata.format)) {
-        throw new ValidationError(
-          `Image format '${metadata.format}' is not supported`,
-          'UNSUPPORTED_IMAGE_FORMAT'
-        );
-      }
-
-      return true;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        throw error;
-      }
-
-      logger.error({ err: error, msg: 'Image validation failed' });
-      throw new ValidationError('Unable to validate image', 'INVALID_IMAGE');
     }
   }
 }

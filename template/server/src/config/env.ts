@@ -20,7 +20,11 @@ const optionalEnv = <T extends z.ZodTypeAny>(schema: T): z.ZodPreprocess<T> =>
 
 const envSchema = z.object({
   // --- Application ---
-  NODE_ENV: optionalEnv(z.enum(['development', 'production', 'test']).default('development')),
+  // Fail-closed default: an unset NODE_ENV means production. Development mode
+  // deliberately relaxes CORS, the Origin check and Secure cookies, so a
+  // deployment that forgets NODE_ENV must not silently land there. Local dev
+  // gets NODE_ENV=development from the generated .env; tests set 'test'.
+  NODE_ENV: optionalEnv(z.enum(['development', 'production', 'test']).default('production')),
   PORT: optionalEnv(z.coerce.number().int().min(1).max(65535).default(8000)),
   HOST: optionalEnv(z.string().default('0.0.0.0')),
 
@@ -39,6 +43,8 @@ const envSchema = z.object({
 
   // --- Redis ---
   REDIS_URL: optionalEnv(z.string().default('redis://localhost:6379')),
+  // Retries for a single Redis command. The connection itself reconnects
+  // forever with capped backoff (see src/libs/redis.ts).
   REDIS_MAX_RETRIES: optionalEnv(z.coerce.number().int().min(0).default(3)),
   REDIS_CONNECT_TIMEOUT: optionalEnv(z.coerce.number().int().min(1000).default(10000)), // ms
 
@@ -82,8 +88,10 @@ const envSchema = z.object({
   JWT_SECRET: z
     .string()
     .min(32, 'JWT_SECRET must be at least 32 characters')
-    // The committed .env.example placeholder is 43 chars and would pass min(32) —
-    // every scaffolded app would boot with the same publicly-known signing key.
+    // Every secret committed in the template's .env.example files is example
+    // text starting with CHANGE_ME (43 chars, so it would pass min(32)). This
+    // guard is what stops an app from booting with that publicly-known signing
+    // key. Keep any new example secret on the CHANGE_ME prefix; CI asserts it.
     .refine(
       (s) => !s.startsWith('CHANGE_ME'),
       'JWT_SECRET is still the placeholder — generate one: openssl rand -hex 48',
@@ -107,12 +115,15 @@ const envSchema = z.object({
   // Cookie domain for cross-origin deployments (client ≠ server hostname)
   // Required when client and API are on different subdomains (e.g., app.example.com + api.example.com)
   // Set to the shared parent domain with a leading dot: ".example.com"
-  // Leave empty for same-origin deployments or local development
+  // Leave empty for same-origin deployments or local development.
+  // Applies only to the non-secret auth_session cookie; the token cookies are
+  // always host-only on the API (see src/libs/cookies.ts).
   COOKIE_DOMAIN: optionalEnv(z.string().optional()),
 
   // --- Account Activation ---
-  // When true (default), new users are created as inactive and must verify
-  // their account before they can log in. When false, users are active immediately.
+  // When true (default), new users start with emailVerifiedAt = null and cannot
+  // sign in until they verify their email. When false, they count as verified
+  // immediately. This never touches isActive, which is only the admin ban switch.
   REQUIRE_USER_VERIFICATION: optionalEnv(z.string().default('true').transform((val) => val === 'true')),
 
   // --- CORS ---

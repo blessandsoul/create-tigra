@@ -5,10 +5,10 @@ import { getRedis } from '@libs/redis.js';
 import { sendEmail } from '@libs/email.js';
 import { logger } from '@libs/logger.js';
 import { env } from '@config/env.js';
+import { assertAccountCanSignIn } from '@libs/account-status.js';
 import {
   ConflictError,
   UnauthorizedError,
-  ForbiddenError,
   NotFoundError,
   BadRequestError,
 } from '@shared/errors/errors.js';
@@ -106,6 +106,8 @@ interface SanitizedUser {
   avatarUrl: string | null;
   role: UserRole;
   isActive: boolean;
+  /** ISO timestamp of email verification, or null while unverified. */
+  emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,6 +133,7 @@ function sanitizeUser(user: {
   avatarUrl?: string | null;
   role: UserRole;
   isActive: boolean;
+  emailVerifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): SanitizedUser {
@@ -142,6 +145,7 @@ function sanitizeUser(user: {
     avatarUrl: user.avatarUrl ?? null,
     role: user.role,
     isActive: user.isActive,
+    emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -167,18 +171,21 @@ export async function register(
   }
 
   const hashedPassword = await hashPassword(input.password);
-  const isActive = !env.REQUIRE_USER_VERIFICATION;
+  // A new account is never banned (isActive stays at its default true). When
+  // verification is required it starts unverified and gets no session until it
+  // proves its email; otherwise it counts as verified from the start.
+  const requiresVerification = env.REQUIRE_USER_VERIFICATION;
 
   const user = await authRepo.createUser({
     email: input.email,
     password: hashedPassword,
     firstName: input.firstName,
     lastName: input.lastName,
-    isActive,
+    emailVerifiedAt: requiresVerification ? null : new Date(),
   });
 
   // If verification is required, don't issue tokens — user must verify first
-  if (!isActive) {
+  if (requiresVerification) {
     return {
       user: sanitizeUser(user),
       requiresVerification: true,
@@ -224,11 +231,6 @@ export async function login(
     throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
   }
 
-  // Distinct error for inactive accounts so the client can show proper messaging
-  if (!user.isActive) {
-    throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
-  }
-
   // Check account lockout — scoped to this email+IP pair (Redis), so an
   // attacker spamming bad passwords only locks out their OWN address and
   // cannot remotely lock the real user out (lockout DoS).
@@ -254,6 +256,10 @@ export async function login(
   if (user.failedLoginAttempts > 0 || user.lockedUntil) {
     await authRepo.resetFailedAttempts(user.id);
   }
+
+  // Reveal account state only now that the password is proven, so an anonymous
+  // caller cannot learn whether an email is banned or unverified.
+  assertAccountCanSignIn(user);
 
   const accessToken = signAccessToken({
     userId: user.id,
@@ -294,13 +300,24 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
     throw new UnauthorizedError('Refresh token expired', 'REFRESH_TOKEN_EXPIRED');
   }
 
+  // A token is only as alive as its session. If the session row is gone
+  // (logout elsewhere, admin force-expire, cleanup job) or past its expiry, the
+  // login is over: drop the token instead of minting new ones.
+  const session = storedToken.sessionId
+    ? await sessionRepository.getSessionById(storedToken.sessionId)
+    : null;
+  if (!session || session.expiresAt <= new Date()) {
+    await authRepo.deleteRefreshToken(refreshToken);
+    throw new UnauthorizedError('Session expired', 'SESSION_EXPIRED');
+  }
+
   const user = await authRepo.findUserById(storedToken.userId);
   if (!user) {
     throw new UnauthorizedError('User not found or disabled', 'INVALID_REFRESH_TOKEN');
   }
-  if (!user.isActive) {
-    throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
-  }
+  // A ban (or a pending verification) also stops refresh, so a banned user's
+  // leftover refresh token cannot mint new access tokens.
+  assertAccountCanSignIn(user);
 
   const newAccessToken = signAccessToken({
     userId: user.id,
@@ -313,7 +330,7 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
   const rotated = await authRepo.rotateRefreshToken(refreshToken, {
     token: newRefreshToken,
     userId: user.id,
-    sessionId: storedToken.sessionId ?? undefined,
+    sessionId: session.id,
     expiresAt: getRefreshTokenExpiresAt(),
   });
 

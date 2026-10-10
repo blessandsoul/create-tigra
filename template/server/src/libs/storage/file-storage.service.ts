@@ -126,6 +126,17 @@ class FileStorageService {
       // Write file to disk (overwrites existing)
       await fs.writeFile(filePath, buffer);
 
+      // Remove any previous avatar files. The filename comes from the user's
+      // name, so after a name change the old file would otherwise stay publicly
+      // reachable at its old URL (possibly with metadata from before EXIF
+      // stripping). New file is written first, so there is never a moment with
+      // no avatar.
+      for (const entry of await fs.readdir(avatarDir)) {
+        if (entry !== filename) {
+          await fs.rm(path.join(avatarDir, entry), { force: true, recursive: true });
+        }
+      }
+
       // Generate public URL
       const url = `/uploads/users/${userId}/avatar/${filename}`;
 
@@ -176,10 +187,13 @@ class FileStorageService {
   }
 
   /**
-   * Deletes all media for a user (entire user directory)
+   * Deletes all media for a user: the public directory (avatars) AND the
+   * private directory (owner-only files).
    *
-   * Used by the cleanup job when permanently purging deleted accounts.
-   * No-op if the user directory doesn't exist.
+   * Used by the cleanup job when permanently purging deleted accounts, which
+   * promises that nothing of the user remains. It used to delete only the
+   * public tier, so private files outlived the account.
+   * No-op for a directory that doesn't exist.
    *
    * @param userId - User's unique ID
    *
@@ -190,14 +204,11 @@ class FileStorageService {
    */
   async deleteUserMedia(userId: string): Promise<void> {
     try {
-      const userDir = this.getUserDir(userId);
-
-      const exists = await this.directoryExists(userDir);
-      if (!exists) {
-        return;
+      for (const dir of [this.getUserDir(userId), this.getUserPrivateDir(userId)]) {
+        if (await this.directoryExists(dir)) {
+          await fs.rm(dir, { recursive: true, force: true });
+        }
       }
-
-      await fs.rm(userDir, { recursive: true, force: true });
 
       logger.info({ msg: 'User media deleted successfully', userId });
     } catch (error) {

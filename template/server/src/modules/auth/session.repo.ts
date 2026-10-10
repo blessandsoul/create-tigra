@@ -39,18 +39,6 @@ export class SessionRepository {
   }
 
   /**
-   * Update session last active timestamp
-   */
-  async updateLastActive(sessionId: string): Promise<Session> {
-    return prisma.session.update({
-      where: { id: sessionId },
-      data: {
-        lastActiveAt: new Date(),
-      },
-    });
-  }
-
-  /**
    * Delete a specific session (no-op if already deleted)
    */
   async deleteSession(sessionId: string): Promise<void> {

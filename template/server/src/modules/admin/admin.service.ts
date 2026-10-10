@@ -43,8 +43,11 @@ class AdminService {
   }
 
   /**
-   * Toggle user active status.
-   * When deactivating, invalidates all sessions and refresh tokens.
+   * Ban (isActive=false) or unban (isActive=true) a user.
+   * Banning invalidates all sessions and refresh tokens. A ban can only be
+   * lifted here: email verification no longer touches isActive.
+   * Activating a user who never verified their email also approves the email,
+   * so admins keep the ability to let a user in manually.
    */
   async toggleUserStatus(userId: string, isActive: boolean): Promise<AdminUser> {
     const user = await adminRepository.findUserById(userId);
@@ -53,7 +56,8 @@ class AdminService {
       throw new NotFoundError('User not found');
     }
 
-    const updatedUser = await adminRepository.updateUserStatus(userId, isActive);
+    const approveEmail = isActive && !user.emailVerifiedAt;
+    const updatedUser = await adminRepository.updateUserStatus(userId, isActive, approveEmail);
 
     if (!isActive) {
       // Force-logout: invalidate all sessions and refresh tokens

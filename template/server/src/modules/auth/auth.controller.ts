@@ -22,7 +22,7 @@ export async function register(
 
   if (result.requiresVerification) {
     reply.status(201).send(
-      successResponse('Registration successful. Please verify your account to continue.', { user: result.user }),
+      successResponse('Registration successful. Please verify your email address to continue.', { user: result.user }),
     );
     return;
   }

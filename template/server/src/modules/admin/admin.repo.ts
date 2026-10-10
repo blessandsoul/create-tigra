@@ -18,6 +18,7 @@ const adminUserSelect = {
   role: true,
   avatarUrl: true,
   isActive: true,
+  emailVerifiedAt: true,
   deletedAt: true,
   failedLoginAttempts: true,
   lockedUntil: true,
@@ -42,6 +43,7 @@ export type AdminUser = {
   role: UserRole;
   avatarUrl: string | null;
   isActive: boolean;
+  emailVerifiedAt: Date | null;
   deletedAt: Date | null;
   failedLoginAttempts: number;
   lockedUntil: Date | null;
@@ -180,12 +182,14 @@ class AdminRepository {
   }
 
   /**
-   * Update user active status
+   * Update the admin ban switch (isActive).
+   * `approveEmail` also marks the email verified — used when an admin activates
+   * a user who never verified, i.e. the admin vouches for them.
    */
-  async updateUserStatus(userId: string, isActive: boolean): Promise<AdminUser> {
+  async updateUserStatus(userId: string, isActive: boolean, approveEmail = false): Promise<AdminUser> {
     return prisma.user.update({
       where: { id: userId },
-      data: { isActive },
+      data: approveEmail ? { isActive, emailVerifiedAt: new Date() } : { isActive },
       select: adminUserSelect,
     });
   }

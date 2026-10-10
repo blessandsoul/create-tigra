@@ -87,6 +87,11 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
+# Pin production mode in the runtime image. src/config/env.ts already defaults
+# an unset NODE_ENV to production; this keeps the image fail-closed even if that
+# default ever changes. A runtime NODE_ENV from Coolify still overrides it.
+ENV NODE_ENV=production
+
 # Copy production dependencies from dependencies stage.
 # Includes the Prisma CLI (+ its engines) installed in stage 1, which the
 # CMD below needs for `npx prisma migrate deploy`.

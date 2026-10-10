@@ -18,6 +18,7 @@ const userSelect = {
   role: true,
   avatarUrl: true,
   isActive: true,
+  emailVerifiedAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -30,6 +31,7 @@ export type SafeUser = {
   role: UserRole;
   avatarUrl: string | null;
   isActive: boolean;
+  emailVerifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };

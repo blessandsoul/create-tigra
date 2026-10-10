@@ -6,6 +6,18 @@ import { hashPassword, verifyPassword } from '@libs/password.js';
 import { ConflictError, UnauthorizedError, ForbiddenError, NotFoundError } from '@shared/errors/errors.js';
 import { testUsers, testRefreshToken, testSession, resetMocks } from '@/test/setup.js';
 import { sessionRepository } from '../session.repo.js';
+import { env } from '@config/env.js';
+
+/** Run `fn` with REQUIRE_USER_VERIFICATION switched on, then restore it. */
+async function withVerificationRequired<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = env.REQUIRE_USER_VERIFICATION;
+  env.REQUIRE_USER_VERIFICATION = true;
+  try {
+    return await fn();
+  } finally {
+    env.REQUIRE_USER_VERIFICATION = previous;
+  }
+}
 
 // Mock dependencies
 vi.mock('../auth.repo.js');
@@ -38,6 +50,8 @@ describe('Auth Service', () => {
     mockRedis.expire.mockResolvedValue(1);
     mockRedis.set.mockResolvedValue('OK');
     mockRedis.del.mockResolvedValue(1);
+    // refresh() requires the token's session to exist and be unexpired
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(testSession);
   });
 
   describe('register', () => {
@@ -82,7 +96,7 @@ describe('Auth Service', () => {
         password: hashedPassword,
         firstName: validRegisterInput.firstName,
         lastName: validRegisterInput.lastName,
-        isActive: true,
+        emailVerifiedAt: expect.any(Date),
       });
       expect(authLib.signAccessToken).toHaveBeenCalledWith({
         userId: createdUser.id,
@@ -114,6 +128,32 @@ describe('Auth Service', () => {
         requiresVerification: false,
       });
       expect(result.user).not.toHaveProperty('password');
+    });
+
+    it('should create an unverified (but never banned) user and issue no session when verification is required', async () => {
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
+      vi.mocked(authRepo.findDeletedUserByEmail).mockResolvedValue(null);
+      vi.mocked(hashPassword).mockResolvedValue('$2a$12$hashedpassword');
+      vi.mocked(authRepo.createUser).mockResolvedValue({
+        ...testUsers.unverifiedUser,
+        email: validRegisterInput.email,
+      });
+
+      const result = await withVerificationRequired(() => authService.register(validRegisterInput));
+
+      // isActive is not passed at all: the ban switch keeps its default (true).
+      expect(authRepo.createUser).toHaveBeenCalledWith({
+        email: validRegisterInput.email,
+        password: '$2a$12$hashedpassword',
+        firstName: validRegisterInput.firstName,
+        lastName: validRegisterInput.lastName,
+        emailVerifiedAt: null,
+      });
+      expect(result.requiresVerification).toBe(true);
+      expect(result.accessToken).toBeUndefined();
+      expect(result.user.emailVerifiedAt).toBeNull();
+      expect(authLib.signAccessToken).not.toHaveBeenCalled();
+      expect(sessionRepository.createSession).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictError if email already exists', async () => {
@@ -225,16 +265,52 @@ describe('Auth Service', () => {
       expect(authRepo.createRefreshToken).not.toHaveBeenCalled();
     });
 
-    it('should throw ForbiddenError if account is not activated', async () => {
-      // Arrange
+    it('should not reveal that an account is banned when the password is wrong', async () => {
+      // Account state is checked only after the password, so a caller without
+      // the password gets the same answer as for any wrong password.
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.inactiveUser);
+      vi.mocked(verifyPassword).mockResolvedValue(false);
 
-      // Act & Assert
+      await expect(authService.login(validLoginInput)).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+      });
+      expect(verifyPassword).toHaveBeenCalled();
+    });
+
+    it('should reject a banned account with ACCOUNT_DEACTIVATED and issue no session', async () => {
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.inactiveUser);
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+
       await expect(authService.login(validLoginInput)).rejects.toThrow(ForbiddenError);
-      await expect(authService.login(validLoginInput)).rejects.toThrow(
-        'Account is not activated. Please verify your account.',
-      );
-      expect(verifyPassword).not.toHaveBeenCalled();
+      await expect(authService.login(validLoginInput)).rejects.toMatchObject({
+        code: 'ACCOUNT_DEACTIVATED',
+      });
+      expect(authLib.signAccessToken).not.toHaveBeenCalled();
+      expect(sessionRepository.createSession).not.toHaveBeenCalled();
+    });
+
+    it('should reject an unverified account with EMAIL_NOT_VERIFIED while verification is required', async () => {
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.unverifiedUser);
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+
+      await expect(
+        withVerificationRequired(() => authService.login(validLoginInput)),
+      ).rejects.toMatchObject({ code: 'EMAIL_NOT_VERIFIED' });
+      expect(authLib.signAccessToken).not.toHaveBeenCalled();
+      expect(sessionRepository.createSession).not.toHaveBeenCalled();
+    });
+
+    it('should report a ban (not "verify your email") for a banned account that is also unverified', async () => {
+      // Verifying an email can never lift a ban, so the ban must win.
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue({
+        ...testUsers.unverifiedUser,
+        isActive: false,
+      });
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+
+      await expect(
+        withVerificationRequired(() => authService.login(validLoginInput)),
+      ).rejects.toMatchObject({ code: 'ACCOUNT_DEACTIVATED' });
     });
 
     it('should throw UnauthorizedError if password is invalid', async () => {
@@ -352,6 +428,46 @@ describe('Auth Service', () => {
   describe('refresh', () => {
     const validRefreshToken = 'valid-refresh-token';
 
+    it('should reject and delete a token whose session no longer exists', async () => {
+      // e.g. the session was force-expired by an admin or removed by the cleanup job
+      vi.mocked(authRepo.findRefreshToken).mockResolvedValue({
+        ...testRefreshToken,
+        sessionId: testSession.id,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+      vi.mocked(sessionRepository.getSessionById).mockResolvedValue(null);
+
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+      expect(authRepo.deleteRefreshToken).toHaveBeenCalledWith(validRefreshToken);
+      expect(authRepo.rotateRefreshToken).not.toHaveBeenCalled();
+      expect(authLib.signAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('should reject a token whose session has expired', async () => {
+      vi.mocked(authRepo.findRefreshToken).mockResolvedValue({
+        ...testRefreshToken,
+        sessionId: testSession.id,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+      vi.mocked(sessionRepository.getSessionById).mockResolvedValue({
+        ...testSession,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+      expect(authRepo.rotateRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('should reject a legacy token that has no session at all', async () => {
+      vi.mocked(authRepo.findRefreshToken).mockResolvedValue({
+        ...testRefreshToken,
+        sessionId: null,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({ code: 'SESSION_EXPIRED' });
+    });
+
     it('should successfully refresh tokens with valid refresh token', async () => {
       // Arrange
       const newAccessToken = 'new-access-token';
@@ -359,6 +475,7 @@ describe('Auth Service', () => {
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const storedToken = {
         ...testRefreshToken,
+        sessionId: testSession.id,
         token: validRefreshToken,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // expires in 1 day
       };
@@ -383,7 +500,7 @@ describe('Auth Service', () => {
       expect(authRepo.rotateRefreshToken).toHaveBeenCalledWith(validRefreshToken, {
         token: newRefreshToken,
         userId: testUsers.validUser.id,
-        sessionId: undefined, // fixture sessionId is null → normalized to undefined
+        sessionId: testSession.id,
         expiresAt,
       });
       expect(result).toEqual({
@@ -405,6 +522,7 @@ describe('Auth Service', () => {
       // Arrange
       const expiredToken = {
         ...testRefreshToken,
+        sessionId: testSession.id,
         expiresAt: new Date(Date.now() - 1000), // expired 1 second ago
       };
       vi.mocked(authRepo.findRefreshToken).mockResolvedValue(expiredToken);
@@ -420,6 +538,7 @@ describe('Auth Service', () => {
       // Arrange
       const storedToken = {
         ...testRefreshToken,
+        sessionId: testSession.id,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
       vi.mocked(authRepo.findRefreshToken).mockResolvedValue(storedToken);
@@ -430,10 +549,11 @@ describe('Auth Service', () => {
       await expect(authService.refresh(validRefreshToken)).rejects.toThrow('User not found or disabled');
     });
 
-    it('should throw ForbiddenError if user is not activated', async () => {
+    it('should refuse to refresh a banned account', async () => {
       // Arrange
       const storedToken = {
         ...testRefreshToken,
+        sessionId: testSession.id,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
       vi.mocked(authRepo.findRefreshToken).mockResolvedValue(storedToken);
@@ -441,9 +561,10 @@ describe('Auth Service', () => {
 
       // Act & Assert
       await expect(authService.refresh(validRefreshToken)).rejects.toThrow(ForbiddenError);
-      await expect(authService.refresh(validRefreshToken)).rejects.toThrow(
-        'Account is not activated. Please verify your account.',
-      );
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({
+        code: 'ACCOUNT_DEACTIVATED',
+      });
+      expect(authLib.signAccessToken).not.toHaveBeenCalled();
     });
 
     it('should revoke ALL refresh tokens and sessions when token reuse is detected', async () => {
@@ -454,6 +575,7 @@ describe('Auth Service', () => {
       // party redeemed it first (possibly an attacker) holds a valid token.
       const storedToken = {
         ...testRefreshToken,
+        sessionId: testSession.id,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
       vi.mocked(authRepo.findRefreshToken).mockResolvedValue(storedToken);
@@ -476,6 +598,7 @@ describe('Auth Service', () => {
       // the happy path.
       const storedToken = {
         ...testRefreshToken,
+        sessionId: testSession.id,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
       vi.mocked(authRepo.findRefreshToken).mockResolvedValue(storedToken);

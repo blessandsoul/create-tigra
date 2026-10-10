@@ -24,7 +24,8 @@ export async function createUser(data: {
   password: string;
   firstName: string;
   lastName: string;
-  isActive?: boolean;
+  /** null = must verify email first; a Date = already verified. */
+  emailVerifiedAt?: Date | null;
 }): Promise<User> {
   return prisma.user.create({
     data,
@@ -59,13 +60,30 @@ export async function deleteRefreshToken(token: string): Promise<void> {
   }
 }
 
+/**
+ * Atomically swap a refresh token for a new one AND move its session forward.
+ *
+ * The session row is what users (GET /auth/sessions) and admins see and
+ * revoke, so it must stay in step with the token family: every rotation sets
+ * the session's expiresAt to the new token's expiry and refreshes lastActiveAt.
+ * Previously only the token's expiry slid forward, so after the first
+ * JWT_REFRESH_EXPIRY window a still-used login vanished from session lists and
+ * could no longer be force-expired.
+ *
+ * Returns false when the old token (or the session) is already gone — a
+ * concurrent redemption, which the caller treats as reuse.
+ */
 export async function rotateRefreshToken(
   oldToken: string,
-  newData: { token: string; userId: string; sessionId?: string; expiresAt: Date },
+  newData: { token: string; userId: string; sessionId: string; expiresAt: Date },
 ): Promise<boolean> {
   try {
     await prisma.$transaction([
       prisma.refreshToken.delete({ where: { token: oldToken } }),
+      prisma.session.update({
+        where: { id: newData.sessionId },
+        data: { expiresAt: newData.expiresAt, lastActiveAt: new Date() },
+      }),
       prisma.refreshToken.create({ data: newData }),
     ]);
     return true;

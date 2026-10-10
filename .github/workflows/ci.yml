@@ -115,6 +115,16 @@ jobs:
           app="$SMOKE_APP"
           grep -q 'CHANGE_ME_generate_with_openssl_rand_hex_48' "$app/server/.env.example" \
             || { echo "::error::server/.env.example lost the CHANGE_ME JWT placeholder"; exit 1; }
+      - name: Assert .env.example.production secrets are CHANGE_ME example text
+        # Example secrets must start with CHANGE_ME so the server's boot guard
+        # (src/config/env.ts) refuses them. A realistic-looking value would boot
+        # with a publicly known signing key if someone copied the file as-is.
+        run: |
+          file="$SMOKE_APP/server/.env.example.production"
+          for key in JWT_SECRET COOKIE_SECRET; do
+            grep -Eq "^${key}=\"?CHANGE_ME" "$file" \
+              || { echo "::error::$key in server/.env.example.production must be CHANGE_ME example text"; exit 1; }
+          done
       - name: Assert .env got a real 96-char hex JWT secret
         run: |
           app="$SMOKE_APP"

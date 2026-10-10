@@ -4,8 +4,10 @@ import { getRedis } from '@libs/redis.js';
 import { sendEmail } from '@libs/email.js';
 import { logger } from '@libs/logger.js';
 import { env } from '@config/env.js';
+import { ACCOUNT_DEACTIVATED } from '@libs/account-status.js';
 import {
   BadRequestError,
+  ForbiddenError,
   NotFoundError,
 } from '@shared/errors/errors.js';
 import * as authRepo from './auth.repo.js';
@@ -21,7 +23,10 @@ const VERIFICATION_USER_PREFIX = 'verify-user:';
 /**
  * Send a verification email to a user.
  * Public endpoint — accepts email, silent return if user not found (prevents enumeration).
- * Also called internally by the register flow for auto-sending.
+ * Also called internally by the register and login flows for auto-sending.
+ *
+ * Verification proves email ownership and nothing else: it sets
+ * `emailVerifiedAt` and never touches `isActive` (the admin ban switch).
  */
 export async function sendVerification(email: string): Promise<void> {
   const user = await authRepo.findUserByEmail(email);
@@ -29,8 +34,11 @@ export async function sendVerification(email: string): Promise<void> {
   // Silent return if user not found — prevents email enumeration (same pattern as forgotPassword)
   if (!user) return;
 
-  // Silent return if already verified — no need to reveal account status
-  if (user.isActive) return;
+  // No token for a banned account: a verify link must never lift an admin ban
+  // (that is exactly how a banned user used to re-activate themselves). No
+  // token either when the email is already verified. Both stay silent so the
+  // response does not reveal the account's status.
+  if (!user.isActive || user.emailVerifiedAt) return;
 
   const redis = getRedis();
 
@@ -107,7 +115,8 @@ export async function verifyAccount(
   const redis = getRedis();
 
   // Atomic get-and-delete to prevent token reuse via concurrent requests
-  const userId = await redis.getDel(`${VERIFICATION_PREFIX}${token}`);
+  // ioredis exposes GETDEL as getdel (all lowercase); getDel does not exist.
+  const userId = await redis.getdel(`${VERIFICATION_PREFIX}${token}`);
   if (!userId) {
     throw new BadRequestError('Invalid or expired verification token', 'INVALID_VERIFICATION_TOKEN');
   }
@@ -117,11 +126,31 @@ export async function verifyAccount(
     throw new NotFoundError('User not found', 'USER_NOT_FOUND');
   }
 
-  // Activate the user account
-  await authRepo.activateUser(userId);
-
-  // Clean up the reverse-lookup key
+  // Clean up the reverse-lookup key (the token itself was consumed above)
   await redis.del(`${VERIFICATION_USER_PREFIX}${userId}`);
+
+  // A token issued before a ban must not lift the ban or open a session.
+  if (!user.isActive) {
+    throw new ForbiddenError(
+      'This account has been deactivated. Contact support if you think this is a mistake.',
+      ACCOUNT_DEACTIVATED,
+    );
+  }
+
+  // Conditional write: only an active, not-yet-verified account is marked. If a
+  // ban lands between the read above and this write, the ban wins.
+  const verifiedAt = new Date();
+  const marked = await authRepo.markEmailVerified(userId, verifiedAt);
+  if (!marked) {
+    const current = await authRepo.findUserById(userId);
+    if (!current || !current.isActive) {
+      throw new ForbiddenError(
+        'This account has been deactivated. Contact support if you think this is a mistake.',
+        ACCOUNT_DEACTIVATED,
+      );
+    }
+    throw new BadRequestError('This email address is already verified', 'ALREADY_VERIFIED');
+  }
 
   // Generate tokens and create session (same pattern as login)
   const accessToken = signAccessToken({
@@ -183,7 +212,7 @@ export async function verifyAccount(
   }
 
   return {
-    user: sanitizeUser({ ...user, isActive: true }),
+    user: sanitizeUser({ ...user, emailVerifiedAt: verifiedAt }),
     accessToken,
     refreshToken,
   };

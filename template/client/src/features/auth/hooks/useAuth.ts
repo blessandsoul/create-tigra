@@ -9,6 +9,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { getErrorMessage, isErrorCode, ERROR_CODES } from '@/lib/utils/error';
 import { ROUTES } from '@/lib/constants/routes';
+import { getSafeRedirectPath } from '@/lib/utils/security';
 import { authService } from '../services/auth.service';
 import { setUser, setLoggingOut, logout as logoutAction } from '../store/authSlice';
 
@@ -42,8 +43,12 @@ export const useAuth = (): UseAuthReturn => {
       router.push(pendingRedirectRef.current);
     },
     onError: (error) => {
-      if (isErrorCode(error, ERROR_CODES.ACCOUNT_NOT_ACTIVE)) {
-        toast.error('Your account is not yet activated. Please verify your account to continue.');
+      if (isErrorCode(error, ERROR_CODES.ACCOUNT_DEACTIVATED)) {
+        toast.error('This account has been deactivated. Contact support if you think this is a mistake.');
+        return;
+      }
+      if (isErrorCode(error, ERROR_CODES.EMAIL_NOT_VERIFIED)) {
+        toast.error('Please verify your email address before signing in.');
         return;
       }
       toast.error(getErrorMessage(error));
@@ -53,8 +58,10 @@ export const useAuth = (): UseAuthReturn => {
   const registerMutation = useMutation({
     mutationFn: (data: IRegisterRequest) => authService.register(data),
     onSuccess: (data) => {
-      if (!data.user.isActive) {
-        toast.success('Account created! Please verify your account to continue.');
+      // No session is issued until the email is verified (server returns the
+      // user with emailVerifiedAt = null when verification is required).
+      if (!data.user.emailVerifiedAt) {
+        toast.success('Account created! Please verify your email address to continue.');
         router.push(ROUTES.VERIFY_ACCOUNT);
         return;
       }
@@ -86,8 +93,11 @@ export const useAuth = (): UseAuthReturn => {
     isAuthenticated,
     isInitializing,
     login: (data: ILoginRequest, redirectTo?: string) => {
-      if (redirectTo) {
-        pendingRedirectRef.current = redirectTo;
+      // Validate again at the sink: whatever a caller passes, router.push after
+      // login only ever receives a same-site path.
+      const safeRedirect = getSafeRedirectPath(redirectTo);
+      if (safeRedirect) {
+        pendingRedirectRef.current = safeRedirect;
       }
       loginMutation.mutate(data);
     },

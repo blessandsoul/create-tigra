@@ -17,7 +17,7 @@ Login now considers only non-deleted users. A soft-deleted account receives the 
 This does not change the other account states:
 
 - A non-deleted, active account can still log in normally.
-- A non-deleted account with `isActive = false`, including an account deactivated by an administrator, is still rejected with `ACCOUNT_NOT_ACTIVE`.
+- A non-deleted account with `isActive = false` (deactivated by an administrator) is still rejected. Since the ban/verification split it gets `ACCOUNT_DEACTIVATED`, and an unverified account gets `EMAIL_NOT_VERIFIED`; see `account-ban-vs-email-verification.md`.
 - Registration still reserves the email while a soft-deleted record exists, but no longer tells the user that logging in will restore it.
 - Self-deletion still invalidates all sessions and refresh tokens.
 - The existing cleanup job still permanently purges soft-deleted accounts after the 30-day retention period. No database migration is required.

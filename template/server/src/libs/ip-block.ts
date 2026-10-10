@@ -102,7 +102,7 @@ export async function blockIp(
   ip: string,
   blockedBy: string,
   reason?: string,
-): Promise<{ id: string; ip: string; reason: string | null; blockedBy: string; createdAt: Date }> {
+): Promise<{ id: string; ip: string; reason: string | null; blockedBy: string | null; createdAt: Date }> {
   // Write to DB (source of truth)
   const existing = await prisma.blockedIp.findUnique({ where: { ip } });
   if (existing) {
@@ -150,7 +150,8 @@ export async function unblockIp(ip: string): Promise<void> {
  * List all currently blocked IPs (permanent from DB + active auto-blocks from Redis).
  */
 export async function getBlockedIps(): Promise<{
-  permanent: { id: string; ip: string; reason: string | null; blockedBy: string; createdAt: Date }[];
+  // blockedBy is null once the admin who created the block has been purged.
+  permanent: { id: string; ip: string; reason: string | null; blockedBy: string | null; createdAt: Date }[];
   autoBlocked: string[];
 }> {
   // Permanent blocks from DB (source of truth)

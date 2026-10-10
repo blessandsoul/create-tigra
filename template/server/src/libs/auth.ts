@@ -4,6 +4,7 @@ import { env } from '@config/env.js';
 import { prisma } from '@libs/prisma.js';
 import { UnauthorizedError, ForbiddenError, BadRequestError } from '@shared/errors/errors.js';
 import { clearAuthCookies } from '@libs/cookies.js';
+import { assertAccountCanSignIn } from '@libs/account-status.js';
 import { parseDurationMs } from '@libs/duration.js';
 import type { JwtPayload, UserRole } from '@shared/types/index.js';
 
@@ -51,24 +52,33 @@ export async function authenticate(
     throw new UnauthorizedError('Invalid or expired token');
   }
 
-  // Verify user still exists, is active, and not soft-deleted.
-  // When the session is definitively dead (user gone/deleted/inactive), clear auth
+  // Verify user still exists, is not banned/unverified, and not soft-deleted.
+  // When the session is definitively dead (user gone/deleted/banned), clear auth
   // cookies on the response so the browser stops replaying stale credentials.
   // Without this, middleware keeps seeing the (still-unexpired) JWT cookie and
   // bounces /login → /dashboard → 401 → /login in an infinite loop.
   const user = await prisma.user.findUnique({
     where: { id: request.user.userId },
-    select: { isActive: true, deletedAt: true },
+    select: { isActive: true, emailVerifiedAt: true, deletedAt: true, role: true },
   });
 
   if (!user || user.deletedAt) {
     clearAuthCookies(reply);
     throw new UnauthorizedError('Account is deactivated or deleted');
   }
-  if (!user.isActive) {
+  try {
+    assertAccountCanSignIn(user);
+  } catch (error) {
     clearAuthCookies(reply);
-    throw new ForbiddenError('Account is not activated. Please verify your account.', 'ACCOUNT_NOT_ACTIVE');
+    throw error;
   }
+
+  // The role decides authorization, so take it from the database, not from the
+  // token. A JWT keeps the role it was signed with until it expires (15 min by
+  // default); trusting it let a demoted admin keep admin rights for that window.
+  // Same query as above, so this costs nothing extra. authorize() and
+  // resolveTargetUser() read request.user.role after this runs.
+  request.user.role = user.role;
 }
 
 export async function optionalAuth(

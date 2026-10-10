@@ -57,8 +57,10 @@ export const AuthInitializer = ({ children }: AuthInitializerProps): React.React
 
     const status = (error as HttpLikeError)?.response?.status;
     if (status === 401 || status === 403) {
-      if (isErrorCode(error, ERROR_CODES.ACCOUNT_NOT_ACTIVE)) {
-        toast.error('Your account is not yet activated. Please verify your account.');
+      if (isErrorCode(error, ERROR_CODES.ACCOUNT_DEACTIVATED)) {
+        toast.error('This account has been deactivated. Contact support if you think this is a mistake.');
+      } else if (isErrorCode(error, ERROR_CODES.EMAIL_NOT_VERIFIED)) {
+        toast.error('Please verify your email address before signing in.');
       }
       router.push(ROUTES.LOGIN);
     }

@@ -27,10 +27,16 @@ export async function register(): Promise<void> {
   if (!Sentry || !dsn) return;
 
   if (process.env.NEXT_RUNTIME === 'nodejs' || process.env.NEXT_RUNTIME === 'edge') {
+    const { scrubSentryEvent } = await import('./lib/observability/sentry-scrub');
     Sentry.init({
       dsn,
       tracesSampleRate,
       environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
+      sendDefaultPii: false,
+      // captureRequestError attaches request headers (incl. Cookie): strip
+      // cookies, auth headers and token query strings before anything is sent.
+      beforeSend: (event) => scrubSentryEvent(event),
+      beforeSendTransaction: (event) => scrubSentryEvent(event),
     });
   }
 }

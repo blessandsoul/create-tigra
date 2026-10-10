@@ -23,6 +23,7 @@ import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
 import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
+import { onRedisReady } from '@libs/redis.js';
 import { getClientIp } from '@libs/client-ip.js';
 import { isAuthPath } from '@libs/auth-path.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
@@ -157,6 +158,16 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // --- Sync permanent IP blocks from DB to Redis ---
   await syncBlockedIpsToRedis();
+  // Permanent blocks live in MySQL and are only *enforced* through Redis. A
+  // restarted Redis (or one that was down at boot) comes back without them, so
+  // re-sync on every reconnect instead of waiting for a server restart.
+  // syncBlockedIpsToRedis never throws (it logs and returns on failure).
+  const stopResyncOnReconnect = onRedisReady(() => {
+    void syncBlockedIpsToRedis();
+  });
+  app.addHook('onClose', async () => {
+    stopResyncOnReconnect();
+  });
 
   // Monitoring endpoints exempt from IP blocking and request logging.
   // Health probes (Coolify/Docker/K8s/load balancers) come from infrastructure

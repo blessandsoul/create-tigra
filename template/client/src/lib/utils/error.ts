@@ -31,6 +31,10 @@ export const isErrorCode = (error: unknown, code: string): boolean => {
   return getErrorCode(error) === code;
 };
 
+// Account-state codes from the server (src/libs/account-status.ts). They are
+// separate on purpose: a deactivated (banned) account must never be steered to
+// email verification, because verifying cannot lift a ban.
 export const ERROR_CODES = {
-  ACCOUNT_NOT_ACTIVE: 'ACCOUNT_NOT_ACTIVE',
+  ACCOUNT_DEACTIVATED: 'ACCOUNT_DEACTIVATED',
+  EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
 } as const;
