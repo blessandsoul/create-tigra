@@ -30,7 +30,15 @@ export const getSafeRedirectPath = (value: string | null | undefined): string | 
   try {
     const url = new URL(value, REDIRECT_PARSE_BASE);
     if (url.origin !== REDIRECT_PARSE_BASE) return undefined;
-    return `${url.pathname}${url.search}${url.hash}`;
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    // Check the RESULT, not only the input: dot segments normalize away, so
+    // '/..//evil.com' or '/%2e%2e//evil.com' come out as '//evil.com', which
+    // the router would treat as another site. The path we return must itself
+    // resolve back to our origin.
+    if (path.startsWith('//') || new URL(path, REDIRECT_PARSE_BASE).origin !== REDIRECT_PARSE_BASE) {
+      return undefined;
+    }
+    return path;
   } catch {
     return undefined;
   }
