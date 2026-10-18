@@ -57,6 +57,23 @@ describe('consumeEmailQuota — 3 emails per address per hour', () => {
     expect(key).not.toContain('example');
   });
 
+  it('keeps the sign-in re-send on its own counter, so anonymous requests cannot use it up', async () => {
+    redisMock.incr.mockResolvedValue(1);
+    await consumeEmailQuota('user@example.com', 'sign-in');
+    expect(redisMock.incr).toHaveBeenCalledWith(emailQuotaKey('user@example.com', 'sign-in'));
+    expect(emailQuotaKey('user@example.com', 'sign-in')).not.toBe(emailQuotaKey('user@example.com'));
+    expect(emailQuotaKey('user@example.com', 'sign-in')).toMatch(/^email-quota:sign-in:[0-9a-f]{64}$/);
+  });
+
+  it('caps the sign-in counter too (whoever registered an address knows its password)', async () => {
+    redisMock.incr.mockResolvedValue(4);
+    redisMock.pttl.mockResolvedValue(60_000);
+    await expect(consumeEmailQuota('user@example.com', 'sign-in')).rejects.toMatchObject({
+      code: 'EMAIL_RATE_LIMITED',
+      retryAfterSeconds: 60,
+    });
+  });
+
   it('lets the email through when Redis is down (fail open)', async () => {
     redisMock.incr.mockRejectedValue(new Error('Connection is closed'));
     await expect(consumeEmailQuota('user@example.com')).resolves.toBeUndefined();

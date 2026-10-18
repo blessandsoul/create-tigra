@@ -5,7 +5,7 @@ import { sendEmail } from '@libs/email.js';
 import { logger } from '@libs/logger.js';
 import { env } from '@config/env.js';
 import { ACCOUNT_DEACTIVATED } from '@libs/account-status.js';
-import { consumeEmailQuota } from '@libs/email-quota.js';
+import { consumeEmailQuota, type EmailQuotaBucket } from '@libs/email-quota.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -29,13 +29,23 @@ const VERIFICATION_USER_PREFIX = 'verify-user:';
  * Verification proves email ownership and nothing else: it sets
  * `emailVerifiedAt` and never touches `isActive` (the admin ban switch).
  */
-export async function sendVerification(email: string): Promise<void> {
-  // Per-address email cap (shared with forgot-password), counted BEFORE the
-  // lookup so unknown, banned and already-verified addresses count the same and
-  // the 429 reveals nothing. Over the cap: the public endpoint answers 429
-  // EMAIL_RATE_LIMITED; register and the sign-in resend call this
-  // fire-and-forget, so there the email is skipped (and logged by the caller).
-  await consumeEmailQuota(email);
+export async function sendVerification(
+  email: string,
+  { quota = 'public' }: { quota?: EmailQuotaBucket | 'none' } = {},
+): Promise<void> {
+  // Per-address email cap (libs/email-quota.ts), counted BEFORE the lookup so
+  // unknown, banned and already-verified addresses count the same and the 429
+  // reveals nothing. Which counter:
+  // - 'public' (default): the public resend endpoint, shared with forgot-password.
+  //   Over the cap it answers 429 EMAIL_RATE_LIMITED with the wait.
+  // - 'sign-in': the resend after a correct password; its own counter, so
+  //   strangers typing the address cannot use it up.
+  // - 'none': the one email sent at register (an address registers only once).
+  // Register and the sign-in resend call this fire-and-forget: over their cap
+  // the email is skipped and the caller logs it.
+  if (quota !== 'none') {
+    await consumeEmailQuota(email, quota);
+  }
 
   const user = await authRepo.findUserByEmail(email);
 

@@ -8,8 +8,9 @@
  *   the onRoute hook in app.ts. Unknown URLs (404s) share one DEFAULT counter.
  * - Never limited: /api/v1/health, /api/v1/ready, /api/v1/live, static /uploads/*
  *   and CORS preflights.
- * - EMAIL_PER_ADDRESS caps emails to one address across every email-sending flow
- *   (src/libs/email-quota.ts). Login lockout lives in modules/auth/auth.service.ts.
+ * - EMAIL_PER_ADDRESS caps emails to one address, per counter (public flows such as
+ *   forgot-password, and the sign-in re-send separately; see src/libs/email-quota.ts).
+ *   Login lockout lives in modules/auth/auth.service.ts.
  *
  * ENV controls:
  * - RATE_LIMIT_ENABLED: master switch (default true). Off = every max is 1,000,000.
@@ -172,7 +173,7 @@ export const RATE_LIMITS = {
 /** Any route without its own entry (own counter per route), and unknown URLs. */
 export const DEFAULT_LIMIT: RouteLimit = routeLimit('DEFAULT', 200, '1m');
 
-/** Emails to one address per window, across all email flows (src/libs/email-quota.ts). */
+/** Emails to one address per window, applied to each email counter (src/libs/email-quota.ts). */
 export const EMAIL_PER_ADDRESS: RouteLimit = routeLimit('EMAIL_PER_ADDRESS', 3, '1h');
 
 // ─── Boot checks ───────────────────────────────────────────────

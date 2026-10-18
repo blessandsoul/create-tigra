@@ -46,12 +46,17 @@ A new route gets `DEFAULT` automatically. Give it its own entry in `RATE_LIMITS`
 
 ## Email cap
 
-At most **3 emails per hour to one address**, shared by every flow that emails someone: forgot-password, send-verification, the verification email at register, and the re-send when an unverified user signs in.
+At most **3 emails per hour to one address**, on two separate counters so a stranger can never use up the owner's emails:
 
-- It is counted **before** looking the account up, so unknown addresses count exactly like real ones and the answer reveals nothing.
+| Counter | Emails it covers | Over the cap |
+|---|---|---|
+| public | forgot-password, send-verification (anyone can type an address) | `429 EMAIL_RATE_LIMITED` with the wait time |
+| sign-in | the verification link re-sent when an unverified user signs in with the **right password** | email skipped and logged; the user is still told to verify |
+
+- **Not counted at all:** the single verification email sent at register. An address can register only once, so it cannot flood anyone, and strangers who used up the public counter cannot stop it.
+- Why the sign-in re-send is still capped: whoever registered an address knows its password and could otherwise flood that inbox by signing in again and again.
+- Both counters are charged **before** looking the account up, so unknown addresses count exactly like real ones and the answer reveals nothing.
 - Redis keys are a SHA-256 of the address; raw emails are never stored there.
-- Over the cap, forgot-password and send-verification answer `429 EMAIL_RATE_LIMITED`.
-- Register still succeeds, and the sign-in re-send still runs. They skip the email and log it. The user can request a new email later and is told how long to wait.
 
 The IP limits alone cannot do this: someone with many IPs could flood one inbox and burn the sender's quota and reputation.
 
@@ -128,7 +133,7 @@ On a correct setup this never happens. The server logs `[CLIENT-IP] Cloudflare r
 
 ## Known limits (read before relying on these)
 
-- **Anyone can use up an address's email quota.** Three anonymous forgot-password or send-verification requests in an hour use up that address's cap. That protects the inbox from flooding, but for the rest of the hour nobody gets a reset link, and an unverified user gets no verification link (register and the sign-in re-send skip the email silently). Someone who keeps doing it every hour can keep one person from resetting their password or verifying. A verified user who knows their password is not affected (the login lockout is per email + IP).
+- **Anyone can use up an address's public email counter.** Three anonymous forgot-password or send-verification requests in an hour use up that address's public counter. For the rest of the hour nobody gets a reset link through that address. A determined stranger can keep doing this every hour, keeping one person from resetting a password by email. Verification is **not** blocked: the register email is not capped, and signing in with the right password re-sends the link on its own counter. A user who knows their password is not affected.
 - **Parallel sign-in attempts can get ahead of the lockout.** A burst of simultaneous failed sign-ins from one IP is checked before any of them is counted, so it can try more than 15 passwords. It is still capped by the login route limit (100 per 15 minutes per IP).
 - **`HEAD` requests count separately from `GET`.** Fastify adds a `HEAD` route for each `GET`, and it gets its own counter.
 

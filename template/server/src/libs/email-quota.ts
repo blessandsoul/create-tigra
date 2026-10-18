@@ -1,12 +1,20 @@
 /**
  * Per-address email cap: at most EMAIL_PER_ADDRESS.max emails to one address per
- * window (default 3 per hour), shared by every flow that emails someone (forgot
- * password, the email-verification module's send-verification, register and the
- * sign-in resend).
+ * window (default 3 per hour).
  *
  * Why per address and not only per IP: the route limits are per IP, so someone
  * with many IPs could otherwise flood one person's inbox and burn the sender's
  * reputation and quota.
+ *
+ * Two separate counters per address, so a stranger cannot use up the owner's emails:
+ * - 'public': emails anyone can trigger by typing an address (forgot-password,
+ *   the email-verification module's send-verification).
+ * - 'sign-in': the verification link re-sent when an unverified user signs in
+ *   with the RIGHT password. Only someone who knows the password reaches it, so
+ *   anonymous requests never drain it; it still has its own cap, because whoever
+ *   registered an address (and so knows its password) could otherwise flood it.
+ * The single verification email sent at register is not capped at all: an
+ * address can register only once, so it cannot be used to flood anyone.
  *
  * Rules that keep it from leaking which accounts exist:
  * - Call it BEFORE looking the user up, so unknown addresses are counted exactly
@@ -21,18 +29,24 @@ import { getRedis } from '@libs/redis.js';
 import { logger } from '@libs/logger.js';
 import { TooManyRequestsError, describeWait } from '@shared/errors/errors.js';
 
-const EMAIL_QUOTA_PREFIX = 'email-quota:';
+/** Which counter an email is charged to (see the module header). */
+export type EmailQuotaBucket = 'public' | 'sign-in';
 
-export function emailQuotaKey(email: string): string {
-  return EMAIL_QUOTA_PREFIX + createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+const EMAIL_QUOTA_PREFIX: Record<EmailQuotaBucket, string> = {
+  public: 'email-quota:',
+  'sign-in': 'email-quota:sign-in:',
+};
+
+export function emailQuotaKey(email: string, bucket: EmailQuotaBucket = 'public'): string {
+  return EMAIL_QUOTA_PREFIX[bucket] + createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
 }
 
 /**
- * Count one email to `email`. Throws 429 EMAIL_RATE_LIMITED (with
- * retryAfterSeconds) once the address is over its quota for the window.
+ * Count one email to `email` in `bucket`. Throws 429 EMAIL_RATE_LIMITED (with
+ * retryAfterSeconds) once that counter is over its quota for the window.
  */
-export async function consumeEmailQuota(email: string): Promise<void> {
-  const key = emailQuotaKey(email);
+export async function consumeEmailQuota(email: string, bucket: EmailQuotaBucket = 'public'): Promise<void> {
+  const key = emailQuotaKey(email, bucket);
   let ttlMs: number;
   try {
     const redis = getRedis();
