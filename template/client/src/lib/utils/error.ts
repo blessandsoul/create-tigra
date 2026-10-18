@@ -34,7 +34,65 @@ export const isErrorCode = (error: unknown, code: string): boolean => {
 // Account-state codes from the server (src/libs/account-status.ts). They are
 // separate on purpose: a deactivated (banned) account must never be steered to
 // email verification, because verifying cannot lift a ban.
+// The last four are the "wait and retry" answers (server docs/rate-limits.md).
+// Keep this an object literal: the email-verification patcher appends to it.
 export const ERROR_CODES = {
   ACCOUNT_DEACTIVATED: 'ACCOUNT_DEACTIVATED',
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
+  LOGIN_LOCKED: 'LOGIN_LOCKED',
+  EMAIL_RATE_LIMITED: 'EMAIL_RATE_LIMITED',
+  IP_BLOCKED: 'IP_BLOCKED',
 } as const;
+
+/** "45 seconds", "1 minute", "15 minutes": minutes round up, so nobody retries too early. */
+export const formatWait = (seconds: number): string => {
+  const s = Math.max(1, Math.ceil(seconds));
+  if (s < 60) return `${s} ${s === 1 ? 'second' : 'seconds'}`;
+  const m = Math.ceil(s / 60);
+  return `${m} ${m === 1 ? 'minute' : 'minutes'}`;
+};
+
+export interface LimitInfo {
+  code: string;
+  retryAfterSeconds?: number;
+  /** Plain message for the person, with the wait time when the server sent one. */
+  message: string;
+}
+
+/**
+ * Recognise a "slow down" answer: a route rate limit, a login lock, the
+ * per-address email cap or a blocked network. Returns null for any other
+ * error. Wording lives here (not in the server's message) so every screen
+ * says the same thing.
+ */
+export const getLimitInfo = (error: unknown): LimitInfo | null => {
+  if (!axios.isAxiosError(error)) return null;
+  const status = error.response?.status;
+  const data = error.response?.data as ApiError | undefined;
+  const code = data?.error?.code ?? (status === 429 ? ERROR_CODES.RATE_LIMIT_EXCEEDED : undefined);
+  const seconds = data?.error?.retryAfterSeconds;
+  const wait = seconds ? ` Try again in ${formatWait(seconds)}.` : ' Please wait a moment and try again.';
+
+  switch (code) {
+    case ERROR_CODES.RATE_LIMIT_EXCEEDED:
+      return { code, retryAfterSeconds: seconds, message: `Too many requests.${wait}` };
+    case ERROR_CODES.LOGIN_LOCKED:
+      return { code, retryAfterSeconds: seconds, message: `Too many failed sign-in attempts.${wait}` };
+    case ERROR_CODES.EMAIL_RATE_LIMITED:
+      return { code, retryAfterSeconds: seconds, message: `Too many emails were sent to this address.${wait}` };
+    case ERROR_CODES.IP_BLOCKED:
+      return {
+        code,
+        retryAfterSeconds: seconds,
+        message: seconds
+          ? `Too many requests from your network. Try again in ${formatWait(seconds)}.`
+          : 'Access from your network is blocked.',
+      };
+    default:
+      return null;
+  }
+};
+
+/** True for the answers getLimitInfo recognises. Such requests must not be retried. */
+export const isLimitError = (error: unknown): boolean => getLimitInfo(error) !== null;

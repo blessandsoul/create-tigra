@@ -10,17 +10,21 @@ interface AuthResponse {
 
 class AuthService {
   async register(data: IRegisterRequest): Promise<AuthResponse> {
+    // skipLimitToast: RegisterForm shows a rate-limit answer inline instead.
     const response = await apiClient.post<ApiResponse<AuthResponse>>(
       API_ENDPOINTS.AUTH.REGISTER,
-      data
+      data,
+      { skipLimitToast: true }
     );
     return response.data.data;
   }
 
   async login(data: ILoginRequest): Promise<AuthResponse> {
+    // skipLimitToast: LoginForm shows a rate-limit or lock answer inline instead.
     const response = await apiClient.post<ApiResponse<AuthResponse>>(
       API_ENDPOINTS.AUTH.LOGIN,
-      data
+      data,
+      { skipLimitToast: true }
     );
     return response.data.data;
   }
@@ -37,7 +41,8 @@ class AuthService {
   }
 
   async forgotPassword(email: string): Promise<void> {
-    await apiClient.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, { email });
+    // skipLimitToast: ForgotPasswordForm shows a rate-limit answer inline instead.
+    await apiClient.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, { email }, { skipLimitToast: true });
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {

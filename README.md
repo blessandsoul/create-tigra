@@ -32,7 +32,7 @@ npx create-tigra my-app
 | Cache | Redis 7 (ioredis) |
 | Auth | JWT (httpOnly cookies), session management |
 | Validation | Zod schemas on all inputs |
-| Security | Helmet, CORS, rate limiting, password hashing (Argon2) |
+| Security | Helmet, CORS, rate limiting (per route, per IP, set through ENV), login lockout, IP auto-block, password hashing (Argon2). If Redis goes down, the limits, lockout and blocks are off until it is back |
 | File uploads | Multipart + Sharp image optimization |
 | Logging | Pino with pretty dev output |
 | Testing | Vitest with 80% coverage thresholds |
@@ -89,6 +89,7 @@ docker compose --profile tools up -d
 
 - [Account deactivation login reactivation: issue, fix, and existing-project migration](docs/account-deactivation-login-reactivation.md)
 - [Client IP behind proxies and Cloudflare: how the visitor address is verified, and existing-project porting](docs/client-ip-behind-proxies.md)
+- [Rate limits, login lockout, email cap and IP blocks: every limit, ENV overrides, Redis-down behaviour, and existing-project porting](template/server/docs/rate-limits.md)
 
 ## License
 

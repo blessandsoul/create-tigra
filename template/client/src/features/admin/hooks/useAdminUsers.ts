@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { getErrorMessage } from '@/lib/utils/error';
+import { getErrorMessage, isLimitError } from '@/lib/utils/error';
 import { adminService } from '../services/admin.service';
 
 import type { IAdminUser, IAdminUserDetail, IGetUsersParams, IGetSessionsParams } from '../types/admin.types';
@@ -95,6 +95,7 @@ export const useUpdateUserStatus = (): UseUpdateUserStatusReturn => {
       router.refresh();
     },
     onError: (error) => {
+      if (isLimitError(error)) return; // the global toast already says how long to wait
       toast.error(getErrorMessage(error));
     },
   });
@@ -126,6 +127,7 @@ export const useUpdateUserRole = (): UseUpdateUserRoleReturn => {
       router.refresh();
     },
     onError: (error) => {
+      if (isLimitError(error)) return; // the global toast already says how long to wait
       toast.error(getErrorMessage(error));
     },
   });

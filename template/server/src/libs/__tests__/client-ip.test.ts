@@ -1,7 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from '@config/env.js';
-import { normalizeIp, resolveClientIp, getClientIp, TRUSTED_PROXY_RANGES, UNVERIFIED_CLOUDFLARE_KEY } from '../client-ip.js';
+import { logger } from '@libs/logger.js';
+import {
+  normalizeIp,
+  resolveClientIp,
+  getClientIp,
+  TRUSTED_PROXY_RANGES,
+  UNVERIFIED_CLOUDFLARE_KEY,
+  UNVERIFIED_WARNING_INTERVAL_MS,
+  resetUnverifiedWarningForTests,
+} from '../client-ip.js';
 
 // Real Fastify with the app's own trustProxy setting, so proxy-addr walks X-Forwarded-For exactly
 // as in production. `remoteAddress` is the TCP peer: a public address = a direct visitor,
@@ -198,5 +207,43 @@ describe('TRUST_CLOUDFLARE is gone', () => {
     } finally {
       delete process.env.TRUST_CLOUDFLARE;
     }
+  });
+});
+
+describe('warning when Cloudflare traffic lands in the shared bucket', () => {
+  // On a correctly set up zone this never happens, so the operator must hear about it:
+  // every such visitor shares ONE rate-limit counter.
+  const unverified = { 'x-forwarded-for': CF_EDGE, 'cf-connecting-ip': FORGED, 'cf-worker': 'someone.example' };
+
+  afterAll(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('logs one warning per interval, not one per request, and never the header values', async () => {
+    resetUnverifiedWarningForTests();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-19T10:00:00Z'));
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as never);
+
+    for (let i = 0; i < 5; i++) await resolve(TRAEFIK, unverified);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0]?.[0]);
+    expect(message).toContain('share one rate-limit bucket');
+    expect(message).not.toContain(FORGED);
+    expect(message).not.toContain('someone.example');
+
+    vi.setSystemTime(new Date(Date.now() + UNVERIFIED_WARNING_INTERVAL_MS + 1));
+    await resolve(TRAEFIK, unverified);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not warn for verified Cloudflare traffic or for direct visitors', async () => {
+    resetUnverifiedWarningForTests();
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as never);
+    warn.mockClear();
+    await resolve(TRAEFIK, { 'x-forwarded-for': CF_EDGE, 'cf-connecting-ip': VISITOR });
+    await resolve(VISITOR);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

@@ -47,6 +47,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { env } from '@config/env.js';
 import { isCloudflareIp } from '@libs/cloudflare-ranges.js';
+import { logger } from '@libs/logger.js';
 
 /** Header the owner's Cloudflare Transform Rule adds (names starting with cf- or x-cf- cannot be set there). */
 export const ORIGIN_VERIFY_HEADER = 'x-origin-verify';
@@ -97,7 +98,10 @@ export function resolveClientIp(request: FastifyRequest): ResolvedClientIp {
   const peer = normalizeIp(request.ip) ?? socketIp ?? request.ip ?? 'unknown';
 
   if (isCloudflareIp(peer)) {
-    if (!isVerifiedCloudflareRequest(request)) return { ip: UNVERIFIED_CLOUDFLARE_KEY, source: 'cloudflare-unverified' };
+    if (!isVerifiedCloudflareRequest(request)) {
+      warnUnverifiedCloudflare();
+      return { ip: UNVERIFIED_CLOUDFLARE_KEY, source: 'cloudflare-unverified' };
+    }
     const header = request.headers['cf-connecting-ip'];
     const visitor = normalizeIp(typeof header === 'string' ? header : undefined);
     if (visitor) return { ip: visitor, source: 'cloudflare' };
@@ -106,6 +110,34 @@ export function resolveClientIp(request: FastifyRequest): ResolvedClientIp {
   }
 
   return { ip: peer, source: socketIp !== undefined && peer !== socketIp ? 'proxy' : 'socket' };
+}
+
+/** At most one warning per this many milliseconds per process (resolveClientIp runs several times per request). */
+export const UNVERIFIED_WARNING_INTERVAL_MS = 10 * 60 * 1000;
+let lastUnverifiedWarningAt = 0;
+
+/**
+ * Tell the operator that Cloudflare traffic is landing in the shared bucket. On a correctly set
+ * up zone this never happens, so it almost always means a misconfiguration that makes all
+ * Cloudflare visitors share ONE rate-limit counter. Never logs the secret or header values.
+ */
+function warnUnverifiedCloudflare(): void {
+  const now = Date.now();
+  if (now - lastUnverifiedWarningAt < UNVERIFIED_WARNING_INTERVAL_MS) return;
+  lastUnverifiedWarningAt = now;
+  logger.warn(
+    env.CLOUDFLARE_ORIGIN_SECRET
+      ? '[CLIENT-IP] Cloudflare requests without a valid X-Origin-Verify header share one rate-limit bucket. ' +
+          'CLOUDFLARE_ORIGIN_SECRET is set: check that the Transform Rule adding the header exists on this zone. ' +
+          'See docs/client-ip-behind-proxies.md'
+      : '[CLIENT-IP] Cloudflare requests carrying a CF-Worker header (Worker traffic) share one rate-limit bucket. ' +
+          'If that traffic is yours, set CLOUDFLARE_ORIGIN_SECRET plus a Transform Rule. See docs/client-ip-behind-proxies.md',
+  );
+}
+
+/** Test hook: let the next unverified request warn again. */
+export function resetUnverifiedWarningForTests(): void {
+  lastUnverifiedWarningAt = 0;
 }
 
 /**

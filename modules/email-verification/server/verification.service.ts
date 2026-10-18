@@ -5,6 +5,7 @@ import { sendEmail } from '@libs/email.js';
 import { logger } from '@libs/logger.js';
 import { env } from '@config/env.js';
 import { ACCOUNT_DEACTIVATED } from '@libs/account-status.js';
+import { consumeEmailQuota } from '@libs/email-quota.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -29,6 +30,13 @@ const VERIFICATION_USER_PREFIX = 'verify-user:';
  * `emailVerifiedAt` and never touches `isActive` (the admin ban switch).
  */
 export async function sendVerification(email: string): Promise<void> {
+  // Per-address email cap (shared with forgot-password), counted BEFORE the
+  // lookup so unknown, banned and already-verified addresses count the same and
+  // the 429 reveals nothing. Over the cap: the public endpoint answers 429
+  // EMAIL_RATE_LIMITED; register and the sign-in resend call this
+  // fire-and-forget, so there the email is skipped (and logged by the caller).
+  await consumeEmailQuota(email);
+
   const user = await authRepo.findUserByEmail(email);
 
   // Silent return if user not found — prevents email enumeration (same pattern as forgotPassword)

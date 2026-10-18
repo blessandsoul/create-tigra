@@ -25,6 +25,11 @@ export interface ApiError {
   error: {
     code: string;
     message: string;
+    /**
+     * Whole seconds until a retry can work. Sent on rate limits (429) and an
+     * automatic IP block (403 IP_BLOCKED); see getLimitInfo in lib/utils/error.ts.
+     */
+    retryAfterSeconds?: number;
   };
 }
 

@@ -60,34 +60,47 @@ export async function syncBlockedIpsToRedis(): Promise<void> {
 }
 
 /**
+ * Block state of one IP.
+ * - `permanent`: an admin block, no end time.
+ * - `retryAfterSeconds`: set for an automatic block, the whole seconds until it
+ *   ends, so the 403 can tell the visitor when to come back.
+ */
+export type IpBlock =
+  | { blocked: false }
+  | { blocked: true; permanent: true }
+  | { blocked: true; permanent: false; retryAfterSeconds: number };
+
+/**
  * Check if an IP is blocked (permanent or auto-blocked).
  *
  * @param ip - IP address to check
- * @returns true if blocked, false otherwise (including Redis failures)
+ * @returns the block state; `{ blocked: false }` also on Redis failures (fail open)
  */
-export async function isIpBlocked(ip: string): Promise<boolean> {
+export async function getIpBlock(ip: string): Promise<IpBlock> {
   try {
     const redis = getRedis();
 
     // Check permanent block list
     const permanent = await redis.sismember(BLOCKED_IPS_KEY, ip);
-    if (permanent === 1) return true;
+    if (permanent === 1) return { blocked: true, permanent: true };
 
     // Check auto-block list (score = expiry Unix timestamp)
     const score = await redis.zscore(AUTO_BLOCKED_KEY, ip);
     if (score) {
-      const expiresAt = Number(score);
-      if (expiresAt > Date.now() / 1000) return true;
+      const secondsLeft = Number(score) - Date.now() / 1000;
+      if (secondsLeft > 0) {
+        return { blocked: true, permanent: false, retryAfterSeconds: Math.max(1, Math.ceil(secondsLeft)) };
+      }
 
       // Expired — clean up lazily
       await redis.zrem(AUTO_BLOCKED_KEY, ip);
     }
 
-    return false;
+    return { blocked: false };
   } catch {
     // Fail open: if Redis is down, don't block
     logger.warn('[IP-BLOCK] Redis unavailable, skipping IP block check');
-    return false;
+    return { blocked: false };
   }
 }
 

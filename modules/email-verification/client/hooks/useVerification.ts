@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 
 import { useAppDispatch } from '@/store/hooks';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { getErrorMessage, isErrorCode, ERROR_CODES } from '@/lib/utils/error';
+import { getErrorMessage, isErrorCode, isLimitError, ERROR_CODES } from '@/lib/utils/error';
 import { ROUTES } from '@/lib/constants/routes';
 import { verificationService } from '../services/verification.service';
 import { setUser } from '../store/authSlice';
@@ -24,6 +24,8 @@ export const useSendVerification = (): UseSendVerificationReturn => {
       toast.success('Verification email sent! Please check your inbox.');
     },
     onError: (error: unknown) => {
+      // Rate limit or the per-address email cap: the global toast already says how long to wait.
+      if (isLimitError(error)) return;
       if (isErrorCode(error, ERROR_CODES.ALREADY_VERIFIED)) {
         toast.info('Your account is already verified');
         router.push(ROUTES.DASHBOARD);
@@ -56,6 +58,7 @@ export const useVerifyAccount = (): UseVerifyAccountReturn => {
       router.push(ROUTES.DASHBOARD);
     },
     onError: (error: unknown) => {
+      if (isLimitError(error)) return; // the global toast already says how long to wait
       toast.error(getErrorMessage(error));
       if (isErrorCode(error, ERROR_CODES.INVALID_VERIFICATION_TOKEN)) {
         router.push(ROUTES.LOGIN);

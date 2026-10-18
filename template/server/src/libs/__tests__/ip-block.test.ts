@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getRedis } from '@libs/redis.js';
-import { recordRateLimitViolation } from '../ip-block.js';
+import { getIpBlock, recordRateLimitViolation } from '../ip-block.js';
 
 // Self-contained env so ip-block.ts can read its threshold constants at import
 // time without loading/validating the real environment.
@@ -33,6 +33,9 @@ const redisMock = {
   zadd: vi.fn(),
   incr: vi.fn(),
   expire: vi.fn(),
+  sismember: vi.fn(),
+  zscore: vi.fn(),
+  zrem: vi.fn(),
 };
 
 describe('recordRateLimitViolation — infra-IP guard', () => {
@@ -58,5 +61,35 @@ describe('recordRateLimitViolation — infra-IP guard', () => {
     redisMock.incr.mockResolvedValue(1);
     await recordRateLimitViolation('93.184.216.34');
     expect(redisMock.incr).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getIpBlock — block state with the time left', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getRedis).mockReturnValue(redisMock as never);
+    redisMock.sismember.mockResolvedValue(0);
+    redisMock.zscore.mockResolvedValue(null);
+  });
+
+  it('reports a permanent (admin) block without an end time', async () => {
+    redisMock.sismember.mockResolvedValue(1);
+    expect(await getIpBlock('93.184.216.34')).toEqual({ blocked: true, permanent: true });
+  });
+
+  it('reports an automatic block with the whole seconds until it ends', async () => {
+    redisMock.zscore.mockResolvedValue(String(Date.now() / 1000 + 1799.2));
+    expect(await getIpBlock('93.184.216.34')).toEqual({ blocked: true, permanent: false, retryAfterSeconds: 1800 });
+  });
+
+  it('cleans up an expired automatic block and reports no block', async () => {
+    redisMock.zscore.mockResolvedValue(String(Date.now() / 1000 - 5));
+    expect(await getIpBlock('93.184.216.34')).toEqual({ blocked: false });
+    expect(redisMock.zrem).toHaveBeenCalledWith('auto_blocked_ips', '93.184.216.34');
+  });
+
+  it('fails open when Redis is down', async () => {
+    redisMock.sismember.mockRejectedValue(new Error('down'));
+    expect(await getIpBlock('93.184.216.34')).toEqual({ blocked: false });
   });
 });

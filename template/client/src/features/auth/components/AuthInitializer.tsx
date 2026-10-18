@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { useAppSelector } from '@/store/hooks';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { ROUTES } from '@/lib/constants/routes';
-import { isErrorCode, ERROR_CODES } from '@/lib/utils/error';
+import { isErrorCode, isLimitError, ERROR_CODES } from '@/lib/utils/error';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE, '/admin'];
@@ -54,6 +54,9 @@ export const AuthInitializer = ({ children }: AuthInitializerProps): React.React
   useEffect(() => {
     if (!error) return;
     if (!isProtectedPath(pathname)) return;
+    // Rate limited or network blocked: the session may be fine, so stay put. The
+    // global toast already says how long to wait (lib/api/axios.config.ts).
+    if (isLimitError(error)) return;
 
     const status = (error as HttpLikeError)?.response?.status;
     if (status === 401 || status === 403) {

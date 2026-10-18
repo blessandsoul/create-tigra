@@ -42,7 +42,7 @@ The version before that used the TCP peer only. That counted every visitor behin
 ## Limits
 
 - **Another CDN or proxy:** behind anything other than Cloudflare (with or without Traefik), the resolved address is that proxy's. Counters are then shared: strict, but never spoofable. Supporting another CDN means adding its ranges the way Cloudflare's are handled.
-- **Shared connections:** people who really share one internet connection (an office, a café, some mobile carriers) count as one visitor for any IP-based rule. Size the limits with `RATE_LIMIT_MULTIPLIER` and the per-route maximums.
+- **Shared connections:** people who really share one internet connection (an office, a café, some mobile carriers) count as one visitor for any IP-based rule. Size the limits with `RATE_LIMIT_MULTIPLIER` and `RATE_LIMIT_OVERRIDES` (see `template/server/docs/rate-limits.md`).
 - **The private-network assumption:** anything on a private network in front of the app is trusted. On Coolify that is Traefik and other containers on the same Docker network. Do not expose the app's port directly on a network you do not control.
 
 ## Porting an existing app

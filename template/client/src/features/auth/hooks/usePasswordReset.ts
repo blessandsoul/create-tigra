@@ -5,12 +5,14 @@ import { toast } from 'sonner';
 
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { ROUTES } from '@/lib/constants/routes';
-import { getErrorMessage } from '@/lib/utils/error';
+import { getErrorMessage, isLimitError } from '@/lib/utils/error';
 import { authService } from '../services/auth.service';
 
 interface UseForgotPasswordReturn {
   forgotPassword: (email: string) => void;
   isPending: boolean;
+  /** Last error; ForgotPasswordForm shows rate-limit answers inline from it. */
+  error: unknown;
 }
 
 export const useForgotPassword = (): UseForgotPasswordReturn => {
@@ -20,6 +22,8 @@ export const useForgotPassword = (): UseForgotPasswordReturn => {
       toast.success('Check your email for reset instructions');
     },
     onError: (error: unknown) => {
+      // Rate limit / email cap: shown inline by ForgotPasswordForm, no toast.
+      if (isLimitError(error)) return;
       toast.error(getErrorMessage(error));
     },
   });
@@ -27,6 +31,7 @@ export const useForgotPassword = (): UseForgotPasswordReturn => {
   return {
     forgotPassword: mutation.mutate,
     isPending: mutation.isPending,
+    error: mutation.error,
   };
 };
 
@@ -46,6 +51,7 @@ export const useResetPassword = (): UseResetPasswordReturn => {
       router.push(ROUTES.LOGIN);
     },
     onError: (error: unknown) => {
+      if (isLimitError(error)) return; // the global toast already says how long to wait
       toast.error(getErrorMessage(error));
     },
   });

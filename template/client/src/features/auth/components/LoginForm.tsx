@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AppLink } from '@/components/common/AppLink';
 import { useAuth } from '../hooks/useAuth';
+import { LimitNotice } from './LimitNotice';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
 import { getSafeRedirectPath } from '@/lib/utils/security';
@@ -26,7 +27,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 const LoginFormInner = (): React.ReactElement => {
-  const { login, isLoggingIn } = useAuth();
+  const { login, isLoggingIn, loginError } = useAuth();
   const searchParams = useSearchParams();
   // `from` is attacker-controllable (anyone can send a /login?from=… link), so
   // only a same-site path is accepted — see getSafeRedirectPath for why a
@@ -88,6 +89,9 @@ const LoginFormInner = (): React.ReactElement => {
             <p id="password-error" className="text-sm text-destructive">{errors.password.message}</p>
           )}
         </div>
+
+        {/* Rate limit or login lock, with the wait time (no toast for these). */}
+        <LimitNotice error={loginError} />
 
         <Button type="submit" className="w-full" disabled={isLoggingIn}>
           {isLoggingIn ? (

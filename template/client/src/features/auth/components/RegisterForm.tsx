@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AppLink } from '@/components/common/AppLink';
 import { useAuth } from '../hooks/useAuth';
+import { LimitNotice } from './LimitNotice';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +37,7 @@ const registerSchema = z
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export const RegisterForm = (): React.ReactElement => {
-  const { register: registerUser, isRegistering } = useAuth();
+  const { register: registerUser, isRegistering, registerError } = useAuth();
 
   const {
     register,
@@ -151,6 +152,9 @@ export const RegisterForm = (): React.ReactElement => {
             </p>
           )}
         </div>
+
+        {/* Rate limit or email cap, with the wait time (no toast for these). */}
+        <LimitNotice error={registerError} />
 
         <Button type="submit" className="w-full" disabled={isRegistering}>
           {isRegistering ? (

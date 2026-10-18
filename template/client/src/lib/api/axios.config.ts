@@ -1,10 +1,25 @@
 import axios from 'axios';
+import { toast } from 'sonner';
 
 import type { InternalAxiosRequestConfig } from 'axios';
 
 import { API_ENDPOINTS } from '@/lib/constants/api-endpoints';
 import { ROUTES } from '@/lib/constants/routes';
 import { env } from '@/lib/env';
+import { getLimitInfo, isLimitError } from '@/lib/utils/error';
+
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /**
+     * Skip the global "too many requests" toast for this request because the
+     * caller shows the message itself (the auth forms show it inline).
+     */
+    skipLimitToast?: boolean;
+  }
+}
+
+// One fixed toast id: a burst of limited requests updates one toast instead of stacking many.
+const LIMIT_TOAST_ID = 'rate-limit';
 
 const apiClient = axios.create({
   baseURL: env.NEXT_PUBLIC_API_BASE_URL,
@@ -47,6 +62,17 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // "Slow down" answers (429 rate limit / login lock / email cap, 403 IP_BLOCKED):
+    // tell the person once, with the wait time, and never treat them as an auth
+    // failure. They are rejected as-is; React Query does not retry them (providers.tsx).
+    const limit = getLimitInfo(error);
+    if (limit) {
+      if (!originalRequest?.skipLimitToast && typeof window !== 'undefined') {
+        toast.error(limit.message, { id: LIMIT_TOAST_ID });
+      }
+      return Promise.reject(error);
+    }
 
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
@@ -100,12 +126,15 @@ apiClient.interceptors.response.use(
       processQueue(refreshError);
 
       // Only logout on definitive auth failures (server responded with 4xx).
-      // Network errors (server unreachable, timeout) should NOT destroy the session.
+      // Network errors (server unreachable, timeout) should NOT destroy the session,
+      // and neither should a rate-limited or blocked refresh: the session is still
+      // valid, the caller just has to wait (the toast says how long).
       const isAuthFailure =
         axios.isAxiosError(refreshError) &&
         refreshError.response != null &&
         refreshError.response.status >= 400 &&
-        refreshError.response.status < 500;
+        refreshError.response.status < 500 &&
+        !isLimitError(refreshError);
 
       if (isAuthFailure) {
         // The bootstrap probe (AuthInitializer's getMe) runs on EVERY page,

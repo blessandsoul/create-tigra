@@ -30,9 +30,6 @@ model User {
   emailVerifiedAt DateTime?
   deletedAt     DateTime?
 
-  // Account lockout
-  failedLoginAttempts Int       @default(0)
-  lockedUntil         DateTime?
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

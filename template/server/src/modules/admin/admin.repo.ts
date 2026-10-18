@@ -20,8 +20,6 @@ const adminUserSelect = {
   isActive: true,
   emailVerifiedAt: true,
   deletedAt: true,
-  failedLoginAttempts: true,
-  lockedUntil: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -45,8 +43,6 @@ export type AdminUser = {
   isActive: boolean;
   emailVerifiedAt: Date | null;
   deletedAt: Date | null;
-  failedLoginAttempts: number;
-  lockedUntil: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };

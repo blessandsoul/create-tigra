@@ -51,6 +51,10 @@ const envSchema = z.object({
   // --- Rate Limiting ---
   RATE_LIMIT_ENABLED: optionalEnv(z.string().default('true').transform((val) => val === 'true')),
   RATE_LIMIT_MULTIPLIER: optionalEnv(z.coerce.number().min(0.1).max(100).default(1)),
+  // Per-limit overrides, e.g. "AUTH_LOGIN=100/15m,DEFAULT=300/1m,EMAIL_PER_ADDRESS=3/1h".
+  // Parsed and validated (names and format) in src/config/rate-limit.config.ts, which stops
+  // the server at boot on a mistake. The multiplier still applies on top of an override.
+  RATE_LIMIT_OVERRIDES: optionalEnv(z.string().optional()),
 
   // There is no Cloudflare switch: the visitor address is verified per request (Cloudflare is
   // recognised by its published edge ranges), see src/libs/client-ip.ts. A TRUST_CLOUDFLARE
@@ -67,8 +71,6 @@ const envSchema = z.object({
       .refine((s) => !s.startsWith('CHANGE_ME'), 'CLOUDFLARE_ORIGIN_SECRET is still the placeholder')
       .optional(),
   ),
-  RATE_LIMIT_AUTH_LOGIN_MAX: optionalEnv(z.coerce.number().int().min(1).optional()),
-  RATE_LIMIT_AUTH_REGISTER_MAX: optionalEnv(z.coerce.number().int().min(1).optional()),
 
   // --- IP Auto-Block (see src/libs/ip-block.ts) ---
   // An IP that exceeds rate limits IP_AUTO_BLOCK_THRESHOLD times within

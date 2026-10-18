@@ -11,7 +11,10 @@ import {
   UnauthorizedError,
   NotFoundError,
   BadRequestError,
+  TooManyRequestsError,
+  describeWait,
 } from '@shared/errors/errors.js';
+import { consumeEmailQuota } from '@libs/email-quota.js';
 import type { UserRole } from '@shared/types/index.js';
 import * as authRepo from './auth.repo.js';
 import { sessionRepository } from './session.repo.js';
@@ -27,25 +30,26 @@ const PASSWORD_RESET_USER_PREFIX = 'pw-reset-user:';
 // passwords at the victim's email (lockout DoS). Scoped to email+IP, an
 // attacker only ever locks out their own address; distributed attempts are
 // still throttled by the per-IP rate limit on the login route.
-// Redis failures fail OPEN (no lockout) — consistent with ip-block.ts:
+// Unknown emails are counted and locked exactly like real ones, so a locked
+// answer (429 LOGIN_LOCKED with the wait time) never reveals that an account
+// exists. Redis failures fail OPEN (no lockout) — consistent with ip-block.ts:
 // availability over lockout, and rate limiting still applies.
 const LOGIN_FAIL_PREFIX = 'login-fail:';
 const LOGIN_LOCK_PREFIX = 'login-lock:';
-const LOGIN_FAIL_WINDOW_SECONDS = 60 * 60; // failed attempts expire after 1 hour
+// The failure count is forgotten an hour after the LAST failure (refreshed on each one).
+const LOGIN_FAIL_WINDOW_SECONDS = 60 * 60;
 
-// Account lockout configuration
-const LOCKOUT_THRESHOLDS = [
-  { attempts: 5, durationMs: 15 * 60 * 1000 },   // 5 failures → 15 min
-  { attempts: 10, durationMs: 30 * 60 * 1000 },   // 10 failures → 30 min
-  { attempts: 15, durationMs: 60 * 60 * 1000 },   // 15+ failures → 1 hour
-];
+// Lock ladder: the 15th failure locks for 15 minutes; the 30th (and every 15th
+// after it) locks for 1 hour. Failures between those steps do not re-lock, so a
+// user whose 15-minute lock ended gets another 14 tries before the long lock.
+export const FIRST_LOCK_AT = 15;
+const FIRST_LOCK_SECONDS = 15 * 60;
+const LONG_LOCK_SECONDS = 60 * 60;
 
-function getLockoutDuration(failedAttempts: number): number | null {
-  for (let i = LOCKOUT_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (failedAttempts >= LOCKOUT_THRESHOLDS[i].attempts) {
-      return LOCKOUT_THRESHOLDS[i].durationMs;
-    }
-  }
+/** Lock length (seconds) that this failure count starts, or null for none. */
+export function lockSecondsForFailure(failedAttempts: number): number | null {
+  if (failedAttempts === FIRST_LOCK_AT) return FIRST_LOCK_SECONDS;
+  if (failedAttempts >= FIRST_LOCK_AT * 2 && failedAttempts % FIRST_LOCK_AT === 0) return LONG_LOCK_SECONDS;
   return null;
 }
 
@@ -53,38 +57,57 @@ function lockoutKey(prefix: string, email: string, ipAddress?: string): string {
   return `${prefix}${email.toLowerCase()}:${ipAddress ?? 'unknown'}`;
 }
 
-async function isLoginLocked(email: string, ipAddress?: string): Promise<boolean> {
+function loginLockedError(seconds: number): TooManyRequestsError {
+  return new TooManyRequestsError(
+    `Too many failed sign-in attempts. Try again in ${describeWait(seconds)}.`,
+    'LOGIN_LOCKED',
+    seconds,
+  );
+}
+
+/** Seconds left on this email+IP lock, or 0 when not locked (also on Redis failure). */
+async function loginLockSeconds(email: string, ipAddress?: string): Promise<number> {
   try {
-    const locked = await getRedis().exists(lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress));
-    return locked === 1;
+    const ttl = await getRedis().ttl(lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress));
+    return ttl > 0 ? ttl : 0;
   } catch {
-    return false; // fail open — Redis down must not block all logins
+    return 0; // fail open — Redis down must not block all logins
   }
 }
 
-async function recordFailedLogin(email: string, ipAddress?: string): Promise<void> {
+/** Count one failure; returns the lock length (seconds) it started, or 0. */
+async function recordFailedLogin(email: string, ipAddress?: string): Promise<number> {
   try {
     const redis = getRedis();
     const failKey = lockoutKey(LOGIN_FAIL_PREFIX, email, ipAddress);
 
     const attempts = await redis.incr(failKey);
-    if (attempts === 1) {
-      await redis.expire(failKey, LOGIN_FAIL_WINDOW_SECONDS);
-    }
+    await redis.expire(failKey, LOGIN_FAIL_WINDOW_SECONDS);
 
-    const lockDurationMs = getLockoutDuration(attempts);
-    if (lockDurationMs) {
-      await redis.set(
-        lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress),
-        '1',
-        'EX',
-        Math.ceil(lockDurationMs / 1000),
-      );
+    const lockSeconds = lockSecondsForFailure(attempts);
+    if (lockSeconds) {
+      await redis.set(lockoutKey(LOGIN_LOCK_PREFIX, email, ipAddress), '1', 'EX', lockSeconds);
+      return lockSeconds;
     }
+    return 0;
   } catch {
     // Non-critical: don't break the login error path if tracking fails
     logger.warn('[AUTH] Failed to record failed login attempt');
+    return 0;
   }
+}
+
+// Hash checked for unknown emails, so they take as long as a wrong password on a real
+// account (no timing hint about which emails are registered). Computed once, on first use.
+// A failed computation is not cached: otherwise every later unknown-email login would
+// answer 500 while real accounts answer 401, revealing which emails are registered.
+let dummyPasswordHash: Promise<string> | undefined;
+function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashPassword(crypto.randomBytes(32).toString('hex')).catch((error: unknown) => {
+    dummyPasswordHash = undefined;
+    throw error;
+  });
+  return dummyPasswordHash;
 }
 
 async function clearFailedLogins(email: string, ipAddress?: string): Promise<void> {
@@ -226,36 +249,32 @@ export async function login(
   deviceInfo?: string,
   ipAddress?: string,
 ): Promise<AuthResult> {
+  // Check the lock FIRST, for any email (registered or not), so a locked
+  // answer looks the same whether or not the account exists. Scoped to this
+  // email+IP pair, so an attacker spamming bad passwords only locks out their
+  // OWN address and cannot remotely lock the real user out (lockout DoS).
+  const lockedFor = await loginLockSeconds(input.email, ipAddress);
+  if (lockedFor > 0) {
+    throw loginLockedError(lockedFor);
+  }
+
   const user = await authRepo.findUserByEmail(input.email);
-  if (!user) {
+  // Unknown email: same password-check cost and same failure counting as a
+  // wrong password, so neither timing nor the lock reveals registered emails.
+  const valid = user
+    ? await verifyPassword(input.password, user.password)
+    : (await verifyPassword(input.password, await getDummyPasswordHash()), false);
+
+  if (!user || !valid) {
+    const lockStarted = await recordFailedLogin(input.email, ipAddress);
+    if (lockStarted > 0) {
+      throw loginLockedError(lockStarted); // tell the user now, not on the next try
+    }
     throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
   }
 
-  // Check account lockout — scoped to this email+IP pair (Redis), so an
-  // attacker spamming bad passwords only locks out their OWN address and
-  // cannot remotely lock the real user out (lockout DoS).
-  if (await isLoginLocked(input.email, ipAddress)) {
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
-
-  // DB-level lock (legacy data or manual admin lock) is still honored.
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
-
-  const valid = await verifyPassword(input.password, user.password);
-
-  if (!valid) {
-    await recordFailedLogin(input.email, ipAddress);
-    throw new UnauthorizedError('Invalid email or password', 'INVALID_CREDENTIALS');
-  }
-
-  // Successful login — clear the email+IP failure counter and any stale
-  // DB-level lockout state from before lockout moved to Redis.
+  // Successful login — clear the email+IP failure counter.
   await clearFailedLogins(input.email, ipAddress);
-  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-    await authRepo.resetFailedAttempts(user.id);
-  }
 
   // Reveal account state only now that the password is proven, so an anonymous
   // caller cannot learn whether an email is banned or unverified.
@@ -412,6 +431,10 @@ export async function logoutAllSessions(userId: string): Promise<number> {
 }
 
 export async function forgotPassword(email: string): Promise<void> {
+  // Per-address email cap, counted BEFORE the lookup so unknown addresses are
+  // counted too (the 429 reveals nothing about the account). See libs/email-quota.ts.
+  await consumeEmailQuota(email);
+
   const user = await authRepo.findUserByEmail(email);
 
   // Silent return if user not found — prevents email enumeration

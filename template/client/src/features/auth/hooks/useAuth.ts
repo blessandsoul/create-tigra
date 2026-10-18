@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { getErrorMessage, isErrorCode, ERROR_CODES } from '@/lib/utils/error';
+import { getErrorMessage, isErrorCode, isLimitError, ERROR_CODES } from '@/lib/utils/error';
 import { ROUTES } from '@/lib/constants/routes';
 import { getSafeRedirectPath } from '@/lib/utils/security';
 import { authService } from '../services/auth.service';
@@ -25,6 +25,10 @@ interface UseAuthReturn {
   isLoggingIn: boolean;
   isRegistering: boolean;
   isLoggingOut: boolean;
+  /** Last login error; the form shows rate-limit and lock answers inline from it. */
+  loginError: unknown;
+  /** Last register error; the form shows rate-limit answers inline from it. */
+  registerError: unknown;
 }
 
 export const useAuth = (): UseAuthReturn => {
@@ -43,6 +47,8 @@ export const useAuth = (): UseAuthReturn => {
       router.push(pendingRedirectRef.current);
     },
     onError: (error) => {
+      // Rate limit / login lock: LoginForm shows it inline (with the wait), no toast.
+      if (isLimitError(error)) return;
       if (isErrorCode(error, ERROR_CODES.ACCOUNT_DEACTIVATED)) {
         toast.error('This account has been deactivated. Contact support if you think this is a mistake.');
         return;
@@ -71,6 +77,8 @@ export const useAuth = (): UseAuthReturn => {
       router.push(ROUTES.DASHBOARD);
     },
     onError: (error) => {
+      // Rate limit / email cap: RegisterForm shows it inline (with the wait), no toast.
+      if (isLimitError(error)) return;
       toast.error(getErrorMessage(error));
     },
   });
@@ -106,5 +114,7 @@ export const useAuth = (): UseAuthReturn => {
     isLoggingIn: loginMutation.isPending,
     isRegistering: registerMutation.isPending,
     isLoggingOut,
+    loginError: loginMutation.error,
+    registerError: registerMutation.error,
   };
 };

@@ -29,6 +29,7 @@ vi.mock('../session.repo.js');
 // never require a live Redis instance.
 const mockRedis = vi.hoisted(() => ({
   exists: vi.fn(),
+  ttl: vi.fn(),
   incr: vi.fn(),
   expire: vi.fn(),
   set: vi.fn(),
@@ -44,8 +45,11 @@ describe('Auth Service', () => {
   beforeEach(() => {
     resetMocks();
     vi.clearAllMocks();
-    // Default Redis behavior: nothing locked, first failure
+    // Default Redis behavior: nothing locked (TTL -2 = no key), first failure
     mockRedis.exists.mockResolvedValue(0);
+    mockRedis.ttl.mockResolvedValue(-2);
+    // Unknown emails are checked against a dummy hash (equal timing)
+    vi.mocked(hashPassword).mockResolvedValue('dummy-hash');
     mockRedis.incr.mockResolvedValue(1);
     mockRedis.expire.mockResolvedValue(1);
     mockRedis.set.mockResolvedValue('OK');
@@ -233,15 +237,19 @@ describe('Auth Service', () => {
       expect(result.user).not.toHaveProperty('password');
     });
 
-    it('should throw UnauthorizedError if user not found', async () => {
+    it('should throw UnauthorizedError if user not found, after the same password check and failure count', async () => {
       // Arrange
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
+      vi.mocked(verifyPassword).mockResolvedValue(false);
 
       // Act & Assert
       await expect(authService.login(validLoginInput)).rejects.toThrow(UnauthorizedError);
       await expect(authService.login(validLoginInput)).rejects.toThrow('Invalid email or password');
       expect(authRepo.findDeletedUserByEmail).not.toHaveBeenCalled();
-      expect(verifyPassword).not.toHaveBeenCalled();
+      // Same cost as a wrong password on a real account: no timing hint about registered emails
+      expect(verifyPassword).toHaveBeenCalledWith(validLoginInput.password, 'dummy-hash');
+      // Counted like a real failure, so the lock cannot reveal which emails exist
+      expect(mockRedis.incr).toHaveBeenCalledWith(`login-fail:${validLoginInput.email}:unknown`);
     });
 
     it('should not restore or authenticate a soft-deleted account with correct credentials', async () => {
@@ -258,7 +266,8 @@ describe('Auth Service', () => {
       await expect(authService.login(validLoginInput)).rejects.toThrow(UnauthorizedError);
       await expect(authService.login(validLoginInput)).rejects.toThrow('Invalid email or password');
       expect(authRepo.findDeletedUserByEmail).not.toHaveBeenCalled();
-      expect(verifyPassword).not.toHaveBeenCalled();
+      // Only the dummy hash is checked, never the deleted account's own password
+      expect(verifyPassword).not.toHaveBeenCalledWith(validLoginInput.password, testUsers.validUser.password);
       expect(authLib.signAccessToken).not.toHaveBeenCalled();
       expect(authLib.generateRefreshToken).not.toHaveBeenCalled();
       expect(sessionRepository.createSession).not.toHaveBeenCalled();
@@ -328,17 +337,36 @@ describe('Auth Service', () => {
     const loginInput = { email: 'test@example.com', password: 'WrongPassword!' };
     const attackerIp = '203.0.113.7';
 
-    it('should reject login when the email+IP pair is locked, without verifying the password', async () => {
+    it('should answer 429 LOGIN_LOCKED with the wait time while the email+IP pair is locked, without checking the password', async () => {
       // Arrange
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
-      mockRedis.exists.mockResolvedValue(1); // lock key present for this pair
+      mockRedis.ttl.mockResolvedValue(600); // lock key present for this pair, 10 min left
 
-      // Act & Assert
+      // Act & Assert — even the right password gets the locked answer
       await expect(
-        authService.login(loginInput, 'test-agent', attackerIp),
-      ).rejects.toThrow('Invalid email or password');
-      expect(mockRedis.exists).toHaveBeenCalledWith(`login-lock:test@example.com:${attackerIp}`);
+        authService.login({ ...loginInput, password: 'Password123!' }, 'test-agent', attackerIp),
+      ).rejects.toMatchObject({
+        statusCode: 429,
+        code: 'LOGIN_LOCKED',
+        retryAfterSeconds: 600,
+        message: 'Too many failed sign-in attempts. Try again in 10 minutes.',
+      });
+      expect(mockRedis.ttl).toHaveBeenCalledWith(`login-lock:test@example.com:${attackerIp}`);
       expect(verifyPassword).not.toHaveBeenCalled();
+      expect(authRepo.findUserByEmail).not.toHaveBeenCalled(); // checked before the lookup
+    });
+
+    it('should lock an unknown email exactly like a real one (no account enumeration)', async () => {
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
+      vi.mocked(verifyPassword).mockResolvedValue(false);
+      mockRedis.incr.mockResolvedValue(15);
+
+      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toMatchObject({
+        statusCode: 429,
+        code: 'LOGIN_LOCKED',
+        retryAfterSeconds: 15 * 60,
+      });
+      expect(mockRedis.set).toHaveBeenCalledWith(`login-lock:test@example.com:${attackerIp}`, '1', 'EX', 15 * 60);
     });
 
     it('should NOT lock out the same email from a different IP (no remote lockout DoS)', async () => {
@@ -348,7 +376,7 @@ describe('Auth Service', () => {
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
-      mockRedis.exists.mockResolvedValue(0);
+      mockRedis.ttl.mockResolvedValue(-2);
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(authLib.signAccessToken).mockReturnValue('access');
       vi.mocked(authLib.generateRefreshToken).mockReturnValue('refresh');
@@ -364,7 +392,7 @@ describe('Auth Service', () => {
       );
 
       // Assert — lock was checked for the VICTIM's pair only, and login succeeded
-      expect(mockRedis.exists).toHaveBeenCalledWith(`login-lock:test@example.com:${victimIp}`);
+      expect(mockRedis.ttl).toHaveBeenCalledWith(`login-lock:test@example.com:${victimIp}`);
       expect(result.accessToken).toBe('access');
     });
 
@@ -372,26 +400,31 @@ describe('Auth Service', () => {
       // Arrange
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
       vi.mocked(verifyPassword).mockResolvedValue(false);
-      mockRedis.incr.mockResolvedValue(3); // below the first lockout threshold
+      mockRedis.incr.mockResolvedValue(14); // one below the first lock
 
       // Act & Assert
-      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toThrow(
-        UnauthorizedError,
-      );
+      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+      });
       expect(mockRedis.incr).toHaveBeenCalledWith(`login-fail:test@example.com:${attackerIp}`);
+      // The count is forgotten an hour after the last failure
+      expect(mockRedis.expire).toHaveBeenCalledWith(`login-fail:test@example.com:${attackerIp}`, 3600);
       expect(mockRedis.set).not.toHaveBeenCalled(); // no lock yet
     });
 
-    it('should set a lock for the email+IP pair after 5 failures (15 min)', async () => {
+    it('should lock for 15 minutes on the 15th failure and say so on that same attempt', async () => {
       // Arrange
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
       vi.mocked(verifyPassword).mockResolvedValue(false);
-      mockRedis.incr.mockResolvedValue(5); // hits the first threshold
+      mockRedis.incr.mockResolvedValue(15); // hits the first threshold
 
       // Act & Assert
-      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toThrow(
-        UnauthorizedError,
-      );
+      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toMatchObject({
+        statusCode: 429,
+        code: 'LOGIN_LOCKED',
+        retryAfterSeconds: 15 * 60,
+        message: 'Too many failed sign-in attempts. Try again in 15 minutes.',
+      });
       expect(mockRedis.set).toHaveBeenCalledWith(
         `login-lock:test@example.com:${attackerIp}`,
         '1',
@@ -400,11 +433,38 @@ describe('Auth Service', () => {
       );
     });
 
+    it('should not re-lock between the steps, and lock for 1 hour on the 30th failure', async () => {
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
+      vi.mocked(verifyPassword).mockResolvedValue(false);
+
+      mockRedis.incr.mockResolvedValue(16);
+      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toMatchObject({
+        code: 'INVALID_CREDENTIALS',
+      });
+      expect(mockRedis.set).not.toHaveBeenCalled();
+
+      mockRedis.incr.mockResolvedValue(30);
+      await expect(authService.login(loginInput, 'test-agent', attackerIp)).rejects.toMatchObject({
+        code: 'LOGIN_LOCKED',
+        retryAfterSeconds: 3600,
+      });
+      expect(mockRedis.set).toHaveBeenCalledWith(`login-lock:test@example.com:${attackerIp}`, '1', 'EX', 3600);
+    });
+
+    it('lockSecondsForFailure: 15 → 15 min, 30 and every 15th after → 1 h, others → none', () => {
+      expect(authService.lockSecondsForFailure(14)).toBeNull();
+      expect(authService.lockSecondsForFailure(15)).toBe(900);
+      expect(authService.lockSecondsForFailure(16)).toBeNull();
+      expect(authService.lockSecondsForFailure(29)).toBeNull();
+      expect(authService.lockSecondsForFailure(30)).toBe(3600);
+      expect(authService.lockSecondsForFailure(45)).toBe(3600);
+    });
+
     it('should fail open and allow login when Redis is unavailable', async () => {
       // Arrange — Redis down: lockout checks must not block all logins
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(testUsers.validUser);
-      mockRedis.exists.mockRejectedValue(new Error('Redis down'));
+      mockRedis.ttl.mockRejectedValue(new Error('Redis down'));
       mockRedis.del.mockRejectedValue(new Error('Redis down'));
       vi.mocked(verifyPassword).mockResolvedValue(true);
       vi.mocked(authLib.signAccessToken).mockReturnValue('access');

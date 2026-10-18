@@ -1,7 +1,6 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
@@ -21,13 +20,13 @@ import { adminRoutes } from '@modules/admin/admin.routes.js';
 import { filesRoutes } from '@modules/files/files.routes.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { registerJobs } from '@jobs/index.js';
-import { RATE_LIMIT_ENABLED, getRateLimitRedisStore } from '@config/rate-limit.config.js';
-import { isIpBlocked, recordRateLimitViolation, syncBlockedIpsToRedis } from '@libs/ip-block.js';
-import { onRedisReady } from '@libs/redis.js';
+import { RATE_LIMIT_ENABLED } from '@config/rate-limit.config.js';
+import { getIpBlock, syncBlockedIpsToRedis } from '@libs/ip-block.js';
+import { MONITORING_PATHS, registerNotFoundHandler, registerRateLimiting } from '@libs/rate-limiting.js';
+import { getRedis, onRedisReady } from '@libs/redis.js';
 import { getClientIp, TRUSTED_PROXY_RANGES } from '@libs/client-ip.js';
-import { isAuthPath } from '@libs/auth-path.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
-import { ForbiddenError } from '@shared/errors/errors.js';
+import { ForbiddenError, describeWait } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -86,35 +85,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
 
-  // Rate limiting: Redis-backed when available, in-memory fallback
-  if (RATE_LIMIT_ENABLED) {
-    const redisStore = getRateLimitRedisStore();
-    await app.register(rateLimit, {
-      global: false,
-      max: 100,
-      timeWindow: '1 minute',
-      redis: redisStore,
-      nameSpace: 'rl:',
-      skipOnError: true, // Gracefully degrade if Redis fails mid-request
-      // Key the limiter on the verified visitor address (one counter per real visitor, and
-      // never an address the visitor wrote itself) — see src/libs/client-ip.ts.
-      keyGenerator: (request: FastifyRequest) => getClientIp(request),
-      onExceeded: (request: FastifyRequest) => {
-        // Auth routes keep their own per-route limit + account lockout; don't let
-        // a mistyped password arm the IP-wide auto-ban.
-        if (isAuthPath(request)) return;
-        recordRateLimitViolation(getClientIp(request));
-      },
-    });
-  } else {
-    // Register with effectively no limit so per-route configs don't error
-    await app.register(rateLimit, {
-      global: false,
-      max: 1_000_000,
-      timeWindow: '1 minute',
-    });
-    logger.warn('[RATE-LIMIT] Rate limiting is DISABLED (RATE_LIMIT_ENABLED=false)');
-  }
+  // Rate limiting: the default-limit hook + @fastify/rate-limit, Redis-backed so every
+  // server process shares the counters. Before any route. See src/libs/rate-limiting.ts.
+  await registerRateLimiting(app, RATE_LIMIT_ENABLED ? { redis: getRedis() } : {});
 
   await app.register(cookie, {
     secret: env.COOKIE_SECRET || env.JWT_SECRET,
@@ -172,14 +145,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     stopResyncOnReconnect();
   });
 
-  // Monitoring endpoints exempt from IP blocking and request logging.
-  // Health probes (Coolify/Docker/K8s/load balancers) come from infrastructure
-  // IPs that must NEVER be blocked — a blocked probe IP would mark a healthy
-  // container as dead and restart-loop it. Exact match on the path (query
-  // string stripped) so the exemption cannot be widened by crafted URLs.
-  // These paths must match the route registrations below.
-  const monitoringPaths = new Set(['/api/v1/health', '/api/v1/ready', '/api/v1/live']);
-
   // --- Request-id echo: surface request.id on the response so a client/proxy
   // can correlate a failed call with the server log + Sentry event. Runs first
   // so the header is present even when a later hook short-circuits (IP block,
@@ -190,12 +155,19 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // --- IP Block Check (runs before everything else) ---
   app.addHook('onRequest', async (request: FastifyRequest) => {
-    if (monitoringPaths.has(request.url.split('?')[0])) {
+    if (MONITORING_PATHS.has(request.url.split('?')[0])) {
       return; // never block health probes
     }
-    if (await isIpBlocked(getClientIp(request))) {
-      throw new ForbiddenError('Access denied', 'IP_BLOCKED');
+    const block = await getIpBlock(getClientIp(request));
+    if (!block.blocked) return;
+    if (block.permanent) {
+      throw new ForbiddenError('Access from your network is blocked.', 'IP_BLOCKED');
     }
+    throw new ForbiddenError(
+      `Too many requests from your network. Try again in ${describeWait(block.retryAfterSeconds)}.`,
+      'IP_BLOCKED',
+      block.retryAfterSeconds,
+    );
   });
 
   // --- CSRF defense-in-depth: Origin check on state-changing methods ---
@@ -220,14 +192,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   // --- Request/Response Logging ---
   app.addHook('preHandler', async (request) => {
     const pathname = request.url.split('?')[0];
-    if (!monitoringPaths.has(pathname)) {
+    if (!MONITORING_PATHS.has(pathname)) {
       markRequestStart(request);
     }
   });
 
   app.addHook('onResponse', async (request, reply) => {
     const pathname = request.url.split('?')[0];
-    if (!monitoringPaths.has(pathname)) {
+    if (!MONITORING_PATHS.has(pathname)) {
       logRequestLine(request, reply);
     }
   });
@@ -236,7 +208,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     // AppError — our typed errors (use duck-type check to avoid instanceof issues)
     if (isAppError(error)) {
-      return reply.status(error.statusCode).send(errorResponse(error.code, error.message));
+      return reply
+        .status(error.statusCode)
+        .send(errorResponse(error.code, error.message, error.retryAfterSeconds));
     }
 
     // Zod validation error
@@ -289,11 +263,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     return reply.status(500).send(errorResponse('INTERNAL_ERROR', 'Internal server error'));
   });
 
+  // --- Unknown URLs: error envelope + DEFAULT_LIMIT (see src/libs/rate-limiting.ts) ---
+  registerNotFoundHandler(app);
+
   // --- Monitoring & Health Checks ---
+  // rateLimit: false — never limited (see MONITORING_PATHS in src/libs/rate-limiting.ts).
   const { performHealthCheck, checkReadiness, checkLiveness } = await import('@libs/monitoring.js');
 
   // Comprehensive health check (DB + Redis + Memory + Uptime)
-  app.get('/api/v1/health', async (_request, reply) => {
+  app.get('/api/v1/health', { config: { rateLimit: false } }, async (_request, reply) => {
     const health = await performHealthCheck();
 
     const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
@@ -311,7 +289,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Readiness probe (for load balancers / K8s)
-  app.get('/api/v1/ready', async (_request, reply) => {
+  app.get('/api/v1/ready', { config: { rateLimit: false } }, async (_request, reply) => {
     const ready = await checkReadiness();
     const statusCode = ready ? 200 : 503;
     return reply.status(statusCode).send(
@@ -323,7 +301,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Liveness probe (for container orchestration)
-  app.get('/api/v1/live', (_request, reply) => {
+  app.get('/api/v1/live', { config: { rateLimit: false } }, (_request, reply) => {
     const alive = checkLiveness();
     const statusCode = alive ? 200 : 503;
     return reply.status(statusCode).send(

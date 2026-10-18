@@ -11,6 +11,7 @@ import { Toaster } from 'sonner';
 import { SmoothNavigationProvider } from '@/components/common/SmoothNavigationProvider';
 import { store } from '@/store';
 import { AuthInitializer } from '@/features/auth/components/AuthInitializer';
+import { isLimitError } from '@/lib/utils/error';
 
 export function Providers({
   children,
@@ -30,7 +31,10 @@ export function Providers({
             gcTime: 5 * 60 * 1000,
             refetchOnWindowFocus: true,
             refetchOnMount: true,
-            retry: 1,
+            // One retry for flaky networks, but never for a "slow down" answer
+            // (429 / IP_BLOCKED): a retry would only earn another strike toward
+            // the server's IP auto-block. Mutations never retry (React Query default).
+            retry: (failureCount, error) => !isLimitError(error) && failureCount < 1,
           },
         },
       })

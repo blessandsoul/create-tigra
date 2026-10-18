@@ -5,8 +5,6 @@ import type { PaginationParams } from '@/lib/api/api.types';
 
 export interface IAdminUser extends IUser {
   deletedAt: string | null;
-  failedLoginAttempts: number;
-  lockedUntil: string | null;
 }
 
 export interface IAdminUserDetail extends IAdminUser {
