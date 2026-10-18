@@ -3,6 +3,7 @@ import { successResponse } from '@shared/responses/successResponse.js';
 import { paginatedResponse } from '@shared/responses/paginatedResponse.js';
 import { ValidationError } from '@shared/errors/errors.js';
 import { blockIp, unblockIp, getBlockedIps } from '@libs/ip-block.js';
+import { resolveClientIp } from '@libs/client-ip.js';
 import { adminService } from './admin.service.js';
 import {
   blockIpSchema,
@@ -25,6 +26,15 @@ export async function listBlockedIps(
 ): Promise<void> {
   const { permanent, autoBlocked } = await getBlockedIps();
   reply.send(successResponse('Blocked IPs retrieved', { permanent, autoBlocked }));
+}
+
+/** The resolved visitor address for this request and its source (see libs/client-ip.ts). */
+export async function getResolvedClientIp(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const { ip, source } = resolveClientIp(request);
+  reply.send(successResponse('Client IP resolved', { ip, source }));
 }
 
 export async function blockIpHandler(

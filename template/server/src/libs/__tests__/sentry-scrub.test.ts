@@ -16,6 +16,7 @@ describe('scrubSentryEvent', () => {
         headers: {
           Cookie: 'access_token=jwt-value; refresh_token=refresh-value',
           authorization: 'Bearer jwt-value',
+          'X-Origin-Verify': 'origin-secret-value',
           'user-agent': 'vitest',
         },
       },
@@ -30,6 +31,7 @@ describe('scrubSentryEvent', () => {
     expect(serialized).not.toContain('Plaintext-Passw0rd');
     expect(serialized).not.toContain('jwt-value');
     expect(serialized).not.toContain('refresh-value');
+    expect(serialized).not.toContain('origin-secret-value');
     expect(serialized).not.toContain('secret-reset-token');
     expect(serialized).not.toContain('token=abc');
     // Useful, non-secret context survives

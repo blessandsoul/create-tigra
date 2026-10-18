@@ -8,6 +8,7 @@
 import type { FastifyInstance } from 'fastify';
 import { startCleanupExpiredAuthJob } from './cleanup-expired-auth.job.js';
 import { startCleanupDeletedAccountsJob } from './cleanup-deleted-accounts.job.js';
+import { startRefreshCloudflareRangesJob } from './refresh-cloudflare-ranges.job.js';
 
 /**
  * Registers all background jobs
@@ -17,4 +18,5 @@ import { startCleanupDeletedAccountsJob } from './cleanup-deleted-accounts.job.j
 export function registerJobs(app: FastifyInstance): void {
   startCleanupExpiredAuthJob(app);
   startCleanupDeletedAccountsJob(app);
+  startRefreshCloudflareRangesJob(app);
 }

@@ -38,10 +38,8 @@ async function checkDatabase(): Promise<CheckStatus> {
       status: responseTime < 100 ? 'up' : 'degraded',
       message: responseTime < 100 ? 'Database is healthy' : 'Database responding slowly',
       responseTime,
-      details: {
-        poolMin: env.DATABASE_POOL_MIN,
-        poolMax: env.DATABASE_POOL_MAX,
-      },
+      // No pool details: the pool is sized by connection_limit inside DATABASE_URL, which
+      // this public endpoint must not echo.
     };
   } catch (error) {
     const responseTime = Date.now() - start;

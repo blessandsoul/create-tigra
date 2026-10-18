@@ -33,6 +33,21 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * Show the address the server resolves for THIS request, and where it came from.
+   * Used after a deploy or a proxy/CDN change to confirm rate limits and IP blocks see the real
+   * visitor (source "cloudflare" behind Cloudflare, "proxy" behind Traefik alone), never a
+   * Cloudflare, Docker or proxy address. Returns nothing else (no headers are echoed).
+   *
+   * GET /api/v1/admin/client-ip
+   * Auth: Required (ADMIN)
+   * Returns: { ip: string, source: 'cloudflare' | 'cloudflare-unverified' | 'proxy' | 'socket' }
+   */
+  fastify.get('/admin/client-ip', {
+    config: { rateLimit: RATE_LIMITS.ADMIN_DEFAULT },
+    handler: adminController.getResolvedClientIp,
+  });
+
+  /**
    * Block an IP address (permanent)
    *
    * POST /api/v1/admin/blocked-ips

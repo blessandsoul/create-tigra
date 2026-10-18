@@ -26,7 +26,7 @@ services:
       - --innodb-buffer-pool-size=128M    # default is fine for dev; keeps RSS small
       - --performance-schema=OFF          # saves ~hundreds of MB on its own
       - --skip-name-resolve               # no reverse-DNS per connection (faster, leaner)
-      - --max-connections=60              # well above DATABASE_POOL_MAX (10) + headroom
+      - --max-connections=60              # well above Prisma's pool (connection_limit in DATABASE_URL) + headroom
       - --innodb-flush-log-at-trx-commit=2 # dev durability/throughput trade — not for prod
     ports:
       - '127.0.0.1:${MYSQL_PORT:-{{MYSQL_PORT}}}:3306'

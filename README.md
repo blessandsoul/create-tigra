@@ -87,6 +87,7 @@ docker compose --profile tools up -d
 ## Security and Migration Notes
 
 - [Account deactivation login reactivation: issue, fix, and existing-project migration](docs/account-deactivation-login-reactivation.md)
+- [Client IP behind proxies and Cloudflare: how the visitor address is verified, and existing-project porting](docs/client-ip-behind-proxies.md)
 
 ## License
 

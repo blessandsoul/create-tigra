@@ -15,7 +15,7 @@
  */
 import type { Event } from '@sentry/nextjs';
 
-const SECRET_HEADERS = new Set(['cookie', 'set-cookie', 'authorization', 'proxy-authorization', 'x-api-key']);
+const SECRET_HEADERS = new Set(['cookie', 'set-cookie', 'authorization', 'proxy-authorization', 'x-api-key', 'x-origin-verify']);
 const URL_HEADERS = new Set(['referer', 'referrer']);
 
 /** Drop the query string and fragment: tokens travel there. */

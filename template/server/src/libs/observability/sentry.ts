@@ -24,7 +24,7 @@ let initialized = false;
  * headers whose value is a URL that may carry a token in its query string.
  * Keep in step with the client scrubber (client/src/lib/observability/sentry-scrub.ts).
  */
-const SECRET_HEADERS = new Set(['cookie', 'set-cookie', 'authorization', 'proxy-authorization', 'x-api-key']);
+const SECRET_HEADERS = new Set(['cookie', 'set-cookie', 'authorization', 'proxy-authorization', 'x-api-key', 'x-origin-verify']);
 const URL_HEADERS = new Set(['referer', 'referrer']);
 
 /** Drop the query string: reset/verify tokens and other secrets travel there. */

@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { successResponse } from '@shared/responses/successResponse.js';
 import { setAuthCookies } from '@libs/cookies.js';
+import { getClientIp } from '@libs/client-ip.js';
 import * as verificationService from './verification.service.js';
 
 import type { SendVerificationInput, VerifyAccountInput } from './auth.schemas.js';
@@ -19,7 +20,8 @@ export async function verifyAccount(
   reply: FastifyReply,
 ): Promise<void> {
   const deviceInfo = request.headers['user-agent'];
-  const ipAddress = request.ip;
+  // Same verified address as login/register sessions (never request.ip or a raw header).
+  const ipAddress = getClientIp(request);
 
   const result = await verificationService.verifyAccount(request.body.token, deviceInfo, ipAddress);
 

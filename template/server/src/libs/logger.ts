@@ -12,6 +12,9 @@ export const logger = pino({
       'req.headers.cookie',
       'headers.authorization',
       'headers.cookie',
+      // The Cloudflare origin-proof secret (see src/libs/client-ip.ts).
+      'req.headers["x-origin-verify"]',
+      'headers["x-origin-verify"]',
       '*.password',
       '*.token',
       '*.secret',

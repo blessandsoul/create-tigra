@@ -37,9 +37,9 @@ const envSchema = z.object({
   CONNECTION_TIMEOUT_MS: optionalEnv(z.coerce.number().int().min(1).default(60000)),
 
   // --- Database (MySQL 8.0+) ---
+  // The connection pool is sized INSIDE this URL (`?connection_limit=20&pool_timeout=10`); Prisma
+  // reads no separate pool variables. Without connection_limit Prisma uses CPU cores x 2 + 1.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  DATABASE_POOL_MIN: optionalEnv(z.coerce.number().int().min(1).default(2)),
-  DATABASE_POOL_MAX: optionalEnv(z.coerce.number().int().min(1).max(1000).default(10)),
 
   // --- Redis ---
   REDIS_URL: optionalEnv(z.string().default('redis://localhost:6379')),
@@ -52,12 +52,21 @@ const envSchema = z.object({
   RATE_LIMIT_ENABLED: optionalEnv(z.string().default('true').transform((val) => val === 'true')),
   RATE_LIMIT_MULTIPLIER: optionalEnv(z.coerce.number().min(0.1).max(100).default(1)),
 
-  // When true, derive the client IP for rate-limiting / IP-blocking from the
-  // Cloudflare `CF-Connecting-IP` header instead of the socket/X-Forwarded-For
-  // IP (which is a Cloudflare edge IP behind the proxy — see src/libs/client-ip.ts).
-  // Default false: the header is client-spoofable, so enable this ONLY when the
-  // origin accepts traffic exclusively via Cloudflare.
-  TRUST_CLOUDFLARE: optionalEnv(z.string().default('false').transform((val) => val === 'true')),
+  // There is no Cloudflare switch: the visitor address is verified per request (Cloudflare is
+  // recognised by its published edge ranges), see src/libs/client-ip.ts. A TRUST_CLOUDFLARE
+  // value left over on an older deployment is simply ignored (this object is not strict).
+  //
+  // Optional, recommended behind Cloudflare: a secret that a Cloudflare Transform Rule on YOUR
+  // zone adds to every request as the `X-Origin-Verify` header. When set, Cloudflare's visitor
+  // header is believed only on requests carrying it, which proves they came through your own
+  // zone and not through someone else's Cloudflare Worker. Generate: openssl rand -hex 32
+  CLOUDFLARE_ORIGIN_SECRET: optionalEnv(
+    z
+      .string()
+      .min(32, 'CLOUDFLARE_ORIGIN_SECRET must be at least 32 characters')
+      .refine((s) => !s.startsWith('CHANGE_ME'), 'CLOUDFLARE_ORIGIN_SECRET is still the placeholder')
+      .optional(),
+  ),
   RATE_LIMIT_AUTH_LOGIN_MAX: optionalEnv(z.coerce.number().int().min(1).optional()),
   RATE_LIMIT_AUTH_REGISTER_MAX: optionalEnv(z.coerce.number().int().min(1).optional()),
 
