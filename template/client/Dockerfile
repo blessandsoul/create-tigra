@@ -24,9 +24,12 @@
 # load and the server crashes at start. So we compile a pinned libvips release
 # for the generic x86-64 baseline and build sharp's addon against it (stage 2).
 #
-# KEEP THIS STAGE BYTE-IDENTICAL in server/Dockerfile and client/Dockerfile:
-# identical text gives an identical build-cache key, so a host that builds
-# both apps compiles libvips once.
+# KEEP THIS STAGE BYTE-IDENTICAL in server/Dockerfile and client/Dockerfile,
+# so one rule set builds both images. Identical text also lets a plain
+# `docker build` host reuse the compiled layer across the two apps. Coolify
+# usually cannot: it passes an --add-host entry for every container on its
+# network, which is part of the cache key, so expect each Coolify deploy to
+# compile libvips again (measured 2.5-5 min on small VPSes).
 #
 # Version coupling: every sharp release needs a minimum libvips (the
 # "config.libvips" range in sharp's package.json, e.g. ">=8.18.7" for sharp
