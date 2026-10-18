@@ -19,7 +19,7 @@ npx create-tigra my-app
 | State | Redux Toolkit (auth), React Query v5 (server data) |
 | Forms | React Hook Form + Zod validation |
 | HTTP | Axios with httpOnly cookie auth + auto refresh |
-| Auth UI | Login, Register, Dashboard pages |
+| Auth UI | Login, register and forgot-password form components (no pages: add your own `/login` and `/register` pages. The middleware sends signed-out visitors of `/dashboard`, `/profile` and `/admin` to `/login`) |
 | Components | Header, Footer, Loading, Error, Empty states |
 | Theme | Light/Dark mode with next-themes |
 

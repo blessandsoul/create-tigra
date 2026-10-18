@@ -28,6 +28,7 @@ vi.mock('../session.repo.js');
 // In-memory Redis stub — account lockout (email+IP) uses Redis. Tests must
 // never require a live Redis instance.
 const mockRedis = vi.hoisted(() => ({
+  status: 'ready',
   exists: vi.fn(),
   ttl: vi.fn(),
   incr: vi.fn(),
@@ -45,7 +46,8 @@ describe('Auth Service', () => {
   beforeEach(() => {
     resetMocks();
     vi.clearAllMocks();
-    // Default Redis behavior: nothing locked (TTL -2 = no key), first failure
+    // Default Redis behavior: connected, nothing locked (TTL -2 = no key), first failure
+    mockRedis.status = 'ready';
     mockRedis.exists.mockResolvedValue(0);
     mockRedis.ttl.mockResolvedValue(-2);
     // Unknown emails are checked against a dummy hash (equal timing)
@@ -725,6 +727,34 @@ describe('Auth Service', () => {
 
       // Act & Assert
       await expect(authService.logout(refreshToken)).rejects.toThrow('DB error');
+    });
+  });
+
+  describe('password reset while Redis is down', () => {
+    // Reset tokens live in Redis: the answer must be a clear 503 for every
+    // address, decided before any lookup (so it reveals nothing).
+    it('forgotPassword answers 503 SERVICE_UNAVAILABLE before looking the user up', async () => {
+      mockRedis.status = 'reconnecting';
+      await expect(authService.forgotPassword('anyone@example.com')).rejects.toMatchObject({
+        statusCode: 503,
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Password reset is temporarily unavailable. Please try again in a few minutes.',
+      });
+      expect(authRepo.findUserByEmail).not.toHaveBeenCalled();
+    });
+
+    it('resetPassword answers 503 SERVICE_UNAVAILABLE instead of failing on the token lookup', async () => {
+      mockRedis.status = 'reconnecting';
+      await expect(authService.resetPassword('some-token', 'New-Passw0rd-123!')).rejects.toMatchObject({
+        statusCode: 503,
+        code: 'SERVICE_UNAVAILABLE',
+      });
+      expect(mockRedis.get).not.toHaveBeenCalled();
+    });
+
+    it('forgotPassword still answers normally while Redis is connected (unknown email: no error)', async () => {
+      vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
+      await expect(authService.forgotPassword('nobody@example.com')).resolves.toBeUndefined();
     });
   });
 

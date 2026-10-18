@@ -15,6 +15,7 @@ import {
   describeWait,
 } from '@shared/errors/errors.js';
 import { consumeEmailQuota } from '@libs/email-quota.js';
+import { assertRedisReady } from '@libs/redis-required.js';
 import type { UserRole } from '@shared/types/index.js';
 import * as authRepo from './auth.repo.js';
 import { sessionRepository } from './session.repo.js';
@@ -431,6 +432,10 @@ export async function logoutAllSessions(userId: string): Promise<number> {
 }
 
 export async function forgotPassword(email: string): Promise<void> {
+  // Reset tokens live in Redis: without it, answer a clear 503 for every
+  // address (checked before the lookup, so it reveals nothing).
+  assertRedisReady('Password reset');
+
   // Per-address email cap, counted BEFORE the lookup so unknown addresses are
   // counted too (the 429 reveals nothing about the account). See libs/email-quota.ts.
   await consumeEmailQuota(email);
@@ -508,6 +513,7 @@ export async function forgotPassword(email: string): Promise<void> {
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  assertRedisReady('Password reset'); // the token is stored in Redis
   const redis = getRedis();
 
   const userId = await redis.get(`${PASSWORD_RESET_PREFIX}${token}`);

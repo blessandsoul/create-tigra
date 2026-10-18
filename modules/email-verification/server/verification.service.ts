@@ -6,6 +6,7 @@ import { logger } from '@libs/logger.js';
 import { env } from '@config/env.js';
 import { ACCOUNT_DEACTIVATED } from '@libs/account-status.js';
 import { consumeEmailQuota, type EmailQuotaBucket } from '@libs/email-quota.js';
+import { assertRedisReady } from '@libs/redis-required.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -43,6 +44,10 @@ export async function sendVerification(
   // - 'none': the one email sent at register (an address registers only once).
   // Register and the sign-in resend call this fire-and-forget: over their cap
   // the email is skipped and the caller logs it.
+  //
+  // Verification tokens live in Redis: without it, answer a clear 503 for every
+  // address (checked first, so it reveals nothing about the account).
+  assertRedisReady('Email verification');
   if (quota !== 'none') {
     await consumeEmailQuota(email, quota);
   }
@@ -130,6 +135,7 @@ export async function verifyAccount(
   deviceInfo?: string,
   ipAddress?: string,
 ): Promise<AuthResult> {
+  assertRedisReady('Email verification'); // the token is stored in Redis
   const redis = getRedis();
 
   // Atomic get-and-delete to prevent token reuse via concurrent requests

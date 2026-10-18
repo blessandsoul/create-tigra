@@ -58,6 +58,16 @@ export class ConflictError extends AppError {
   }
 }
 
+/**
+ * 503: a feature that depends on something temporarily down (e.g. Redis for
+ * password-reset and verification tokens). The request was fine; retry later.
+ */
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service temporarily unavailable', code = 'SERVICE_UNAVAILABLE') {
+    super(code, message, 503);
+  }
+}
+
 export class InternalError extends AppError {
   constructor(message = 'Internal server error', code = 'INTERNAL_ERROR') {
     super(code, message, 500);

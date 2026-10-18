@@ -119,7 +119,7 @@ Example: `RATE_LIMIT_OVERRIDES=AUTH_LOGIN=200/15m,DEFAULT=300/1m,EMAIL_PER_ADDRE
 The app keeps serving, but while Redis is unreachable:
 - rate limits, the email cap and the login lockout are off;
 - IP blocks are not enforced;
-- forgot-password and send-verification answer 500, because their tokens are stored in Redis.
+- forgot-password, reset-password, send-verification and verify-account answer `503 SERVICE_UNAVAILABLE` ("Password reset is temporarily unavailable. Please try again in a few minutes."). Their tokens live in Redis, so they cannot work. The check runs before any account lookup, so the answer is the same for every address and reveals nothing (`src/libs/redis-required.ts`).
 
 `/api/v1/health` reports `degraded`. Everything returns on its own when Redis is back; permanent blocks are re-loaded from the database on reconnect.
 
