@@ -37,6 +37,7 @@ npx create-tigra my-app
 | Logging | Pino with pretty dev output |
 | Testing | Vitest with 80% coverage thresholds |
 | Dev tools | Docker Compose (MySQL, phpMyAdmin, Redis, Redis Commander) |
+| Production images | Node 22 Alpine Dockerfiles (server and client) with sharp built on a pinned libvips, so they run on any x86-64 CPU, including VPSes without x86-64-v2, plus curl for Coolify's health check |
 
 ### Codex Development
 

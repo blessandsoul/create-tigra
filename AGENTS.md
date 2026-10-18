@@ -22,7 +22,7 @@ Every implementation change MUST include a human-readability pass. Add or update
 
 ## Deployment and security boundaries
 
-- `template/client/Dockerfile` and `template/server/Dockerfile` are production contracts for Docker/Coolify. Preserve the client standalone output, the server migrate-on-boot command, non-root runtimes, writable upload ownership, and health checks.
+- `template/client/Dockerfile` and `template/server/Dockerfile` are production contracts for Docker/Coolify. Preserve the client standalone output, the server migrate-on-boot command, non-root runtimes, writable upload ownership, health checks on 127.0.0.1 with curl in the runtime image, and the CPU-safe sharp build (pinned libvips stage, byte-identical in both Dockerfiles).
 - `template/server/docker-compose.yml` is local development infrastructure only. Keep published services loopback-bound and admin tools behind the `tools` profile.
 - Never commit real secrets or place secrets in `NEXT_PUBLIC_*`; public client variables are build-time Docker arguments.
 - Keep authentication tokens in server-issued httpOnly cookies. Enforce authorization, Zod validation, origin/CORS checks, and safe error responses on the server even when the client also validates.
