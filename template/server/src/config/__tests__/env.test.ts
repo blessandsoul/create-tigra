@@ -9,7 +9,7 @@
  * it would fill in the ones a case deliberately leaves out).
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -18,6 +18,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const tsxCli = path.join(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 const envModuleUrl = pathToFileURL(path.join(serverRoot, 'src', 'config', 'env.ts')).href;
+
+/** The email-verification module adds this file (and turns verification on by default). */
+const EMAIL_MODULE_INSTALLED = existsSync(path.join(serverRoot, 'src', 'modules', 'auth', 'verification.service.ts'));
 
 const workDir = mkdtempSync(path.join(tmpdir(), 'env-validation-'));
 const probe = path.join(workDir, 'probe.mts');
@@ -99,9 +102,15 @@ describe('env validation at boot', { timeout: 60_000 }, () => {
     expect(parsed({ ...BASE, NODE_ENV: 'development', RATE_LIMIT_ENABLED: 'TRUE' }).RATE_LIMIT_ENABLED).toBe(true);
     expect(parsed({ ...BASE, NODE_ENV: 'development', RATE_LIMIT_ENABLED: ' False ' }).RATE_LIMIT_ENABLED).toBe(false);
     expect(parsed({ ...BASE, NODE_ENV: 'development' }).RATE_LIMIT_ENABLED).toBe(true);
-    // Verification defaults to OFF in the template (no verify route without the
-    // email module), so no Resend key is needed when it is left unset.
-    expect(parsed({ ...REQUIRED, NODE_ENV: 'development' }).REQUIRE_USER_VERIFICATION).toBe(false);
+    // Verification defaults to OFF without the email module (no verify route),
+    // and ON once the module is installed (its patcher flips the default; a
+    // Resend key is then required).
+    const unset = parsed({
+      ...REQUIRED,
+      NODE_ENV: 'development',
+      ...(EMAIL_MODULE_INSTALLED ? { RESEND_API_KEY: 're_test' } : {}),
+    });
+    expect(unset.REQUIRE_USER_VERIFICATION).toBe(EMAIL_MODULE_INSTALLED);
   });
 
   it('refuses verification switched on without a Resend key', () => {
