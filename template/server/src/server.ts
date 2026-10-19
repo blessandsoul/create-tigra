@@ -8,42 +8,37 @@ import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { testDatabaseConnection, disconnectPrisma } from '@libs/prisma.js';
 import { connectRedis, disconnectRedis } from '@libs/redis.js';
+import { createShutdown } from '@libs/shutdown.js';
 import { buildApp } from './app.js';
 
 async function start(): Promise<void> {
   let app: Awaited<ReturnType<typeof buildApp>> | null = null;
-  let isShuttingDown = false;
 
-  // Graceful shutdown
-  const shutdown = async (signal: string): Promise<void> => {
-    if (isShuttingDown) return; // Prevent multiple shutdown attempts
-    isShuttingDown = true;
-
-    logger.info(`[SERVER] Received ${signal} - shutting down gracefully`);
-    try {
+  // One shutdown for every way the process ends: exit 0 after a signal, 1 after
+  // a crash or a failed start, 1 if closing takes longer than 8 s (see libs/shutdown.ts).
+  const shutdown = createShutdown({
+    close: async () => {
       if (app) {
         await app.close();
       }
       await disconnectRedis();
       await disconnectPrisma();
-      logger.info('[SERVER] Shutdown complete');
-      process.exit(0);
-    } catch (error) {
-      logger.error(error, '[SERVER] Error during shutdown');
-      process.exit(1);
-    }
-  };
+    },
+    exit: (code) => process.exit(code),
+    logger,
+  });
 
   // Register signal handlers early
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('uncaughtException', (error) => {
-    logger.fatal(error, '[SERVER] Uncaught exception');
-    shutdown('uncaughtException');
+    logger.fatal({ err: error }, '[SERVER] Uncaught exception');
+    void shutdown('uncaughtException');
   });
   process.on('unhandledRejection', (reason) => {
-    logger.fatal(reason, '[SERVER] Unhandled rejection');
-    shutdown('unhandledRejection');
+    // { err } even for a non-Error reason: pino would read a bare string as the message.
+    logger.fatal({ err: reason }, '[SERVER] Unhandled rejection');
+    void shutdown('unhandledRejection');
   });
 
   try {
@@ -56,7 +51,7 @@ async function start(): Promise<void> {
     await app.listen({ port: env.PORT, host: env.HOST });
     logger.info(`[SERVER] Started on http://${env.HOST}:${env.PORT} [${env.NODE_ENV}]`);
   } catch (error) {
-    logger.fatal(error, '[SERVER] Failed to start');
+    logger.fatal({ err: error }, '[SERVER] Failed to start');
     await shutdown('startup-error');
   }
 }
