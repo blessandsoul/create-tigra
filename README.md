@@ -28,7 +28,7 @@ npx create-tigra my-app
 | Feature | Technology |
 |---|---|
 | Framework | Fastify 5 with TypeScript (strict) |
-| Database | MySQL 8.0 + Prisma 6 ORM |
+| Database | MySQL 8.4 + Prisma 6 ORM |
 | Cache | Redis 7 (ioredis) |
 | Auth | JWT (httpOnly cookies), session management |
 | Validation | Zod schemas on all inputs |

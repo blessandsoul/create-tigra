@@ -76,7 +76,7 @@ type GlobalWithContainers = typeof globalThis & {
 const g = globalThis as GlobalWithContainers;
 
 async function bootContainers(): Promise<IntegrationContainers> {
-  const mysql = await new MySqlContainer('mysql:8.0')
+  const mysql = await new MySqlContainer('mysql:8.4')
     .withDatabase('test_db')
     .withUsername('test')
     .withUserPassword('test')

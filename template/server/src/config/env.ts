@@ -50,7 +50,7 @@ const envSchema = z.object({
   REQUEST_TIMEOUT_MS: optionalEnv(z.coerce.number().int().min(1).default(30000)),
   CONNECTION_TIMEOUT_MS: optionalEnv(z.coerce.number().int().min(1).default(60000)),
 
-  // --- Database (MySQL 8.0+) ---
+  // --- Database (MySQL 8.4 LTS; 8.0+ works) ---
   // The connection pool is sized INSIDE this URL (`?connection_limit=20&pool_timeout=10`); Prisma
   // reads no separate pool variables. Without connection_limit Prisma uses CPU cores x 2 + 1.
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),

@@ -14,7 +14,9 @@ name: {{PROJECT_NAME}}
 
 services:
   mysql:
-    image: mysql:8.0
+    # 8.4 is MySQL's long-term release (8.0 reached end of life in April 2026);
+    # keep it on the version production runs, so local behaves the same.
+    image: mysql:8.4
     container_name: {{PROJECT_NAME}}-mysql
     restart: unless-stopped
     # Local-dev resource bounds. mem_limit is a cgroup ceiling (a runaway container is
