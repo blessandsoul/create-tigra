@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { prisma } from '@libs/prisma.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
-import { purgeDeletedAccounts } from '../cleanup-deleted-accounts.job.js';
+import type { FastifyInstance } from 'fastify';
+import { logger } from '@libs/logger.js';
+import { purgeDeletedAccounts, startCleanupDeletedAccountsJob } from '../cleanup-deleted-accounts.job.js';
 
 // The purge must complete for every account past retention: one failing
 // account is logged and skipped, never blocks the rest. Files go first and the
@@ -69,4 +71,30 @@ describe('purgeDeletedAccounts', () => {
     expect(prisma.user.delete).toHaveBeenCalledTimes(1);
     expect(prisma.user.delete).not.toHaveBeenCalledWith({ where: { id: 'a' } });
   });
+
+  it('logs one line per run even when nothing was due (so the log shows it runs)', async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+    await purgeDeletedAccounts();
+    expect(logger.info).toHaveBeenCalledWith(
+      { purgedCount: 0, failedCount: 0, totalFound: 0 },
+      'Deleted accounts purge complete',
+    );
+  });
 });
+
+describe('startCleanupDeletedAccountsJob', () => {
+  it('runs about a minute after start, not a day later (a daily deploy used to postpone it forever)', async () => {
+    vi.useFakeTimers();
+    vi.clearAllMocks(); // this describe has no beforeEach of its own
+    try {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+      const app = { addHook: vi.fn() } as unknown as FastifyInstance;
+      startCleanupDeletedAccountsJob(app);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+

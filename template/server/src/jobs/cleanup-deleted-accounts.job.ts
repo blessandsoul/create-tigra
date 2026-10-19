@@ -12,16 +12,20 @@
  * included. (The public avatar is normally gone already: deleting the account
  * removes it at once, see usersService.deleteAccount.)
  *
- * Runs once daily. `purgeDeletedAccounts()` is exported so it can also be run
- * on demand (tests, an operator script) without waiting for the interval.
+ * Runs about a minute after start, then once a day (jobs/schedule.ts): a
+ * deploy or restart never pushes the purge back by another day.
+ * `purgeDeletedAccounts()` is exported so it can also be run on demand (tests,
+ * an operator script) without waiting for the schedule.
  */
 
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '@libs/prisma.js';
 import { logger } from '@libs/logger.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
+import { startRecurringJob } from './schedule.js';
 
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const FIRST_RUN_DELAY_MS = 60 * 1000;
 /** Days a soft-deleted account is kept (restorable by an admin) before the purge. */
 export const RETENTION_DAYS = 30;
 
@@ -56,11 +60,6 @@ export async function purgeDeletedAccounts(now: Date = new Date()): Promise<Purg
   });
 
   const result: PurgeResult = { found: usersToDelete.length, purged: 0, failed: 0 };
-  if (usersToDelete.length === 0) {
-    return result;
-  }
-
-  logger.info({ count: usersToDelete.length }, 'Starting purge of soft-deleted accounts');
 
   for (const user of usersToDelete) {
     try {
@@ -81,6 +80,8 @@ export async function purgeDeletedAccounts(now: Date = new Date()): Promise<Purg
     }
   }
 
+  // One line per run, also when nothing was due: the log then shows the purge
+  // really runs (it used to say nothing unless it found an account).
   logger.info(
     { purgedCount: result.purged, failedCount: result.failed, totalFound: result.found },
     'Deleted accounts purge complete',
@@ -89,15 +90,10 @@ export async function purgeDeletedAccounts(now: Date = new Date()): Promise<Purg
 }
 
 export function startCleanupDeletedAccountsJob(app: FastifyInstance): void {
-  const intervalId = setInterval(async () => {
-    try {
-      await purgeDeletedAccounts();
-    } catch (error) {
-      logger.error({ err: error }, 'Failed to run deleted accounts cleanup');
-    }
-  }, INTERVAL_MS);
-
-  app.addHook('onClose', async () => {
-    clearInterval(intervalId);
+  startRecurringJob(app, {
+    name: 'purge-deleted-accounts',
+    intervalMs: INTERVAL_MS,
+    firstRunDelayMs: FIRST_RUN_DELAY_MS,
+    run: () => purgeDeletedAccounts(),
   });
 }
