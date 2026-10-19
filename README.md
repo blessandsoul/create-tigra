@@ -58,9 +58,10 @@ cd my-app/server
 docker compose up -d
 
 # 2. Install server dependencies & set up database
-#    (npm ci installs the shipped package-lock.json exactly, without rewriting it)
+#    (npm ci installs the shipped package-lock.json exactly, without rewriting it;
+#    the CLI already wrote server/.env and client/.env with fresh secrets, so do
+#    not copy .env.example over them: the server refuses its placeholder secret)
 npm ci
-cp .env.example .env
 npm run prisma:generate
 npm run prisma:migrate:dev -- --name init
 
@@ -70,14 +71,12 @@ npm run dev
 # 4. In a new terminal, set up the client
 cd my-app/client
 npm ci
-cp .env.example .env
 npm run dev
 ```
 
 - Server: http://localhost:8000
 - Client: http://localhost:3000
-- phpMyAdmin: http://localhost:8080 (optional — see below)
-- Redis Commander: http://localhost:8081 (optional — see below)
+- phpMyAdmin and Redis Commander (optional, see below): each project gets its own ports, so several projects can run side by side. The CLI prints them when it finishes; they are also in `server/docker-compose.yml`.
 
 The admin UIs (phpMyAdmin, Redis Commander) are behind the docker-compose `tools` profile and do **not** start with plain `docker compose up -d`. Start them with:
 

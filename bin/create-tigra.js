@@ -87,6 +87,37 @@ function validateProjectName(name) {
   return true;
 }
 
+// The generated apps need newer tools than this CLI itself (which runs on Node
+// 22.12+): Node 24+ (their package.json engines and Docker images) and npm
+// 11.19+ (the npm in those images; an older npm writes lockfiles that the
+// image's `npm ci` rejects at deploy time). Warn, never stop: the project is
+// still created, and the tools can be updated before the first `npm ci`.
+const APP_MIN_NODE_MAJOR = 24;
+const APP_MIN_NPM = { major: 11, minor: 19 };
+
+function appRuntimeWarnings() {
+  const warnings = [];
+  const nodeMajor = Number(process.versions.node.split('.')[0]);
+  if (nodeMajor < APP_MIN_NODE_MAJOR) {
+    warnings.push(`Node ${process.versions.node} found: the new project needs Node ${APP_MIN_NODE_MAJOR} or newer.`);
+  }
+  // npm names itself in npm_config_user_agent ("npm/11.6.1 node/v24.11.0 ...")
+  // when it launches this CLI (npx, npm create, npm run). Launched any other
+  // way, npm is not checked rather than spawning it.
+  const npm = /\bnpm\/(\d+)\.(\d+)\./.exec(process.env.npm_config_user_agent ?? '');
+  if (npm) {
+    const major = Number(npm[1]);
+    const minor = Number(npm[2]);
+    if (major < APP_MIN_NPM.major || (major === APP_MIN_NPM.major && minor < APP_MIN_NPM.minor)) {
+      warnings.push(
+        `npm ${major}.${minor} found: use npm ${APP_MIN_NPM.major}.${APP_MIN_NPM.minor} or newer ` +
+          `(npm install -g npm@${APP_MIN_NPM.major}), or the Docker build rejects your lockfiles.`,
+      );
+    }
+  }
+  return warnings;
+}
+
 function shouldSkip(filePath) {
   const parts = filePath.split(path.sep);
   return parts.some((part) =>
@@ -293,6 +324,11 @@ async function main() {
       console.log();
       console.log(chalk.bold('  Create Tigra') + chalk.dim(` v${VERSION}`));
       console.log();
+      const runtimeWarnings = appRuntimeWarnings();
+      for (const warning of runtimeWarnings) {
+        console.log(chalk.yellow(`  ! ${warning}`));
+      }
+      if (runtimeWarnings.length > 0) console.log();
 
       let projectName = projectNameArg;
 
