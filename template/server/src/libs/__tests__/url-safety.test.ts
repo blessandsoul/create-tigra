@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redactUrl, isPrivateOrReservedIp } from '../url-safety.js';
+import { redactUrl, isPrivateOrReservedIp, isForbiddenOutboundIp } from '../url-safety.js';
 
 describe('redactUrl', () => {
   it('redacts a Telegram bot token in the API path', () => {
@@ -78,3 +78,48 @@ describe('isPrivateOrReservedIp', () => {
     expect(isPrivateOrReservedIp('')).toBe(true);
   });
 });
+
+describe('isPrivateOrReservedIp — every spelling of an internal address', () => {
+  it.each([
+    ['::ffff:7f00:1', '127.0.0.1 as hex IPv4-mapped'],
+    ['::ffff:a00:5', '10.0.0.5 as hex IPv4-mapped'],
+    ['[::1]', 'bracketed IPv6 (URL form)'],
+    ['FE80::1%ETH0', 'link-local with a zone id'],
+  ])('blocks %s (%s)', (addr) => {
+    expect(isPrivateOrReservedIp(addr)).toBe(true);
+  });
+
+  it.each(['203.0.113.7', '198.51.100.9', '2001:db8::1', '224.0.0.1'])(
+    'does not call the documentation/multicast address %s internal (IP blocks may target it)',
+    (addr) => {
+      expect(isPrivateOrReservedIp(addr)).toBe(false);
+    },
+  );
+});
+
+describe('isForbiddenOutboundIp — only public unicast is a valid destination', () => {
+  it.each([
+    '127.0.0.1', '10.0.0.5', '169.254.169.254', '::1', '::ffff:7f00:1', '::ffff:a00:5',
+    '64:ff9b::a00:5', // NAT64 to 10.0.0.5
+    '2002:a00:5::1', // 6to4 embedding 10.0.0.5
+    '224.0.0.1', '240.0.0.1', '255.255.255.255', '198.18.0.1', '192.0.0.1',
+    '192.0.2.1', '198.51.100.1', '203.0.113.1', '2001:db8::1',
+    'ff02::1', 'fec0::1', '100::1', '2001::1',
+  ])('forbids %s', (addr) => {
+    expect(isForbiddenOutboundIp(addr)).toBe(true);
+  });
+
+  it.each(['93.184.216.34', '8.8.8.8', '1.1.1.1', '2606:4700:4700::1111', '::ffff:93.184.216.34'])(
+    'allows the public address %s',
+    (addr) => {
+      expect(isForbiddenOutboundIp(addr)).toBe(false);
+    },
+  );
+
+  it('fails closed on anything that is not an IP', () => {
+    for (const addr of ['', 'not-an-ip', '999.999.999.999', 'example.com']) {
+      expect(isForbiddenOutboundIp(addr)).toBe(true);
+    }
+  });
+});
+
