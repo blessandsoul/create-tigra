@@ -125,7 +125,7 @@ jobs:
         # with a publicly known signing key if someone copied the file as-is.
         run: |
           file="$SMOKE_APP/server/.env.example.production"
-          for key in JWT_SECRET COOKIE_SECRET; do
+          for key in JWT_SECRET COOKIE_SECRET RESEND_API_KEY; do
             grep -Eq "^${key}=\"?CHANGE_ME" "$file" \
               || { echo "::error::$key in server/.env.example.production must be CHANGE_ME example text"; exit 1; }
           done

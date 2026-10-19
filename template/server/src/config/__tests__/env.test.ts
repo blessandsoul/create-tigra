@@ -150,6 +150,39 @@ describe('env validation at boot', { timeout: 60_000 }, () => {
     it('needs no CLIENT_URL in production without a Resend key (server-only project)', () => {
       expect(parsed(WITH_REDIS).CLIENT_URL).toBe('http://localhost:3000');
     });
+
+    describe('placeholder email settings', () => {
+      const READY = { ...WITH_REDIS, CLIENT_URL: 'https://app.example.test' };
+
+      it.each(['CHANGE_ME_your_resend_api_key', 're_xxxxxxxxxxxxxxxxxxxxxxxxxxxx'])('refuses the placeholder key %s in production', (key) => {
+        const result = boot({ ...READY, RESEND_API_KEY: key, RESEND_FROM_EMAIL: 'noreply@app.example.test' });
+        expect(result.code).toBe(1);
+        expect(result.err).toContain('RESEND_API_KEY is still the placeholder');
+      });
+
+      it('refuses the placeholder sender @yourdomain.com in production', () => {
+        const result = boot({ ...READY, RESEND_API_KEY: 're_live_key', RESEND_FROM_EMAIL: 'noreply@yourdomain.com' });
+        expect(result.code).toBe(1);
+        expect(result.err).toContain('RESEND_FROM_EMAIL is still the placeholder');
+      });
+
+      it("warns (but starts) on Resend's test sender", () => {
+        const result = boot({ ...READY, RESEND_API_KEY: 're_live_key', RESEND_FROM_EMAIL: 'onboarding@resend.dev' });
+        expect(result.code, result.err).toBe(0);
+        expect(result.err).toContain("Resend's test sender");
+      });
+
+      it('starts quietly with a real key and a real sender', () => {
+        const result = boot({ ...READY, RESEND_API_KEY: 're_live_key', RESEND_FROM_EMAIL: 'noreply@app.example.test' });
+        expect(result.code, result.err).toBe(0);
+        expect(result.err).not.toContain('RESEND_');
+      });
+
+      it('lets development boot with the placeholders (no email goes out by accident there)', () => {
+        const result = boot({ ...BASE, NODE_ENV: 'development', RESEND_API_KEY: 'CHANGE_ME_your_resend_api_key', RESEND_FROM_EMAIL: 'noreply@yourdomain.com' });
+        expect(result.code, result.err).toBe(0);
+      });
+    });
   });
 
   it('reads on/off switches in any letter case, and defaults them when unset', () => {

@@ -273,6 +273,32 @@ if (parsed.data.NODE_ENV === 'production' && parsed.data.RESEND_API_KEY && !pars
   process.exit(1);
 }
 
+// Placeholder email settings in production. Copied as is from
+// .env.example.production, every send fails at Resend and is only logged: with
+// verification on, nobody could finish signing up. Refuse them like the
+// JWT_SECRET placeholder. Resend's test sender only warns (it delivers only to
+// the Resend account owner's own address, but can be a deliberate staging choice).
+if (parsed.data.NODE_ENV === 'production' && parsed.data.RESEND_API_KEY) {
+  const key = parsed.data.RESEND_API_KEY;
+  const from = parsed.data.RESEND_FROM_EMAIL.toLowerCase();
+  if (key.startsWith('CHANGE_ME') || /^re_x+$/i.test(key)) {
+    console.error('\nRESEND_API_KEY is still the placeholder: set your Resend API key (https://resend.com/api-keys).\n');
+    process.exit(1);
+  }
+  if (from.endsWith('@yourdomain.com')) {
+    console.error(
+      '\nRESEND_FROM_EMAIL is still the placeholder (…@yourdomain.com): use an address on a domain verified in Resend.\n',
+    );
+    process.exit(1);
+  }
+  if (from === 'onboarding@resend.dev') {
+    console.warn(
+      "\nWARNING: RESEND_FROM_EMAIL is Resend's test sender (onboarding@resend.dev): it delivers only to your own " +
+        "Resend account's address, so users get no email. Use an address on a domain verified in Resend.\n",
+    );
+  }
+}
+
 // Validate RESEND_API_KEY when email verification is enabled
 if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
   console.error('\nRESEND_API_KEY is required when REQUIRE_USER_VERIFICATION is enabled.\nGet your API key from: https://resend.com/api-keys\n');
