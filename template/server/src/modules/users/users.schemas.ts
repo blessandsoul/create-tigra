@@ -21,12 +21,22 @@ export const GetUserAvatarSchema = UserIdParamSchema;
 /**
  * Schema for updating user profile
  *
- * All fields optional — at least one must be provided (validated in service layer)
+ * Both fields optional, but at least one must be sent. That rule lives here,
+ * not in the service, so an empty update is wrong input like any other:
+ * 422 VALIDATION_FAILED naming both fields. trim() runs FIRST (Zod 4 runs the
+ * steps in order; a length check before it let "   " become an empty name).
  */
-export const UpdateProfileSchema = z.object({
-  firstName: z.string().min(2, 'First name must be at least 2 characters').max(100).trim().optional(),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters').max(100).trim().optional(),
-});
+export const UpdateProfileSchema = z
+  .object({
+    firstName: z.string().trim().min(2, 'First name must be at least 2 characters').max(100).optional(),
+    lastName: z.string().trim().min(2, 'Last name must be at least 2 characters').max(100).optional(),
+  })
+  .superRefine((input, ctx) => {
+    if (input.firstName !== undefined || input.lastName !== undefined) return;
+    for (const field of ['firstName', 'lastName'] as const) {
+      ctx.addIssue({ code: 'custom', path: [field], message: 'Send a first name or a last name' });
+    }
+  });
 
 /**
  * Schema for changing user password

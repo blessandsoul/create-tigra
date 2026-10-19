@@ -9,8 +9,10 @@ export const registerSchema = z.object({
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
-  firstName: z.string().min(2, 'First name must be at least 2 characters').max(100).trim(),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters').max(100).trim(),
+  // trim() FIRST: Zod 4 runs the steps in order, so a length check before the
+  // trim let "   " through and saved it as an empty name.
+  firstName: z.string().trim().min(2, 'First name must be at least 2 characters').max(100),
+  lastName: z.string().trim().min(2, 'Last name must be at least 2 characters').max(100),
 });
 
 export const loginSchema = z.object({

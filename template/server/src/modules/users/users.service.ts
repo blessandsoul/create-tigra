@@ -175,13 +175,11 @@ class UsersService {
    * @param input - Fields to update (firstName, lastName)
    * @returns Updated user
    * @throws NotFoundError if user not found
-   * @throws BadRequestError if no fields provided
+   *
+   * UpdateProfileSchema already guarantees at least one (trimmed, 2-100 char) field.
    */
   async updateProfile(userId: string, input: UpdateProfileInput): Promise<SafeUser> {
     const { firstName, lastName } = input;
-    if (!firstName && !lastName) {
-      throw new BadRequestError('At least one field must be provided', 'INVALID_INPUT');
-    }
 
     const user = await usersRepository.getUserById(userId);
     if (!user) {
@@ -195,8 +193,8 @@ class UsersService {
     });
 
     const updateData: { firstName?: string; lastName?: string } = {};
-    if (firstName) updateData.firstName = firstName;
-    if (lastName) updateData.lastName = lastName;
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
 
     const updatedUser = await usersRepository.updateUserProfile(userId, updateData);
 
