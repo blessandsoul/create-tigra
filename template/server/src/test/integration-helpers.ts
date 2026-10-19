@@ -23,8 +23,16 @@ export function uniqueEmail(tag: string): string {
   return `it-${Date.now().toString(36)}-${process.pid}-${sequence}-${tag}@example.test`;
 }
 
-/** The real app, ready for app.inject(). Close it in afterAll. */
+/**
+ * The real app, ready for app.inject(). Close it in afterAll.
+ *
+ * Starts like server.ts: Redis is connected first (non-fatal, as in
+ * production), so a file's very first request does not find Redis still
+ * connecting, which the Redis-dependent routes answer with 503.
+ */
 export async function buildTestApp(): Promise<FastifyInstance> {
+  const { connectRedis } = await import('@/libs/redis.js');
+  await connectRedis();
   const { buildApp } = await import('@/app.js');
   const app = await buildApp();
   await app.ready();
