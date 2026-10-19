@@ -9,6 +9,7 @@
  */
 
 import type { MultipartFile } from '@fastify/multipart';
+import { AppError } from '@shared/errors/AppError.js';
 import { ValidationError } from '@shared/errors/errors.js';
 import { env } from '@config/env.js';
 
@@ -60,10 +61,23 @@ export function validateImageFile(file: MultipartFile | undefined): void {
 /**
  * Validates file buffer size
  *
+ * `truncated` is the multipart file's own flag (`file.file.truncated`), and it
+ * must be passed. @fastify/multipart cuts a file at MAX_FILE_SIZE, but its
+ * toBuffer() only throws (413 FILE_TOO_LARGE) when it notices the cut while
+ * still reading. When the cut lands after the last chunk, it returns the first
+ * MAX_FILE_SIZE bytes as if the file were complete. Proven live: an 11 MB file
+ * got through cut in 3 of 5 tries, and a cut 10.7 MB JPEG then failed as a 500.
+ *
  * @param buffer - File buffer
- * @throws ValidationError if buffer exceeds max size
+ * @param truncated - Whether the parser cut the file at the size limit
+ * @throws AppError 413 FILE_TOO_LARGE if the file was cut at the limit
+ * @throws ValidationError if the buffer is empty or exceeds max size
  */
-export function validateFileSize(buffer: Buffer): void {
+export function validateFileSize(buffer: Buffer, truncated: boolean): void {
+  if (truncated) {
+    throw new AppError('FILE_TOO_LARGE', 'File size exceeds the maximum allowed limit', 413);
+  }
+
   if (buffer.length === 0) {
     throw new ValidationError('Uploaded file is empty', 'FILE_EMPTY');
   }

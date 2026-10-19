@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { crc32, deflateSync } from 'node:zlib';
 import sharp from 'sharp';
 import { imageOptimizerService, MAX_INPUT_PIXELS } from '../image-optimizer.service.js';
-import { validateImageFile } from '../file-validator.js';
+import { validateFileSize, validateImageFile } from '../file-validator.js';
 import { TINY_HEIC_BASE64 } from './fixtures/tiny-heic.js';
 import type { MultipartFile } from '@fastify/multipart';
 
@@ -125,5 +125,19 @@ describe('validateImageFile', () => {
 
   it('refuses an upload without a file', () => {
     expect(() => validateImageFile(undefined)).toThrow(expect.objectContaining({ code: 'FILE_REQUIRED' }));
+  });
+});
+
+describe('validateFileSize', () => {
+  it('refuses a file the parser cut at the size limit with 413 FILE_TOO_LARGE, whatever its length', () => {
+    // The cut file is exactly MAX_FILE_SIZE bytes, so a length check alone lets it through.
+    expect(() => validateFileSize(Buffer.alloc(16), true)).toThrow(
+      expect.objectContaining({ statusCode: 413, code: 'FILE_TOO_LARGE' }),
+    );
+  });
+
+  it('accepts a complete file and refuses an empty one', () => {
+    expect(() => validateFileSize(Buffer.alloc(16), false)).not.toThrow();
+    expect(() => validateFileSize(Buffer.alloc(0), false)).toThrow(expect.objectContaining({ code: 'FILE_EMPTY' }));
   });
 });

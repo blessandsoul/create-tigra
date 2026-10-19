@@ -46,8 +46,8 @@ class UsersController {
     // Read file buffer
     const buffer = await data.toBuffer();
 
-    // Validate file size
-    validateFileSize(buffer);
+    // Validate file size, including a file the parser silently cut at the limit
+    validateFileSize(buffer, data.file.truncated);
 
     // Get target user ID (set by resolveMe or resolveTargetUser middleware)
     const userId = request.targetUserId!;
