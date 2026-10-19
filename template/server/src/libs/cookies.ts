@@ -1,8 +1,36 @@
 import type { FastifyReply } from 'fastify';
 import { env } from '@config/env.js';
 import { parseDurationMs } from '@libs/duration.js';
+import { logger } from '@libs/logger.js';
 
 const isProduction = env.NODE_ENV === 'production';
+
+/**
+ * Production cookies are Secure, and browsers drop Secure cookies that arrive
+ * over plain http: a login "works" and the user is still signed out. env.ts
+ * warns at boot about an http CORS_ORIGIN; this catches the API itself being
+ * reached over http (request.protocol follows X-Forwarded-Proto from our own
+ * proxy, see trustProxy in app.ts). Logged once per process. localhost is
+ * exempt: browsers accept Secure cookies there.
+ */
+let warnedPlainHttp = false;
+
+function warnIfPlainHttp(reply: FastifyReply): void {
+  if (!isProduction || warnedPlainHttp) return;
+  const request = (reply as { request?: { protocol?: string; hostname?: string } }).request;
+  if (request?.protocol !== 'http') return;
+  if (['localhost', '127.0.0.1', '[::1]'].includes(request.hostname ?? '')) return;
+  warnedPlainHttp = true;
+  logger.warn(
+    '[COOKIES] Login cookies are Secure but this API was reached over plain http: browsers drop them, ' +
+      'so users cannot stay signed in. Serve the API over https.',
+  );
+}
+
+/** Test hook: let the next plain-http login warn again. */
+export function resetPlainHttpWarningForTests(): void {
+  warnedPlainHttp = false;
+}
 
 /**
  * SameSite per cookie. Sibling subdomains (app.example.com + api.example.com)
@@ -57,6 +85,7 @@ export function setAuthCookies(
   accessToken: string,
   refreshToken: string,
 ): void {
+  warnIfPlainHttp(reply);
   expireLegacyDomainTokenCookies(reply);
 
   reply.setCookie('access_token', accessToken, {

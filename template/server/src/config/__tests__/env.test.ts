@@ -115,6 +115,24 @@ describe('env validation at boot', { timeout: 60_000 }, () => {
     });
   });
 
+  describe('plain http in production', () => {
+    const WITH_REDIS = { ...PRODUCTION, REDIS_URL: 'redis://cache.internal:6379' };
+
+    it('warns (but starts) when CORS_ORIGIN uses http:// in production', () => {
+      const result = boot({ ...WITH_REDIS, CORS_ORIGIN: 'http://app.example.test' });
+      expect(result.code, result.err).toBe(0);
+      expect(result.err).toContain('CORS_ORIGIN uses http:// in production');
+    });
+
+    it('stays quiet for https and for a local http origin', () => {
+      for (const origin of ['https://app.example.test', 'http://localhost:3000']) {
+        const result = boot({ ...WITH_REDIS, CORS_ORIGIN: origin });
+        expect(result.code, origin).toBe(0);
+        expect(result.err, origin).not.toContain('uses http://');
+      }
+    });
+  });
+
   describe('CLIENT_URL (email links)', () => {
     const WITH_REDIS = { ...PRODUCTION, REDIS_URL: 'redis://cache.internal:6379' };
 

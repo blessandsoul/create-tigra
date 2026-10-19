@@ -235,6 +235,22 @@ if (parsed.data.NODE_ENV === 'production' && corsOrigins.length === 0) {
   process.exit(1);
 }
 
+// A production client on plain http cannot keep a login: the auth cookies are
+// Secure in production and browsers drop Secure cookies over http (localhost
+// is the exception, so a local production test still works). Coolify's
+// default sslip.io addresses are http, so say it at boot instead of leaving
+// "login works but I stay logged out". A warning, not an exit: some internal
+// setups run on http knowingly. src/libs/cookies.ts warns at runtime too when
+// the API itself is reached over http.
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const plainHttpOrigins = corsOrigins.filter((o) => o.startsWith('http://') && !LOCAL_HOSTS.has(new URL(o).hostname));
+if (parsed.data.NODE_ENV === 'production' && plainHttpOrigins.length > 0) {
+  console.warn(
+    `\nWARNING: CORS_ORIGIN uses http:// in production (${plainHttpOrigins.join(', ')}): browsers drop the Secure ` +
+      'login cookies over http, so users cannot stay signed in. Serve the client and API over https.\n',
+  );
+}
+
 // Require REDIS_URL in production. Redis-backed protections fail OPEN by design
 // (a Redis outage must not take the API down), so a missing URL would not
 // crash anything: inside a container the localhost default reaches nothing,

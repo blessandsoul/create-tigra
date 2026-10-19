@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { FastifyReply } from 'fastify';
-import { setAuthCookies, clearAuthCookies } from '../cookies.js';
+import { setAuthCookies, clearAuthCookies, resetPlainHttpWarningForTests } from '../cookies.js';
+import { logger } from '@libs/logger.js';
 
 // Production cross-subdomain setup: only the non-secret auth_session indicator
 // may use COOKIE_DOMAIN; the bearer token cookies must stay host-only.
@@ -13,6 +14,8 @@ vi.mock('@config/env.js', () => ({
     JWT_REFRESH_EXPIRY: '7d',
   },
 }));
+
+vi.mock('@libs/logger.js', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
 type CookieOpts = { domain?: string; path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: string };
 
@@ -80,5 +83,31 @@ describe('clearAuthCookies', () => {
     const tokenClears = cleared.filter(([name]) => name === 'access_token');
     expect(tokenClears.map(([, o]) => o.domain).sort()).toEqual(['.example.test', undefined].sort());
     expect(cleared).toContainEqual(['auth_session', expect.objectContaining({ domain: '.example.test' })]);
+  });
+});
+
+describe('plain-http warning (production cookies are Secure)', () => {
+  function replyOver(protocol: string, hostname = 'api.example.test'): FastifyReply {
+    const { reply } = fakeReply();
+    (reply as unknown as { request: unknown }).request = { protocol, hostname };
+    return reply;
+  }
+
+  it('warns once when the API is reached over http', () => {
+    resetPlainHttpWarningForTests();
+    vi.mocked(logger.warn).mockClear();
+    setAuthCookies(replyOver('http'), 'a', 'r');
+    setAuthCookies(replyOver('http'), 'a', 'r');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logger.warn).mock.calls[0]?.[0]).toContain('plain http');
+  });
+
+  it('stays quiet over https, on localhost, and when the request is unknown', () => {
+    resetPlainHttpWarningForTests();
+    vi.mocked(logger.warn).mockClear();
+    setAuthCookies(replyOver('https'), 'a', 'r');
+    setAuthCookies(replyOver('http', 'localhost'), 'a', 'r');
+    setAuthCookies(fakeReply().reply, 'a', 'r');
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
