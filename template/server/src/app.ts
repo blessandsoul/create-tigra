@@ -15,6 +15,7 @@ import { usersRoutes } from '@modules/users/users.routes.js';
 import { adminRoutes } from '@modules/admin/admin.routes.js';
 import { filesRoutes } from '@modules/files/files.routes.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
+import { MULTIPART_LIMITS } from '@libs/storage/file-validator.js';
 import { registerJobs } from '@jobs/index.js';
 import { RATE_LIMIT_ENABLED } from '@config/rate-limit.config.js';
 import { getIpBlock, syncBlockedIpsToRedis } from '@libs/ip-block.js';
@@ -103,11 +104,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   // No-op in production. Registered early so its onRequest store is entered before any query runs.
   registerQueryCounter(app);
 
-  // File upload handling (multipart/form-data)
+  // File upload handling (multipart/form-data). The field and part caps keep
+  // one request from making the server buffer ~1 GB of form fields before the
+  // file (see MULTIPART_LIMITS in libs/storage/file-validator.ts).
   await app.register(multipart, {
     limits: {
       fileSize: env.MAX_FILE_SIZE_MB * 1024 * 1024, // ENV-configurable (default 10MB)
       files: 1, // Only one file per request
+      ...MULTIPART_LIMITS,
     },
   });
 

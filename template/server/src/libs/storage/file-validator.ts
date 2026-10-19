@@ -20,6 +20,25 @@ export const FILE_UPLOAD_CONSTANTS = {
 } as const;
 
 /**
+ * Limits for the non-file parts of a multipart upload (passed to
+ * @fastify/multipart in app.ts, next to the file size and count).
+ *
+ * Form fields that arrive BEFORE the file are kept in memory while the parser
+ * looks for the file. The library defaults (1 MB per field, 1,000 parts) let one
+ * request make the server hold about 1 GB, and any signed-in user (registration
+ * is free) can send that to the avatar upload. Proven live: 300 fields of 1 MB
+ * grew the server by 429 MB. These caps bound it to about 2 MB:
+ * - more fields or parts than allowed: 413 MULTIPART_LIMIT (libs/error-handler.ts);
+ * - a field longer than fieldSize is truncated, never buffered whole.
+ * Raise them only for a route that really sends many or large fields.
+ */
+export const MULTIPART_LIMITS = {
+  fields: 20,
+  fieldSize: 100 * 1024, // bytes per field
+  parts: 25, // fields + files, a backstop behind the two limits above
+} as const;
+
+/**
  * Validates an uploaded image file
  *
  * Checks:
