@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getRedis } from '@libs/redis.js';
 import { prisma } from '@libs/prisma.js';
-import { blockIp, getIpBlock, recordRateLimitViolation, unblockIp } from '../ip-block.js';
+import { blockIp, getIpBlock, pruneExpiredAutoBlocks, recordRateLimitViolation, unblockIp } from '../ip-block.js';
 
 // Self-contained env so ip-block.ts can read its threshold constants at import
 // time without loading/validating the real environment.
@@ -40,6 +40,7 @@ const redisMock = {
   zrem: vi.fn(),
   sadd: vi.fn(),
   srem: vi.fn(),
+  zremrangebyscore: vi.fn(),
 };
 
 describe('recordRateLimitViolation — infra-IP guard', () => {
@@ -157,3 +158,22 @@ describe('blockIp / unblockIp — one spelling, no self-lockout', () => {
     expect(redisMock.zrem).toHaveBeenCalledWith('auto_blocked_ips', '2001:db8::1');
   });
 });
+
+describe('pruneExpiredAutoBlocks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getRedis).mockReturnValue(redisMock as never);
+  });
+
+  it('removes every automatic block whose end time has passed, and says how many', async () => {
+    redisMock.zremrangebyscore.mockResolvedValue(3);
+    await expect(pruneExpiredAutoBlocks(1_700_000_000)).resolves.toBe(3);
+    expect(redisMock.zremrangebyscore).toHaveBeenCalledWith('auto_blocked_ips', '-inf', 1_700_000_000);
+  });
+
+  it('does nothing and reports 0 when Redis is down (fail-open)', async () => {
+    redisMock.zremrangebyscore.mockRejectedValue(new Error('ECONNREFUSED'));
+    await expect(pruneExpiredAutoBlocks()).resolves.toBe(0);
+  });
+});
+

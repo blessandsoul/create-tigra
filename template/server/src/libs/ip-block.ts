@@ -192,6 +192,24 @@ export async function unblockIp(rawIp: string): Promise<void> {
 }
 
 /**
+ * Remove every automatic block whose end time has passed. getIpBlock removes
+ * an expired entry only when that same IP comes back, so IPs that never return
+ * would stay in the list forever. Called by the hourly cleanup job
+ * (jobs/cleanup-expired-auth.job.ts). Fail-open: with Redis down it does
+ * nothing and reports 0.
+ *
+ * @returns how many expired entries were removed
+ */
+export async function pruneExpiredAutoBlocks(nowSeconds: number = Date.now() / 1000): Promise<number> {
+  try {
+    return await getRedis().zremrangebyscore(AUTO_BLOCKED_KEY, '-inf', nowSeconds);
+  } catch {
+    logger.warn('[IP-BLOCK] Redis unavailable, expired automatic blocks not pruned this time');
+    return 0;
+  }
+}
+
+/**
  * List all currently blocked IPs (permanent from DB + active auto-blocks from Redis).
  */
 export async function getBlockedIps(): Promise<{
