@@ -41,8 +41,9 @@ export function redactUrl(url: string): string {
     return url;
   }
 
-  // Drop the query string (and fragment) — may hold signed tokens.
-  const noQuery = url.split(/[?#]/, 1)[0];
+  // Drop the query string (and fragment) — may hold API keys or signed tokens —
+  // and credentials in the authority (https://user:password@host/).
+  const noQuery = url.split(/[?#]/, 1)[0].replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, '$1');
 
   // Rewrite Telegram bot-token path segments. The token charset is [A-Za-z0-9_-]
   // plus the ':' separating bot-id from secret, e.g. 123456:AAH...

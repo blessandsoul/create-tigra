@@ -12,6 +12,7 @@ const captured = vi.hoisted(() => ({
   responseFulfilled: null as null | ((r: AxiosResponse) => AxiosResponse),
   responseRejected: null as null | ((e: unknown) => never),
   mockIsAxiosError: vi.fn<(e: unknown) => boolean>(),
+  createConfig: null as unknown,
 }));
 
 // ---------------------------------------------------------------------------
@@ -19,7 +20,7 @@ const captured = vi.hoisted(() => ({
 // ---------------------------------------------------------------------------
 vi.mock('axios', () => ({
   default: {
-    create: vi.fn(() => ({
+    create: vi.fn((config: unknown) => (captured.createConfig = config, {
       interceptors: {
         request: {
           use: vi.fn(
@@ -60,7 +61,7 @@ vi.mock('@libs/logger.js', () => ({
 }));
 
 // Import AFTER mocks are registered
-import { httpClient } from '../http.js';
+import { httpClient, OutboundHttpError, MAX_BODY_BYTES, OUTBOUND_BLOCKED } from '../http.js';
 import { logger } from '@libs/logger.js';
 
 // ---------------------------------------------------------------------------
@@ -426,3 +427,68 @@ describe('httpClient', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Layer 7: redaction, size caps, and one typed error for every failure
+// ---------------------------------------------------------------------------
+describe('httpClient — secrets never logged, failures typed', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('logs URLs without query strings or credentials (API keys, user:password)', () => {
+    captured.requestFulfilled!(
+      makeConfig({ method: 'get', url: 'https://api.example.com/v1/geo?key=SECRET123', baseURL: 'https://user:pw@api.example.com' }),
+    );
+    captured.responseFulfilled!(makeResponse({ config: makeConfig({ method: 'get', url: '/v1?token=SECRET123' }) }));
+    captured.mockIsAxiosError.mockReturnValue(true);
+    expect(() =>
+      captured.responseRejected!({ isAxiosError: true, config: { method: 'get', url: 'https://user:pw@x.test/a?key=SECRET123' }, message: 'boom' }),
+    ).toThrow();
+    const logged = JSON.stringify([...vi.mocked(logger.debug).mock.calls, ...vi.mocked(logger.error).mock.calls]);
+    expect(logged).not.toContain('SECRET123');
+    expect(logged).not.toContain('user:pw');
+    expect(logged).toContain('https://api.example.com/v1/geo');
+  });
+
+  it('caps request and response bodies at 10 MB', () => {
+    expect(captured.createConfig).toMatchObject({ maxContentLength: MAX_BODY_BYTES, maxBodyLength: MAX_BODY_BYTES });
+    expect(MAX_BODY_BYTES).toBe(10 * 1024 * 1024);
+  });
+
+  const reject = (error: object): OutboundHttpError => {
+    captured.mockIsAxiosError.mockReturnValue(true);
+    try {
+      captured.responseRejected!({ isAxiosError: true, message: 'x', ...error });
+    } catch (e) {
+      return e as OutboundHttpError;
+    }
+    throw new Error('expected a throw');
+  };
+
+  it.each([
+    ['an upstream HTTP error, with its status', { response: { status: 404 } }, 'http', 404],
+    ['a timeout', { code: 'ECONNABORTED', message: 'timeout of 30000ms exceeded' }, 'timeout', undefined],
+    ['a body over the cap', { code: 'ERR_BAD_RESPONSE', message: 'maxContentLength size of 10485760 exceeded' }, 'too-large', undefined],
+    ['a connection failure', { code: 'ECONNREFUSED', message: 'connect ECONNREFUSED' }, 'network', undefined],
+    ['a request our guard refused (wrapped)', { code: 'ERR_FR_REDIRECTION_FAILURE', cause: { cause: { code: OUTBOUND_BLOCKED } } }, 'blocked', undefined],
+  ])('turns %s into OutboundHttpError with that kind', (_label, error, kind, status) => {
+    const thrown = reject(error);
+    expect(thrown).toBeInstanceOf(OutboundHttpError);
+    expect(thrown).toBeInstanceOf(InternalError);
+    expect(thrown).toMatchObject({ kind, status, statusCode: 500, code: 'INTERNAL_ERROR', message: 'Outbound HTTP request failed' });
+  });
+
+  it('keeps the original error as a non-enumerable cause (never serialized with the error)', () => {
+    const thrown = reject({ response: { status: 500 } });
+    expect((thrown as { cause?: unknown }).cause).toBeDefined();
+    expect(Object.keys(thrown)).not.toContain('cause');
+  });
+
+  it("passes our own guard's OutboundHttpError through unchanged", () => {
+    const own = new OutboundHttpError('blocked');
+    captured.mockIsAxiosError.mockReturnValue(false);
+    expect(() => captured.responseRejected!(own)).toThrow(own);
+  });
+});
+

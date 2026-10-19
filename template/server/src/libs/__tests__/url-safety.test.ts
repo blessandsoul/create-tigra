@@ -24,6 +24,11 @@ describe('redactUrl', () => {
     expect(redactUrl('https://cdn.example.com/x.jpg#frag')).toBe('https://cdn.example.com/x.jpg');
   });
 
+  it('strips credentials from the authority', () => {
+    expect(redactUrl('https://user:pa55@api.example.com/v1/x')).toBe('https://api.example.com/v1/x');
+    expect(redactUrl('http://token@example.com/')).toBe('http://example.com/');
+  });
+
   it('leaves a normal URL unchanged', () => {
     expect(redactUrl('https://scontent.xx.fbcdn.net/v/photo.jpg')).toBe(
       'https://scontent.xx.fbcdn.net/v/photo.jpg',
