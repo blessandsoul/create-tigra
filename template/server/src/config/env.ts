@@ -165,7 +165,11 @@ const envSchema = z.object({
   // --- Email (Resend) ---
   RESEND_API_KEY: optionalEnv(z.string().min(1).optional()),
   RESEND_FROM_EMAIL: optionalEnv(z.string().email().default('onboarding@resend.dev')),
-  CLIENT_URL: optionalEnv(z.string().url().default('http://localhost:3000')),
+  // The client's address, used ONLY to build links inside emails (password
+  // reset, verification). Required in production when RESEND_API_KEY is set
+  // (checked below); otherwise it defaults to http://localhost:3000, so a
+  // server-only project without email needs no client address at all.
+  CLIENT_URL: optionalEnv(z.string().url().optional()),
 
   // --- Error Tracking (Optional, Sentry) ---
   // All inert without SENTRY_DSN — Sentry init becomes a no-op (see
@@ -206,6 +210,16 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.REDIS_URL) {
   process.exit(1);
 }
 
+// Require CLIENT_URL in production when emails can go out: without it every
+// reset or verification link would point at http://localhost:3000. A
+// production server without a Resend key sends no email, so it needs none.
+if (parsed.data.NODE_ENV === 'production' && parsed.data.RESEND_API_KEY && !parsed.data.CLIENT_URL) {
+  console.error(
+    '\nCLIENT_URL is required in production when RESEND_API_KEY is set: email links would point to http://localhost:3000\n',
+  );
+  process.exit(1);
+}
+
 // Validate RESEND_API_KEY when email verification is enabled
 if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
   console.error('\nRESEND_API_KEY is required when REQUIRE_USER_VERIFICATION is enabled.\nGet your API key from: https://resend.com/api-keys\n');
@@ -216,6 +230,8 @@ export const env = {
   ...parsed.data,
   // Outside production a missing REDIS_URL means the local default (checked above).
   REDIS_URL: parsed.data.REDIS_URL ?? 'redis://localhost:6379',
+  // A missing CLIENT_URL means the local client (production with email is checked above).
+  CLIENT_URL: parsed.data.CLIENT_URL ?? 'http://localhost:3000',
   // Default the Sentry environment tag to NODE_ENV when not explicitly set.
   SENTRY_ENVIRONMENT: parsed.data.SENTRY_ENVIRONMENT ?? parsed.data.NODE_ENV,
 };

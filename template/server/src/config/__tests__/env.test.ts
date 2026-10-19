@@ -25,7 +25,8 @@ writeFileSync(
   probe,
   `const { env } = await import(${JSON.stringify(envModuleUrl)});\n` +
     'console.log(JSON.stringify({ RATE_LIMIT_ENABLED: env.RATE_LIMIT_ENABLED, ' +
-    'REQUIRE_USER_VERIFICATION: env.REQUIRE_USER_VERIFICATION, REDIS_URL: env.REDIS_URL }));\n',
+    'REQUIRE_USER_VERIFICATION: env.REQUIRE_USER_VERIFICATION, REDIS_URL: env.REDIS_URL, ' +
+    'CLIENT_URL: env.CLIENT_URL }));\n',
 );
 afterAll(() => rmSync(workDir, { recursive: true, force: true }));
 
@@ -73,6 +74,25 @@ describe('env validation at boot', { timeout: 60_000 }, () => {
 
   it('defaults REDIS_URL to the local Redis outside production', () => {
     expect(parsed({ ...BASE, NODE_ENV: 'development' }).REDIS_URL).toBe('redis://localhost:6379');
+  });
+
+  describe('CLIENT_URL (email links)', () => {
+    const WITH_REDIS = { ...PRODUCTION, REDIS_URL: 'redis://cache.internal:6379' };
+
+    it('refuses to start in production when a Resend key is set but CLIENT_URL is not', () => {
+      const result = boot({ ...WITH_REDIS, RESEND_API_KEY: 're_test' });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('CLIENT_URL is required in production when RESEND_API_KEY is set');
+    });
+
+    it('starts in production with a Resend key and CLIENT_URL', () => {
+      const env = parsed({ ...WITH_REDIS, RESEND_API_KEY: 're_test', CLIENT_URL: 'https://app.example.test' });
+      expect(env.CLIENT_URL).toBe('https://app.example.test');
+    });
+
+    it('needs no CLIENT_URL in production without a Resend key (server-only project)', () => {
+      expect(parsed(WITH_REDIS).CLIENT_URL).toBe('http://localhost:3000');
+    });
   });
 
   it('reads on/off switches in any letter case, and defaults them when unset', () => {
