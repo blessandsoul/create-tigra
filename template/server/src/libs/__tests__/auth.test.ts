@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '@libs/prisma.js';
 import { clearAuthCookies } from '@libs/cookies.js';
-import { authenticate, authorize } from '../auth.js';
+import { authenticate, authorize, resolveMe, resolveTargetUser } from '../auth.js';
 
 // authenticate() is the single per-request gate: the token must belong to a
 // live session of this user, the role comes from the database (not the token),
@@ -114,5 +114,55 @@ describe('authenticate', () => {
       code: 'ACCOUNT_DEACTIVATED',
     });
     expect(clearAuthCookies).toHaveBeenCalledWith(reply);
+  });
+});
+
+// resolveMe / resolveTargetUser decide WHOSE account a /users route acts on.
+// They are the whole ownership check for the /users/:userId routes (profile,
+// password, account deletion, avatar): an owner acts on themselves, an admin on
+// anyone, everyone else is refused before the handler runs.
+describe('resolveMe and resolveTargetUser', () => {
+  function guardRequest(userId: string, role: 'USER' | 'ADMIN', params: Record<string, string> = {}): FastifyRequest {
+    return { user: { userId, role, sessionId: 'session-1' }, params } as unknown as FastifyRequest;
+  }
+
+  it('resolveMe targets the signed-in user, never as an admin action', async () => {
+    const request = guardRequest('user-1', 'ADMIN');
+    await resolveMe(request, reply);
+    expect(request.targetUserId).toBe('user-1');
+    expect(request.isAdminAction).toBe(false);
+  });
+
+  it('an owner acts on their own account', async () => {
+    const request = guardRequest('user-1', 'USER', { userId: 'user-1' });
+    await resolveTargetUser(request, reply);
+    expect(request.targetUserId).toBe('user-1');
+    expect(request.isAdminAction).toBe(false);
+  });
+
+  it("refuses a user acting on someone else's account with 403", async () => {
+    const request = guardRequest('user-2', 'USER', { userId: 'user-1' });
+    await expect(resolveTargetUser(request, reply)).rejects.toMatchObject({ statusCode: 403 });
+    expect(request.targetUserId).toBeUndefined();
+  });
+
+  it("lets an admin act on another user's account, marked as an admin action", async () => {
+    const request = guardRequest('admin-1', 'ADMIN', { userId: 'user-1' });
+    await resolveTargetUser(request, reply);
+    expect(request.targetUserId).toBe('user-1');
+    expect(request.isAdminAction).toBe(true);
+  });
+
+  it('an admin on their own account takes the owner path (still needs their own password)', async () => {
+    const request = guardRequest('admin-1', 'ADMIN', { userId: 'admin-1' });
+    await resolveTargetUser(request, reply);
+    expect(request.isAdminAction).toBe(false);
+  });
+
+  it('refuses a request without :userId with 400 MISSING_USER_ID', async () => {
+    await expect(resolveTargetUser(guardRequest('user-1', 'USER'), reply)).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'MISSING_USER_ID',
+    });
   });
 });
