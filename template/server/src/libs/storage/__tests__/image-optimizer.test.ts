@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { crc32, deflateSync } from 'node:zlib';
 import sharp from 'sharp';
 import { imageOptimizerService, MAX_INPUT_PIXELS } from '../image-optimizer.service.js';
+import { validateImageFile } from '../file-validator.js';
+import { TINY_HEIC_BASE64 } from './fixtures/tiny-heic.js';
+import type { MultipartFile } from '@fastify/multipart';
 
 // Avatars are public: the output must carry no metadata (GPS, device), and a
 // small file describing a huge picture must be refused before it is decoded.
@@ -68,8 +71,36 @@ describe('imageOptimizerService.optimizeAvatar', () => {
   it('refuses formats outside the allowlist even when named like a PNG', async () => {
     const gif = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#ff0000' } }).gif().toBuffer();
     await expect(imageOptimizerService.optimizeAvatar(gif)).rejects.toMatchObject({
+      statusCode: 422,
       code: 'UNSUPPORTED_IMAGE_FORMAT',
+      message: 'Image format is not supported. Use JPEG, PNG, WebP or HEIC.',
     });
+  });
+
+  it('refuses bytes that are not an image at all (a text file named photo.jpg)', async () => {
+    await expect(imageOptimizerService.optimizeAvatar(Buffer.from('not an image, just text'))).rejects.toMatchObject({
+      statusCode: 422,
+    });
+  });
+
+  it('accepts AVIF (sharp reports it as heif, and every build decodes it)', async () => {
+    const avif = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#20a040' } }).avif().toBuffer();
+    const meta = await sharp(await imageOptimizerService.optimizeAvatar(avif)).metadata();
+    expect(meta.format).toBe('webp');
+  });
+
+  it('a real HEIC decodes where the build has HEVC (the Docker image), else answers 422, never a 500', async () => {
+    const heic = Buffer.from(TINY_HEIC_BASE64, 'base64');
+    expect((await sharp(heic).metadata()).compression).toBe('hevc');
+    // sharp's prebuilt binaries (developer machines) cannot decode HEVC; the
+    // server image can, and scripts/check-heic.mjs proves it at build time.
+    const canDecodeHevc = await sharp(heic).resize(1, 1).toBuffer().then(() => true, () => false);
+    const result = imageOptimizerService.optimizeAvatar(heic);
+    if (canDecodeHevc) {
+      expect((await sharp(await result).metadata()).format).toBe('webp');
+    } else {
+      await expect(result).rejects.toMatchObject({ statusCode: 422, code: 'UNSUPPORTED_IMAGE_FORMAT' });
+    }
   });
 
   it('accepts a normal photo-sized JPEG', async () => {
@@ -80,5 +111,19 @@ describe('imageOptimizerService.optimizeAvatar', () => {
     const meta = await sharp(output).metadata();
     expect(meta.width).toBe(512);
     expect(meta.height).toBe(384);
+  });
+});
+
+describe('validateImageFile', () => {
+  const file = (mimetype: string, filename: string): MultipartFile => ({ mimetype, filename }) as unknown as MultipartFile;
+
+  it('ignores the browser-sent type and name: the bytes decide later', () => {
+    expect(() => validateImageFile(file('application/octet-stream', 'blob'))).not.toThrow();
+    expect(() => validateImageFile(file('image/heic', 'IMG_0001.HEIC'))).not.toThrow();
+    expect(() => validateImageFile(file('application/x-msdownload', 'photo.exe'))).not.toThrow();
+  });
+
+  it('refuses an upload without a file', () => {
+    expect(() => validateImageFile(undefined)).toThrow(expect.objectContaining({ code: 'FILE_REQUIRED' }));
   });
 });

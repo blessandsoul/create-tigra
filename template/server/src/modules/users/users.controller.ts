@@ -40,7 +40,8 @@ class UsersController {
       throw new BadRequestError('No file uploaded', 'NO_FILE');
     }
 
-    // Validate file (MIME type, extension)
+    // A file must be present. Its format is judged from the bytes later
+    // (imageOptimizerService); the browser-sent type and name are not trusted.
     validateImageFile(data);
 
     // Read file buffer

@@ -1,21 +1,22 @@
 /**
  * File Upload Validator
  *
- * Validates uploaded files for security and compliance with upload constraints.
+ * Size and count limits for uploads. Which image formats are accepted is NOT
+ * decided here: the browser-sent type and filename are not trusted, and are
+ * often wrong for real photos (a browser that does not know .heic sends
+ * application/octet-stream). The image's own bytes decide, in
+ * image-optimizer.service.ts, and the output is always a re-encoded WebP.
  */
 
 import type { MultipartFile } from '@fastify/multipart';
 import { ValidationError } from '@shared/errors/errors.js';
 import { env } from '@config/env.js';
-import path from 'path';
 
 /**
  * File upload constants and constraints
  */
 export const FILE_UPLOAD_CONSTANTS = {
   MAX_FILE_SIZE: env.MAX_FILE_SIZE_MB * 1024 * 1024, // ENV-configurable (default 10MB)
-  ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const,
-  ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'] as const,
   AVATAR_MAX_DIMENSION: 512, // pixels
 } as const;
 
@@ -39,52 +40,20 @@ export const MULTIPART_LIMITS = {
 } as const;
 
 /**
- * Validates an uploaded image file
+ * Checks that an upload carries a file.
  *
- * Checks:
- * - File size within limits
- * - MIME type is allowed
- * - File extension is allowed (prevents disguised files)
- * - File is not executable
+ * The browser-sent MIME type and filename are deliberately ignored: they are
+ * the client's claim, not the content. imageOptimizerService.optimizeAvatar
+ * judges the real format from the bytes and re-encodes the image, so a file
+ * named photo.exe that is really a PNG becomes a plain WebP, and a text file
+ * named photo.jpg is refused.
  *
  * @param file - Fastify multipart file object
- * @throws ValidationError if file is invalid
- *
- * @example
- * ```typescript
- * const file = await request.file();
- * validateImageFile(file); // Throws if invalid
- * ```
+ * @throws ValidationError (FILE_REQUIRED) when no file was sent
  */
-export function validateImageFile(file: MultipartFile): void {
-  // Validate file exists
+export function validateImageFile(file: MultipartFile | undefined): void {
   if (!file) {
     throw new ValidationError('No file was uploaded', 'FILE_REQUIRED');
-  }
-
-  // Validate MIME type
-  const mimeType = file.mimetype;
-  if (!(FILE_UPLOAD_CONSTANTS.ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType)) {
-    throw new ValidationError(
-      `Invalid file type. Allowed types: ${FILE_UPLOAD_CONSTANTS.ALLOWED_MIME_TYPES.join(', ')}`,
-      'INVALID_FILE_TYPE'
-    );
-  }
-
-  // Validate file extension (prevents MIME type spoofing)
-  const extension = path.extname(file.filename).toLowerCase();
-  if (!(FILE_UPLOAD_CONSTANTS.ALLOWED_EXTENSIONS as readonly string[]).includes(extension)) {
-    throw new ValidationError(
-      `Invalid file extension. Allowed extensions: ${FILE_UPLOAD_CONSTANTS.ALLOWED_EXTENSIONS.join(', ')}`,
-      'INVALID_FILE_EXTENSION'
-    );
-  }
-
-  // Prevent executable files (extra security layer)
-  const dangerousExtensions = ['.exe', '.sh', '.bat', '.cmd', '.com', '.pif', '.scr', '.vbs', '.js'];
-  const lowerFilename = file.filename.toLowerCase();
-  if (dangerousExtensions.some((ext) => lowerFilename.endsWith(ext))) {
-    throw new ValidationError('Executable files are not allowed', 'DANGEROUS_FILE');
   }
 }
 

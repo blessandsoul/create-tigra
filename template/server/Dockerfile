@@ -247,8 +247,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 # Copy Prisma files (needed for migrations)
 COPY --from=builder --chown=nodejs:nodejs /app/prisma ./prisma
 
-# Build-time sharp proof (see the script's header).
+# Build-time sharp and HEIC proofs (see each script's header).
 COPY --chown=nodejs:nodejs scripts/check-sharp.mjs ./scripts/check-sharp.mjs
+COPY --chown=nodejs:nodejs scripts/check-heic.mjs ./scripts/check-heic.mjs
 
 # Create BOTH upload tiers with correct ownership (must be before USER nodejs).
 # public/ is served as static files at /uploads/; private/ is served ONLY via
@@ -262,6 +263,9 @@ USER nodejs
 # runtime user, before the image can ship. A failure fails the build instead
 # of crashing the server on its first upload or at start.
 RUN node scripts/check-sharp.mjs
+# The avatar upload accepts iPhone HEIC photos: prove a real HEVC-coded HEIC
+# decodes here (the HEIF flag check-sharp sees is also true for AVIF-only builds).
+RUN node scripts/check-heic.mjs
 
 # Expose port (matches default PORT in env.ts; override via PORT env var)
 EXPOSE 8000

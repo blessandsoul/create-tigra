@@ -14,6 +14,12 @@
  *    the compressed bytes, so we also cap the decoded pixel count BEFORE
  *    decoding, accept only real JPEG/PNG/WebP/HEIF content (judged from the
  *    bytes, not the client's filename or MIME type), and time out slow work.
+ *  - HEIC (iPhone photos) is decoded by libheif's libde265 plugin, which the
+ *    server Docker image installs and proves at build time
+ *    (scripts/check-heic.mjs). sharp's prebuilt binaries on developer machines
+ *    have no HEVC decoder: there a HEIC upload answers 422
+ *    UNSUPPORTED_IMAGE_FORMAT, never a 500. 'heif' also covers AVIF, which every
+ *    build decodes.
  */
 
 import sharp from 'sharp';
@@ -28,8 +34,10 @@ import { logger } from '@libs/logger.js';
  */
 export const MAX_INPUT_PIXELS = 50_000_000;
 
-/** Formats sharp detects from the file's bytes that we accept for avatars. */
+/** Formats sharp detects from the file's bytes that we accept for avatars ('heif' = HEIC and AVIF). */
 export const ALLOWED_INPUT_FORMATS = ['jpeg', 'png', 'webp', 'heif'] as const;
+
+const UNSUPPORTED_FORMAT_MESSAGE = 'Image format is not supported. Use JPEG, PNG, WebP or HEIC.';
 
 /** Hard stop for a single image's processing time. */
 const PROCESSING_TIMEOUT_SECONDS = 10;
@@ -66,10 +74,7 @@ class ImageOptimizerService {
         throw new ValidationError('Unable to read image dimensions', 'INVALID_IMAGE');
       }
       if (!metadata.format || !(ALLOWED_INPUT_FORMATS as readonly string[]).includes(metadata.format)) {
-        throw new ValidationError(
-          'Image format is not supported. Use JPEG, PNG or WebP.',
-          'UNSUPPORTED_IMAGE_FORMAT',
-        );
+        throw new ValidationError(UNSUPPORTED_FORMAT_MESSAGE, 'UNSUPPORTED_IMAGE_FORMAT');
       }
       if (metadata.width * metadata.height > MAX_INPUT_PIXELS) {
         throw new ValidationError('Image dimensions are too large', 'IMAGE_TOO_LARGE');
@@ -116,6 +121,12 @@ class ImageOptimizerService {
         }
         if (message.includes('timeout')) {
           throw new ValidationError('Image is too complex to process', 'IMAGE_TOO_COMPLEX');
+        }
+        // A real HEIC on a build without the HEVC decoder (sharp's prebuilt
+        // binaries): the header reads fine, decoding says the compression
+        // "has not been built in". The format, not the file, is the problem.
+        if (message.includes('has not been built in')) {
+          throw new ValidationError(UNSUPPORTED_FORMAT_MESSAGE, 'UNSUPPORTED_IMAGE_FORMAT');
         }
         if (
           message.includes('unsupported image format') ||
