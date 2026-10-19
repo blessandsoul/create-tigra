@@ -35,7 +35,7 @@ npx create-tigra my-app
 | Security | Helmet, CORS, rate limiting (per route, per IP, set through ENV), login lockout, IP auto-block, password hashing (Argon2). If Redis goes down, the limits, lockout and blocks are off until it is back |
 | File uploads | Multipart + Sharp image optimization |
 | Logging | Pino with pretty dev output |
-| Testing | Vitest with 80% coverage thresholds |
+| Testing | Vitest: unit tests (no database needed) and integration tests of every route against a real MySQL and Redis (Testcontainers, or services you already run); a coverage ratchet; CI, a weekly dependency audit and Dependabot security updates for GitHub included |
 | Dev tools | Docker Compose (MySQL, phpMyAdmin, Redis, Redis Commander) |
 | Production images | Node 24 Alpine Dockerfiles (server and client) with sharp built on a pinned libvips, so they run on any x86-64 CPU, including VPSes without x86-64-v2, plus curl for Coolify's health check |
 
@@ -84,6 +84,27 @@ The admin UIs (phpMyAdmin, Redis Commander) are behind the docker-compose `tools
 cd my-app/server
 docker compose --profile tools up -d
 ```
+
+## Testing and CI
+
+```bash
+cd my-app/server
+npm test                  # unit tests: no database, no Docker
+npm run test:coverage     # the same, with the coverage ratchet (vitest.config.ts)
+npm run test:integration  # every route against a real MySQL + Redis
+```
+
+The integration tests start a throwaway MySQL and Redis with Testcontainers (Docker must run). To use services you
+already run instead, set `INTEGRATION_DATABASE_URL` (a database whose name ends in `_test`) and
+`INTEGRATION_REDIS_URL` (a Redis database 1-15): the suite empties both first. Details and how to write new tests:
+`server/docs/testing.md`.
+
+New projects ship with GitHub workflows in `.github/`:
+- `ci.yml`, on every push and pull request: typecheck, lint, unit tests with coverage, the server build, the
+  integration tests (Testcontainers on GitHub's runners) and the client build. It never deploys.
+- `audit.yml`, weekly: `npm audit` of what production installs, red on a critical advisory. It does not block merges.
+- `dependabot.yml`: security-update pull requests only. Turn them on once in the repository's Settings → Advanced
+  Security → Dependabot security updates.
 
 ## Deploying to Coolify
 

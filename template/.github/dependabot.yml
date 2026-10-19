@@ -1,0 +1,24 @@
+# Dependabot, security updates only: a pull request when a dependency has a
+# known vulnerability with a fix, and no routine version-bump pull requests
+# (open-pull-requests-limit: 0 turns those off; security updates have their
+# own limit).
+#
+# Turn it on once per repository: Settings → Advanced Security → "Dependabot
+# security updates" (this file only says where the apps are and what to skip).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0

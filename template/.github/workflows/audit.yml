@@ -1,0 +1,36 @@
+name: Dependency audit
+
+# Once a week: does anything production installs have a known CRITICAL
+# advisory? Not part of CI, so it never blocks a merge; a red run is the
+# signal to update. Critical, not high: some high advisories sit in tooling
+# that only a major upgrade fixes (Prisma's config loader, until Prisma 7),
+# and a check that is red from day one teaches everyone to ignore it. Fixable
+# high advisories reach you as Dependabot security pull requests
+# (.github/dependabot.yml).
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (${{ matrix.app }}, production dependencies)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [server, client]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Reads package-lock.json; nothing is installed.
+      - name: Audit
+        run: npm audit --omit=dev --audit-level=critical

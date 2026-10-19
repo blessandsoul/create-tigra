@@ -1,0 +1,77 @@
+name: CI
+
+# Every push and pull request: typecheck, lint, tests and builds for both
+# apps. Checks only — it never deploys. See server/docs/testing.md.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: server (typecheck · lint · unit tests + coverage · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies (exactly the lockfile)
+        run: npm ci --include=optional
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      # Unit tests with the coverage ratchet (vitest.config.ts): fails when
+      # coverage drops below the recorded numbers.
+      - name: Unit tests and coverage
+        run: npm run test:coverage
+      - name: Build
+        run: npm run build
+
+  server-integration:
+    name: server integration tests (real MySQL + Redis)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies (exactly the lockfile)
+        run: npm ci --include=optional
+      - name: Generate Prisma client
+        run: npx prisma generate
+      # Testcontainers starts a throwaway MySQL 8.4 and Redis 7 (GitHub's
+      # Ubuntu runners have Docker) and applies prisma/migrations.
+      - name: Integration tests
+        run: npm run test:integration
+
+  client:
+    name: client (typecheck · lint · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies (exactly the lockfile)
+        run: npm ci --include=optional
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
