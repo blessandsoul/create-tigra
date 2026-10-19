@@ -33,7 +33,8 @@
     "generate:env": "node -e \"import('fs').then(f=>{if(f.existsSync('.env'))console.log('.env already exists, skipping');else{f.copyFileSync('.env.example','.env');console.log('.env created from .env.example')}})\""
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "make-admin": "tsx src/scripts/make-admin.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

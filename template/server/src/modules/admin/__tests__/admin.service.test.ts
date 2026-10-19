@@ -131,3 +131,32 @@ describe('deleted accounts and restore', () => {
   });
 });
 
+describe('promoteToAdmin (make-admin)', () => {
+  const state = (overrides: Record<string, unknown> = {}): never =>
+    ({ id: USER_ID, role: 'USER', isActive: true, deletedAt: null, emailVerifiedAt: new Date('2026-01-01'), ...overrides }) as never;
+
+  it('promotes an existing account, looked up by its lower-cased email, and keeps its verification date', async () => {
+    vi.mocked(adminRepository.findAccountStateByEmail).mockResolvedValue(state());
+    await expect(adminService.promoteToAdmin('  Owner@Example.TEST ')).resolves.toBe('promoted');
+    expect(adminRepository.findAccountStateByEmail).toHaveBeenCalledWith('owner@example.test');
+    expect(adminRepository.promoteToAdmin).toHaveBeenCalledWith(USER_ID, new Date('2026-01-01'));
+  });
+
+  it('marks an unverified account verified when promoting it', async () => {
+    vi.mocked(adminRepository.findAccountStateByEmail).mockResolvedValue(state({ emailVerifiedAt: null }));
+    await adminService.promoteToAdmin('owner@example.test');
+    expect(vi.mocked(adminRepository.promoteToAdmin).mock.calls[0]?.[1]).toBeInstanceOf(Date);
+  });
+
+  it.each([
+    ['no account', null, 'not-found'],
+    ['a deleted account', state({ deletedAt: new Date() }), 'deleted'],
+    ['a banned account', state({ isActive: false }), 'banned'],
+    ['an admin already', state({ role: 'ADMIN' }), 'already-admin'],
+  ])('changes nothing for %s', async (_label, account, outcome) => {
+    vi.mocked(adminRepository.findAccountStateByEmail).mockResolvedValue(account as never);
+    await expect(adminService.promoteToAdmin('owner@example.test')).resolves.toBe(outcome);
+    expect(adminRepository.promoteToAdmin).not.toHaveBeenCalled();
+  });
+});
+

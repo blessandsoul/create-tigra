@@ -210,6 +210,24 @@ class AdminRepository {
     return count === 1;
   }
 
+  /**
+   * The account state make-admin needs, by email, INCLUDING deleted accounts
+   * (so it can say "restore it first" instead of "no such account").
+   */
+  async findAccountStateByEmail(
+    email: string,
+  ): Promise<{ id: string; role: UserRole; isActive: boolean; deletedAt: Date | null; emailVerifiedAt: Date | null } | null> {
+    return prisma.user.findUnique({
+      where: { email },
+      select: { id: true, role: true, isActive: true, deletedAt: true, emailVerifiedAt: true },
+    });
+  }
+
+  /** Make an account ADMIN, marking its email verified if it was not (the operator vouches). */
+  async promoteToAdmin(userId: string, emailVerifiedAt: Date): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { role: 'ADMIN', emailVerifiedAt } });
+  }
+
   /** Whether a user row exists at all, deleted or not (purged rows are gone). */
   async userExists(userId: string): Promise<boolean> {
     return (await prisma.user.count({ where: { id: userId } })) === 1;

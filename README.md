@@ -91,6 +91,8 @@ Server and client deploy as two separate Coolify applications, each from its own
 
 **The server needs a persistent volume for uploads.** Avatars (and any other uploaded files) are written to `/app/uploads` inside the container, and every deploy starts a fresh container. Without a volume, all uploaded files are lost on each redeploy. In the server application: **Storages → Add Volume Mount**, leave *Source Path* empty (Coolify manages the volume), *Destination Path* `/app/uploads`. The server warns at boot (`[STORAGE] … is not on a mounted volume`) when it runs in production without one. Details: `server/.env.example.production`, section FILE UPLOAD.
 
+**First admin.** Sign up in the app with the account that should be the admin (your own password; verify the email if the email module is on). Then open the server application's **Terminal** in Coolify and run `node dist/scripts/make-admin.js you@example.com`. It only changes that account's role and marks its email verified: no password is asked for or printed. Locally: `cd server && npm run make-admin -- you@example.com`. The same command recovers a project whose last admin was demoted or banned by mistake.
+
 ## Security and Migration Notes
 
 - [Account deactivation login reactivation: issue, fix, and existing-project migration](docs/account-deactivation-login-reactivation.md)

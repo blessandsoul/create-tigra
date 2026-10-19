@@ -157,6 +157,26 @@ class AdminService {
   }
 
   /**
+   * Promote an EXISTING account to ADMIN by email (src/scripts/make-admin.ts).
+   * The way to get the first admin in production, and to recover when no admin
+   * is left. It never creates an account and never touches a password: the
+   * person signs up in the app with their own password first.
+   * Refuses a deleted account (restore it first) and a banned one (unban it
+   * first). Marks the email verified if it was not. Sessions are kept: the role
+   * is re-read on every request, so the new rights apply at once.
+   */
+  async promoteToAdmin(rawEmail: string): Promise<'promoted' | 'already-admin' | 'not-found' | 'deleted' | 'banned'> {
+    const email = rawEmail.trim().toLowerCase(); // register stores emails lower-cased
+    const account = await adminRepository.findAccountStateByEmail(email);
+    if (!account) return 'not-found';
+    if (account.deletedAt) return 'deleted';
+    if (!account.isActive) return 'banned';
+    if (account.role === 'ADMIN') return 'already-admin';
+    await adminRepository.promoteToAdmin(account.id, account.emailVerifiedAt ?? new Date());
+    return 'promoted';
+  }
+
+  /**
    * Get dashboard statistics
    */
   async getDashboardStats(): Promise<DashboardStats> {
