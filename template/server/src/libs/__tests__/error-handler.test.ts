@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { registerErrorHandler } from '@libs/error-handler.js';
 import { MAX_FIELD_ERRORS, parseInput } from '@libs/validation-errors.js';
 import { TooManyRequestsError } from '@shared/errors/errors.js';
+import { OutboundHttpError } from '@libs/http.js';
 
 /** A distinctive value: it must never appear in any answer. */
 const SECRET_VALUE = 'leak-canary-7Q2X';
@@ -45,6 +46,9 @@ beforeAll(async () => {
   app.post('/parse-input', async (request) => parseInput(passwordSchema, request.body));
   app.get('/limited', async () => {
     throw new TooManyRequestsError('Too many requests. Try again in 1 minute.', 'RATE_LIMIT_EXCEEDED', 42);
+  });
+  app.get('/outbound', async () => {
+    throw new OutboundHttpError('http', { status: 404, cause: new Error(`upstream said ${SECRET_VALUE}`) });
   });
   app.get('/boom', async () => {
     throw new Error(`internal detail ${SECRET_VALUE}`);
@@ -146,4 +150,13 @@ describe('global error handler', () => {
     expect(res.json().error).toEqual({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
     expectNoLeak(res.body);
   });
+
+  it('an unhandled outbound failure is the same generic 500, without its status, kind or cause', async () => {
+    const res = await app.inject({ method: 'GET', url: '/outbound' });
+    expect(res.statusCode).toBe(500);
+    expect(res.json().error).toEqual({ code: 'INTERNAL_ERROR', message: 'Outbound HTTP request failed' });
+    expect(res.body).not.toContain('404');
+    expectNoLeak(res.body);
+  });
 });
+
