@@ -28,6 +28,9 @@ const FILES_TO_REPLACE = [
   'server/.env.example',
   'server/docker-compose.yml',
   'client/package.json',
+  // The shipped lockfiles carry {{PROJECT_NAME}} in their root "name" fields.
+  'server/package-lock.json',
+  'client/package-lock.json',
   'client/.env.example',
   'client/.env.example.production',
   'server/postman/collection.json',
@@ -43,7 +46,10 @@ const SKIP_PATTERNS = [
   '.env',
   '.env.local',
   '.env.*.local',
-  'package-lock.json',
+  // package-lock.json is NOT skipped: new projects get the template's tested
+  // lockfiles, written with the npm in the Dockerfiles' image, so the first
+  // `npm ci` (locally and in Docker) installs exactly the versions we tested.
+  // Without them every project resolved fresh versions on first install.
   'pnpm-lock.yaml',
   'yarn.lock',
 ];
@@ -429,7 +435,10 @@ async function main() {
       console.log(bold('  SERVER') + dim('                    cd ') + cyan(`${projectName}/server`));
       console.log();
       console.log(cyan('    1 ') + 'Install & start infrastructure');
-      console.log(dim('      npm install'));
+      // `npm ci`, not `npm install`: it installs the shipped lockfile as-is.
+      // `npm install` on an older local npm rewrites the lockfile into a shape
+      // the image's npm then rejects at deploy time.
+      console.log(dim('      npm ci'));
       console.log(dim('      npm run docker:up'));
       console.log();
       console.log(cyan('    2 ') + 'Set up database');
@@ -442,7 +451,7 @@ async function main() {
       console.log(bold('  CLIENT') + dim('  (new terminal)    cd ') + cyan(`${projectName}/client`));
       console.log();
       console.log(cyan('    4 ') + 'Start the client');
-      console.log(dim('      npm install'));
+      console.log(dim('      npm ci'));
       console.log(dim('      npm run dev'));
       console.log();
       console.log(line);

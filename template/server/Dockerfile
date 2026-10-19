@@ -7,8 +7,11 @@
 # ACROSS builds, so a lockfile-change rebuild re-installs without re-downloading.
 # Requires the `# syntax` line above; auto-enabled on Docker 23+ / any BuildKit.
 #
-# Every stage uses the same pinned node:22-alpine image (Node 22.23.3 on
-# Alpine 3.24). The template requires Node >=22.12; Node 20 is end of life.
+# Every stage uses the same pinned node:24-alpine image (Node 24.22.0,
+# npm 11.19.1, Alpine 3.24). Node 24 is the template's runtime (package.json
+# engines >=24). `npm ci` below fails when package-lock.json was written by an
+# older npm: npm 10 always, and early npm 11 too (11.6.1 leaves out the
+# @emnapi/* entries this npm requires). Write lockfiles with npm 11.19 or newer.
 
 # ===================================================================
 # Stage 1: libvips that runs on any x86-64 CPU
@@ -31,7 +34,7 @@
 # 0.35.5). When a sharp upgrade needs more than LIBVIPS_VERSION, bump
 # LIBVIPS_VERSION and LIBVIPS_SHA256 (from the libvips release page) in BOTH
 # Dockerfiles. Stage 2 stops the build with a clear message if you forget.
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS libvips
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS libvips
 
 ARG LIBVIPS_VERSION=8.18.7
 ARG LIBVIPS_SHA256=5baaead3b0bb20ffdb9e9ff09aa9fda08620923df77b63b436654cb5e0b3bf94
@@ -162,7 +165,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # ===================================================================
 # Independent of stages 1-2 (tsc and prisma generate never load sharp), so
 # BuildKit runs it in parallel with the libvips compile.
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS builder
 
 # Override NODE_ENV to ensure devDependencies are installed.
 # Coolify may inject NODE_ENV=production as a build arg, which causes npm ci
@@ -195,7 +198,7 @@ RUN npm run build
 # ===================================================================
 # Stage 4: Production Runtime
 # ===================================================================
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS production
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS production
 
 # dumb-init: proper signal handling.
 # curl: Coolify's own HTTP health check runs curl (then BusyBox wget) inside

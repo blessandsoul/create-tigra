@@ -3,7 +3,11 @@
 
 const { spawn } = require("node:child_process");
 
-const DEFAULT_MAX_OLD_SPACE_SIZE = "768";
+// Heap cap for the dev server, in MB. Webpack dev keeps every compiled route in
+// memory, so the old 768 MB cap ran out after a handful of pages and the server
+// crashed. 2048 leaves room for a normal app; set NEXT_DEV_MAX_OLD_SPACE_SIZE
+// (or --max-old-space-size in NODE_OPTIONS) to change it per machine.
+const DEFAULT_MAX_OLD_SPACE_SIZE = "2048";
 const nextBin = require.resolve("next/dist/bin/next");
 
 function applyOldSpaceLimit(nodeOptions, sizeMb) {

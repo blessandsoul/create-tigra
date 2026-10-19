@@ -1,6 +1,9 @@
 {
   "name": "{{PROJECT_NAME}}-server",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "description": "",
   "main": "dist/server.js",
@@ -66,7 +69,7 @@
     "@eslint/js": "^10.0.1",
     "@testcontainers/mysql": "^12.0.3",
     "@testcontainers/redis": "^12.0.3",
-    "@types/node": "^20.17.10",
+    "@types/node": "^24",
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^4.1.11",
     "@vitest/ui": "^4.1.11",

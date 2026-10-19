@@ -37,7 +37,7 @@ npx create-tigra my-app
 | Logging | Pino with pretty dev output |
 | Testing | Vitest with 80% coverage thresholds |
 | Dev tools | Docker Compose (MySQL, phpMyAdmin, Redis, Redis Commander) |
-| Production images | Node 22 Alpine Dockerfiles (server and client) with sharp built on a pinned libvips, so they run on any x86-64 CPU, including VPSes without x86-64-v2, plus curl for Coolify's health check |
+| Production images | Node 24 Alpine Dockerfiles (server and client) with sharp built on a pinned libvips, so they run on any x86-64 CPU, including VPSes without x86-64-v2, plus curl for Coolify's health check |
 
 ### Codex Development
 
@@ -47,7 +47,7 @@ The security workflow falls back to the bundled skill when Codex Security is una
 
 ## Prerequisites
 
-- **Node.js** 22.12+
+- **Node.js** 24+ with **npm** 11.19+ for the generated apps (the CLI itself runs on Node 22.12+). Early Node 24 releases ship an older npm 11 whose lockfiles the Docker images reject; check `npm -v` and update with `npm install -g npm@11`.
 - **Docker** (for MySQL and Redis)
 
 ## After Scaffolding
@@ -58,7 +58,8 @@ cd my-app/server
 docker compose up -d
 
 # 2. Install server dependencies & set up database
-npm install
+#    (npm ci installs the shipped package-lock.json exactly, without rewriting it)
+npm ci
 cp .env.example .env
 npm run prisma:generate
 npm run prisma:migrate:dev -- --name init
@@ -68,7 +69,7 @@ npm run dev
 
 # 4. In a new terminal, set up the client
 cd my-app/client
-npm install
+npm ci
 cp .env.example .env
 npm run dev
 ```

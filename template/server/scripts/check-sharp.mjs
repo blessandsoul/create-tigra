@@ -13,6 +13,7 @@
  * Keep this file identical in server/scripts and client/scripts.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
@@ -47,4 +48,6 @@ for (const [name, input] of [['jpeg', jpeg], ['png', png]]) {
 // HEIC/HEIF input (phone photos) is accepted by the server's avatar upload.
 assert.equal(sharp.format.heif.input.buffer, true, 'HEIF input support missing');
 
-console.log(`check-sharp: sharp ${version} works with libvips ${sharp.versions.vips}`);
+// Also prove which runtime the image ships (the deploy log shows this line).
+const npmVersion = execFileSync('npm', ['-v'], { encoding: 'utf8' }).trim();
+console.log(`check-sharp: sharp ${version} works with libvips ${sharp.versions.vips} on Node ${process.version}, npm ${npmVersion}`);
