@@ -48,7 +48,7 @@ Every implementation change MUST include a human-readability pass. Add or update
 
 - Never commit `.env` files, credentials, tokens, or production data. Never place a secret in `NEXT_PUBLIC_*` or client-side code.
 - Authentication uses server-issued httpOnly cookies. Do not copy tokens into localStorage, sessionStorage, Redux, logs, URLs, or response bodies.
-- Validate every external input at the server boundary with Zod, use Prisma parameterization, enforce authorization in server services/routes, and return user-safe errors.
+- Validate every external input at the server boundary with Zod, use Prisma parameterization, enforce authorization in server services/routes, and return user-safe errors. Wrong input always answers 422 `VALIDATION_FAILED` with `error.fields` (field + message, never the submitted values); the client reads them with `getFieldErrors`.
 - Preserve origin/CORS checks for state-changing cookie-authenticated requests, rate limits on public/auth-sensitive endpoints, and the split between statically served public uploads and authenticated owner-scoped private files.
 
 ## Required server security workflow

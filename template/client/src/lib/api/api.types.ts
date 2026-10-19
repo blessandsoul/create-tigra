@@ -20,6 +20,13 @@ export interface PaginatedApiResponse<T> {
   };
 }
 
+/** One wrong input field in a 422 VALIDATION_FAILED answer (never the submitted value). */
+export interface ApiFieldError {
+  /** Dot path inside the request part ("email", "address.city"), or the part itself ("body"). */
+  field: string;
+  message: string;
+}
+
 export interface ApiError {
   success: false;
   error: {
@@ -30,6 +37,8 @@ export interface ApiError {
      * automatic IP block (403 IP_BLOCKED); see getLimitInfo in lib/utils/error.ts.
      */
     retryAfterSeconds?: number;
+    /** Sent on 422 VALIDATION_FAILED: every wrong field and why; see getFieldErrors. */
+    fields?: ApiFieldError[];
   };
 }
 

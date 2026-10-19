@@ -11,7 +11,7 @@ import { Toaster } from 'sonner';
 import { SmoothNavigationProvider } from '@/components/common/SmoothNavigationProvider';
 import { store } from '@/store';
 import { AuthInitializer } from '@/features/auth/components/AuthInitializer';
-import { isLimitError } from '@/lib/utils/error';
+import { ERROR_CODES, isErrorCode, isLimitError } from '@/lib/utils/error';
 
 export function Providers({
   children,
@@ -33,8 +33,11 @@ export function Providers({
             refetchOnMount: true,
             // One retry for flaky networks, but never for a "slow down" answer
             // (429 / IP_BLOCKED): a retry would only earn another strike toward
-            // the server's IP auto-block. Mutations never retry (React Query default).
-            retry: (failureCount, error) => !isLimitError(error) && failureCount < 1,
+            // the server's IP auto-block. Nor for wrong input (422
+            // VALIDATION_FAILED): the same request fails the same way.
+            // Mutations never retry (React Query default).
+            retry: (failureCount, error) =>
+              !isLimitError(error) && !isErrorCode(error, ERROR_CODES.VALIDATION_FAILED) && failureCount < 1,
           },
         },
       })

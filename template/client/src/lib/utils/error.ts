@@ -34,7 +34,8 @@ export const isErrorCode = (error: unknown, code: string): boolean => {
 // Account-state codes from the server (src/libs/account-status.ts). They are
 // separate on purpose: a deactivated (banned) account must never be steered to
 // email verification, because verifying cannot lift a ban.
-// The last four are the "wait and retry" answers (server docs/rate-limits.md).
+// RATE_LIMIT_EXCEEDED to IP_BLOCKED are the "wait and retry" answers (server
+// docs/rate-limits.md). VALIDATION_FAILED is wrong input (see getFieldErrors).
 // Keep this an object literal: the email-verification patcher appends to it.
 export const ERROR_CODES = {
   ACCOUNT_DEACTIVATED: 'ACCOUNT_DEACTIVATED',
@@ -43,7 +44,26 @@ export const ERROR_CODES = {
   LOGIN_LOCKED: 'LOGIN_LOCKED',
   EMAIL_RATE_LIMITED: 'EMAIL_RATE_LIMITED',
   IP_BLOCKED: 'IP_BLOCKED',
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
 } as const;
+
+/**
+ * The server's verdict per field on a 422 VALIDATION_FAILED answer, as
+ * { email: 'Invalid email address', ... } (first message per field). Empty for
+ * any other error. Forms can pass these to react-hook-form's setError; the
+ * error's message already names the fields for a toast.
+ */
+export const getFieldErrors = (error: unknown): Record<string, string> => {
+  if (!axios.isAxiosError(error)) return {};
+  const data = error.response?.data as ApiError | undefined;
+  if (data?.error?.code !== ERROR_CODES.VALIDATION_FAILED) return {};
+  // A Map, then fromEntries: field names become own keys only, whatever they are.
+  const firsts = new Map<string, string>();
+  for (const { field, message } of data.error.fields ?? []) {
+    if (!firsts.has(field)) firsts.set(field, message);
+  }
+  return Object.fromEntries(firsts);
+};
 
 /** "45 seconds", "1 minute", "15 minutes": minutes round up, so nobody retries too early. */
 export const formatWait = (seconds: number): string => {

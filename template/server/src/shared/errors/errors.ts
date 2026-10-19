@@ -1,4 +1,4 @@
-import { AppError } from './AppError.js';
+import { AppError, type FieldError } from './AppError.js';
 
 export class BadRequestError extends AppError {
   constructor(message = 'Bad request', code = 'BAD_REQUEST') {
@@ -6,9 +6,14 @@ export class BadRequestError extends AppError {
   }
 }
 
+/**
+ * 422. With `fields` it is the one shape for wrong input (VALIDATION_FAILED,
+ * built by libs/validation-errors.ts); without, a specific check such as an
+ * upload's FILE_* or IMAGE_* code.
+ */
 export class ValidationError extends AppError {
-  constructor(message = 'Validation failed', code = 'VALIDATION_FAILED') {
-    super(code, message, 422);
+  constructor(message = 'Validation failed', code = 'VALIDATION_FAILED', fields?: FieldError[]) {
+    super(code, message, 422, undefined, fields);
   }
 }
 

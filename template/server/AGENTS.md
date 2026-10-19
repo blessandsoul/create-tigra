@@ -12,6 +12,7 @@
 - `prisma/schema.prisma` owns models, relations, indexes, and database naming. Change schema through reviewed Prisma migrations; production is forward-only with `prisma migrate deploy`. `prisma/migrations/0_init` (shipped with the template) creates the first tables; never edit or delete an applied migration, add a new one with `npm run prisma:migrate:dev`.
 - `src/config/env.ts` owns runtime configuration validation. Keep `.env.example` and `.env.example.production` synchronized, but keep real secrets out of the repository and image.
 - Zod route schemas own external input validation. Services own authorization and business invariants; repositories must not decide access policy.
+- Wrong input has one answer: 422 `VALIDATION_FAILED` with `error.fields` (`src/libs/validation-errors.ts`, applied by `src/libs/error-handler.ts` to route schemas and `ZodError`). Validate inside a handler with `parseInput(schema, data)`, never a hand-made `ValidationError(issues[0].message)`. Messages describe the rule; never put a submitted value into one.
 
 ## Security and deployment
 

@@ -1,4 +1,4 @@
-import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
@@ -7,13 +7,10 @@ import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { randomUUID } from 'node:crypto';
 import { env } from '@config/env.js';
-import { logger } from '@libs/logger.js';
-import { Sentry } from '@libs/observability/sentry.js';
 import { markRequestStart, logRequestLine } from '@libs/requestLogger.js';
 import { initAuth } from '@libs/auth.js';
 import { registerQueryCounter } from '@libs/query-counter.js';
-import { isAppError } from '@shared/errors/AppError.js';
-import { successResponse, errorResponse } from '@shared/responses/successResponse.js';
+import { successResponse } from '@shared/responses/successResponse.js';
 import { authRoutes } from '@modules/auth/auth.routes.js';
 import { usersRoutes } from '@modules/users/users.routes.js';
 import { adminRoutes } from '@modules/admin/admin.routes.js';
@@ -26,6 +23,7 @@ import { MONITORING_PATHS, registerNotFoundHandler, registerRateLimiting } from 
 import { getRedis, onRedisReady } from '@libs/redis.js';
 import { getClientIp, TRUSTED_PROXY_RANGES } from '@libs/client-ip.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
+import { registerErrorHandler } from '@libs/error-handler.js';
 import { ForbiddenError, describeWait } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
@@ -204,64 +202,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  // --- Global Error Handler (must be set before routes) ---
-  app.setErrorHandler((error: FastifyError, request, reply) => {
-    // AppError — our typed errors (use duck-type check to avoid instanceof issues)
-    if (isAppError(error)) {
-      return reply
-        .status(error.statusCode)
-        .send(errorResponse(error.code, error.message, error.retryAfterSeconds));
-    }
-
-    // Zod validation error
-    if (error.name === 'ZodError') {
-      return reply.status(422).send(errorResponse('VALIDATION_FAILED', 'Validation failed'));
-    }
-
-    // Fastify validation error
-    if (error.validation) {
-      return reply.status(400).send(
-        errorResponse(
-          'BAD_REQUEST',
-          error.message || 'Invalid request',
-        ),
-      );
-    }
-
-    // Fastify plugin errors (file size, rate limiting, etc.)
-    // These have statusCode properties but aren't AppError instances
-    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
-      // Map common Fastify error codes to user-friendly messages
-      const errorCodeMap: Record<number, { code: string; message: string }> = {
-        413: { code: 'FILE_TOO_LARGE', message: 'File size exceeds the maximum allowed limit' },
-        429: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please try again later' },
-      };
-
-      const errorInfo = errorCodeMap[error.statusCode] || {
-        code: 'BAD_REQUEST',
-        message: error.message || 'Bad request',
-      };
-
-      return reply.status(error.statusCode).send(errorResponse(errorInfo.code, errorInfo.message));
-    }
-
-    // Unexpected error — capture in Sentry (safe no-op when SDK uninitialized),
-    // then log and return a generic 500. reqId ties the event to the log line.
-    const requestId = request.id || 'unknown';
-    Sentry.captureException(error, { extra: { reqId: requestId } });
-    logger.error(
-      {
-        err: error,
-        requestId,
-        url: request.url,
-        method: request.method,
-        stack: error.stack,
-      },
-      `Unhandled error [${requestId}]: ${error.message}`,
-    );
-
-    return reply.status(500).send(errorResponse('INTERNAL_ERROR', 'Internal server error'));
-  });
+  // --- Global Error Handler (must be set before routes): see src/libs/error-handler.ts ---
+  registerErrorHandler(app);
 
   // --- Unknown URLs: error envelope + DEFAULT_LIMIT (see src/libs/rate-limiting.ts) ---
   registerNotFoundHandler(app);

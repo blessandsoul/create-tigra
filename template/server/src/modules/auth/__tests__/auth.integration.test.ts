@@ -70,7 +70,7 @@ describe('auth money-path (real containers)', () => {
     expect(body.data.user.password).toBeUndefined();
   });
 
-  it('POST /api/v1/auth/register with an INVALID body is rejected (400, Zod validation)', async () => {
+  it('POST /api/v1/auth/register with an INVALID body is rejected (422 VALIDATION_FAILED + fields)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/register',
@@ -78,8 +78,14 @@ describe('auth money-path (real containers)', () => {
     });
 
     // fastify-type-provider-zod surfaces body validation as a Fastify
-    // validation error → the app's error handler maps it to 400 BAD_REQUEST.
-    expect(res.statusCode).toBe(400);
+    // validation error → libs/error-handler.ts answers 422 with the field list.
+    expect(res.statusCode).toBe(422);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_FAILED');
+    expect(body.error.fields.map((f: { field: string }) => f.field)).toEqual(
+      expect.arrayContaining(['email', 'password']),
+    );
+    expect(res.body).not.toContain('not-an-email');
   });
 
   it('POST /api/v1/auth/login with valid credentials succeeds and sets an access_token cookie', async () => {
