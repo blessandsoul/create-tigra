@@ -630,12 +630,11 @@ describe('Auth Service', () => {
       expect(authLib.signAccessToken).not.toHaveBeenCalled();
     });
 
-    it('should revoke ALL refresh tokens and sessions when token reuse is detected', async () => {
-      // Regression test for refresh-token-reuse family revocation:
-      // the token was found, but the atomic rotation reports it was already
-      // consumed by a concurrent request — two parties presented the same
-      // single-use token. The whole family must be revoked, because whichever
-      // party redeemed it first (possibly an attacker) holds a valid token.
+    it('a refresh that loses a race with a parallel one is refused alone: nothing is revoked', async () => {
+      // Two tabs share the cookie and refresh at the same moment; the atomic
+      // rotation lets one win. The loser must get its own code (so the
+      // controller keeps the winner's cookies) and must NOT wipe the user's
+      // sessions: that used to sign the user out on every device.
       const storedToken = {
         ...testRefreshToken,
         sessionId: testSession.id,
@@ -646,19 +645,18 @@ describe('Auth Service', () => {
       vi.mocked(authLib.signAccessToken).mockReturnValue('access');
       vi.mocked(authLib.generateRefreshToken).mockReturnValue('refresh');
       vi.mocked(authLib.getRefreshTokenExpiresAt).mockReturnValue(new Date());
-      vi.mocked(authRepo.rotateRefreshToken).mockResolvedValue(false); // already consumed
-      vi.mocked(authRepo.deleteRefreshTokensByUserId).mockResolvedValue(undefined);
-      vi.mocked(sessionRepository.deleteAllUserSessions).mockResolvedValue(1);
+      vi.mocked(authRepo.rotateRefreshToken).mockResolvedValue(false); // the parallel request rotated it first
 
-      // Act & Assert
-      await expect(authService.refresh(validRefreshToken)).rejects.toThrow(UnauthorizedError);
-      expect(authRepo.deleteRefreshTokensByUserId).toHaveBeenCalledWith(testUsers.validUser.id);
-      expect(sessionRepository.deleteAllUserSessions).toHaveBeenCalledWith(testUsers.validUser.id);
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({
+        statusCode: 401,
+        code: 'REFRESH_TOKEN_ROTATED',
+      });
+      expect(authRepo.deleteRefreshTokensByUserId).not.toHaveBeenCalled();
+      expect(sessionRepository.deleteAllUserSessions).not.toHaveBeenCalled();
     });
 
     it('should NOT revoke the token family on a successful rotation', async () => {
-      // Companion to the reuse test — the revocation path must not fire on
-      // the happy path.
+      // Companion to the race test: nothing is revoked on a normal rotation either.
       const storedToken = {
         ...testRefreshToken,
         sessionId: testSession.id,

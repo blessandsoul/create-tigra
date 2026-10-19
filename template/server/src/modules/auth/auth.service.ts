@@ -21,6 +21,9 @@ import * as authRepo from './auth.repo.js';
 import { sessionRepository } from './session.repo.js';
 import type { RegisterInput, LoginInput } from './auth.schemas.js';
 
+/** A refresh that lost a race with a parallel one (see refresh()); its cookies must stay. */
+export const REFRESH_TOKEN_ROTATED = 'REFRESH_TOKEN_ROTATED';
+
 const PASSWORD_RESET_TTL = 3600; // 1 hour in seconds
 const PASSWORD_RESET_PREFIX = 'pw-reset:';
 const PASSWORD_RESET_USER_PREFIX = 'pw-reset-user:';
@@ -355,26 +358,16 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
   });
 
   if (!rotated) {
-    // REUSE DETECTED: the token existed when we looked it up but was consumed
-    // by a concurrent request before we could rotate it — two parties presented
-    // the same single-use token. We cannot tell which one is the attacker, and
-    // whichever redeemed it first already holds a freshly rotated valid token.
-    // Revoke the entire token family: every refresh token and session for this
-    // user. Both legit client and attacker must re-authenticate.
-    //
-    // NOTE: this covers the *detectable* reuse path. Refresh tokens are opaque
-    // random UUIDs (no JWT claims), so a token that is not found in the DB at
-    // all (deleted in an earlier rotation) cannot be attributed to a user, and
-    // the initial not-found lookup above can only reject it. Full replay
-    // attribution would require tombstoning consumed tokens (e.g. a revokedAt
-    // column) instead of deleting them — a schema change out of scope here.
-    logger.warn(
-      { userId: user.id },
-      '[AUTH] Refresh token reuse detected — revoking all sessions and refresh tokens for user',
-    );
-    await authRepo.deleteRefreshTokensByUserId(user.id);
-    await sessionRepository.deleteAllUserSessions(user.id);
-    throw new UnauthorizedError('Refresh token already used', 'INVALID_REFRESH_TOKEN');
+    // A parallel request rotated this token first. That is normally two tabs
+    // of the same browser refreshing at once (they share the cookie and the
+    // 15-minute access token, so both refresh when it expires). The winner's
+    // response has already set the new cookies, so refuse ONLY this request,
+    // with a code the controller recognises so it does NOT clear those cookies.
+    // Nothing is revoked: wiping every session here used to sign the user out
+    // on all devices for a harmless race, while a real replay of a stolen old
+    // token arrives later and is rejected above as not found.
+    logger.info({ userId: user.id }, '[AUTH] Parallel refresh lost the race; refusing only this request');
+    throw new UnauthorizedError('Refresh token already used by a parallel request', REFRESH_TOKEN_ROTATED);
   }
 
   return {

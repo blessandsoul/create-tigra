@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { successResponse } from '@shared/responses/successResponse.js';
 import { UnauthorizedError, ForbiddenError } from '@shared/errors/errors.js';
+import { isAppError } from '@shared/errors/AppError.js';
 import { setAuthCookies, clearAuthCookies } from '@libs/cookies.js';
 import { getClientIp } from '@libs/client-ip.js';
 import type {
@@ -63,7 +64,11 @@ export async function refresh(
     // Clear all auth cookies so the browser stops replaying them — otherwise the
     // client keeps retrying refresh and middleware keeps redirecting, producing
     // an infinite loop that trips the rate limiter.
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+    // Except a lost race with a parallel refresh (REFRESH_TOKEN_ROTATED): that
+    // browser already holds the winner's fresh cookies, and clearing them here
+    // would sign it out.
+    const lostRace = isAppError(error) && error.code === authService.REFRESH_TOKEN_ROTATED;
+    if (!lostRace && (error instanceof UnauthorizedError || error instanceof ForbiddenError)) {
       clearAuthCookies(reply);
     }
     throw error;
