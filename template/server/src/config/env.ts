@@ -148,10 +148,14 @@ const envSchema = z.object({
   COOKIE_DOMAIN: optionalEnv(z.string().optional()),
 
   // --- Account Activation ---
-  // When true (default), new users start with emailVerifiedAt = null and cannot
-  // sign in until they verify their email. When false, they count as verified
-  // immediately. This never touches isActive, which is only the admin ban switch.
-  REQUIRE_USER_VERIFICATION: envBoolean(true),
+  // When true, new users start with emailVerifiedAt = null and cannot sign in
+  // until they verify their email; when false they count as verified at once.
+  // The default is false in projects without the email-verification module:
+  // only that module provides the verify route, so "on" without it would lock
+  // every new user out. Adding the module (at scaffold time or with
+  // `create-tigra add email-verification`) switches the default to true.
+  // Never touches isActive (the admin ban switch).
+  REQUIRE_USER_VERIFICATION: envBoolean(false),
 
   // --- CORS ---
   // In development: CORS_ORIGIN is optional (allows all origins)

@@ -255,22 +255,9 @@ function registerAddCommand(program) {
           const { applyEmailVerificationModule } = await import(
             '../lib/patchers/email-verification.patcher.js'
           );
+          // Also switches REQUIRE_USER_VERIFICATION on (env.ts default + every
+          // server env file), exactly as at scaffold time.
           await applyEmailVerificationModule(projectDir);
-
-          // Set REQUIRE_USER_VERIFICATION=true in .env if it's currently false
-          for (const envFile of ['server/.env.example', 'server/.env']) {
-            const envPath = path.join(projectDir, envFile);
-            if (await fs.pathExists(envPath)) {
-              const content = await fs.readFile(envPath, 'utf-8');
-              if (content.includes('REQUIRE_USER_VERIFICATION=false')) {
-                await fs.writeFile(
-                  envPath,
-                  content.replace('REQUIRE_USER_VERIFICATION=false', 'REQUIRE_USER_VERIFICATION=true'),
-                  'utf-8',
-                );
-              }
-            }
-          }
 
           spinner.succeed('Email verification module added!');
         } catch (error) {
@@ -428,23 +415,12 @@ async function main() {
           }
         }
 
-        // Apply email verification module if selected
+        // Apply email verification module if selected. The template ships with
+        // REQUIRE_USER_VERIFICATION off everywhere (no verify route without the
+        // module); the patcher switches it on in env.ts and every env file.
         if (enableVerification) {
           const { applyEmailVerificationModule } = await import('../lib/patchers/email-verification.patcher.js');
           await applyEmailVerificationModule(targetDir);
-        } else {
-          // Disable verification requirement in .env files
-          for (const envFile of ['server/.env.example', 'server/.env']) {
-            const envPath = path.join(targetDir, envFile);
-            if (await fs.pathExists(envPath)) {
-              const content = await fs.readFile(envPath, 'utf-8');
-              await fs.writeFile(
-                envPath,
-                content.replace('REQUIRE_USER_VERIFICATION=true', 'REQUIRE_USER_VERIFICATION=false'),
-                'utf-8',
-              );
-            }
-          }
         }
 
         spinner.succeed('Project scaffolded successfully!');

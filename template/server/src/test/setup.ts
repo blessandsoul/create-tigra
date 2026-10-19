@@ -13,8 +13,9 @@ process.env.JWT_ACCESS_EXPIRY = '15m';
 process.env.JWT_REFRESH_EXPIRY = '7d';
 process.env.PORT = '3000';
 process.env.HOST = '0.0.0.0';
-// REQUIRE_USER_VERIFICATION defaults to 'true', and env.ts exits when it is
-// enabled without RESEND_API_KEY. Tests don't send email — disable it.
+// Pinned off (the template default; the email module switches the default to
+// true): env.ts exits when it is on without RESEND_API_KEY, and tests send no
+// email. Tests that need it on switch it explicitly.
 process.env.REQUIRE_USER_VERIFICATION = 'false';
 
 // Test user data

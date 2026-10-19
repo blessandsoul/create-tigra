@@ -99,9 +99,15 @@ describe('env validation at boot', { timeout: 60_000 }, () => {
     expect(parsed({ ...BASE, NODE_ENV: 'development', RATE_LIMIT_ENABLED: 'TRUE' }).RATE_LIMIT_ENABLED).toBe(true);
     expect(parsed({ ...BASE, NODE_ENV: 'development', RATE_LIMIT_ENABLED: ' False ' }).RATE_LIMIT_ENABLED).toBe(false);
     expect(parsed({ ...BASE, NODE_ENV: 'development' }).RATE_LIMIT_ENABLED).toBe(true);
-    // Verification defaults to on, which then requires a Resend key.
-    const verification = parsed({ ...REQUIRED, NODE_ENV: 'development', RESEND_API_KEY: 're_test' });
-    expect(verification.REQUIRE_USER_VERIFICATION).toBe(true);
+    // Verification defaults to OFF in the template (no verify route without the
+    // email module), so no Resend key is needed when it is left unset.
+    expect(parsed({ ...REQUIRED, NODE_ENV: 'development' }).REQUIRE_USER_VERIFICATION).toBe(false);
+  });
+
+  it('refuses verification switched on without a Resend key', () => {
+    const result = boot({ ...REQUIRED, NODE_ENV: 'development', REQUIRE_USER_VERIFICATION: 'true' });
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('RESEND_API_KEY is required when REQUIRE_USER_VERIFICATION is enabled');
   });
 
   it('refuses a switch value that is not true or false instead of reading it as off', () => {
