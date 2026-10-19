@@ -214,6 +214,8 @@ export interface EmailStub {
   sent: CaughtEmail[];
   /** The emails sent to one address, newest last. */
   to(address: string): CaughtEmail[];
+  /** How later sends are answered: after `delayMs`, with `status` (default 200 after 0 ms). */
+  respond(how: { delayMs?: number; status?: number }): void;
   close(): Promise<void>;
 }
 
@@ -225,6 +227,7 @@ export interface EmailStub {
  */
 export async function startEmailStub(): Promise<EmailStub> {
   const sent: CaughtEmail[] = [];
+  let answer = { delayMs: 0, status: 200 };
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (chunk: Buffer) => (raw += chunk.toString('utf8')));
@@ -242,8 +245,14 @@ export async function startEmailStub(): Promise<EmailStub> {
         html,
         link: /href="([^"]*(?:verify-account|reset-password)\?token=[^"]+)"/.exec(html)?.[1] ?? null,
       });
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ id: `stub_${sent.length}` }));
+      const { delayMs, status } = answer;
+      const reply = (): void => {
+        if (res.destroyed) return; // the app gave up waiting
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(status === 200 ? { id: `stub_${sent.length}` } : { name: 'application_error', message: 'stub failure' }));
+      };
+      if (delayMs > 0) setTimeout(reply, delayMs).unref();
+      else reply();
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -252,7 +261,13 @@ export async function startEmailStub(): Promise<EmailStub> {
   return {
     sent,
     to: (address) => sent.filter((e) => e.to.includes(address)),
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    respond: ({ delayMs = 0, status = 200 }): void => {
+      answer = { delayMs, status };
+    },
+    close: (): Promise<void> => {
+      server.closeAllConnections();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    },
   };
 }
 
