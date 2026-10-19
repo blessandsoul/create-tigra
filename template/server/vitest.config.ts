@@ -25,15 +25,17 @@ export default defineConfig({
         'scripts/**',
       ],
       // A ratchet, not a target: the unit suite's real numbers when they were
-      // set (2026-10-20), rounded down. `npm run test:coverage` (and CI) fails
-      // if coverage drops below them; raise them when tests are added. Routes
-      // and controllers are tested by the integration suite instead
-      // (npm run test:integration), which this gate does not count.
+      // set (2026-10-20), rounded down, taken from a project made with the
+      // email-verification module (its code adds lines no unit test covers, so
+      // it sits about one point below a plain project). `npm run test:coverage`
+      // (and CI) fails if coverage drops below them; raise them when tests are
+      // added. Routes and controllers are tested by the integration suite
+      // instead (npm run test:integration), which this gate does not count.
       thresholds: {
-        lines: 63,
-        functions: 57,
-        branches: 70,
-        statements: 63,
+        lines: 62,
+        functions: 56,
+        branches: 69,
+        statements: 62,
         // Money-path forward-contract: any future payments module is held to a
         // stricter bar than the 80% global gate. The scaffold ships no payments
         // module, so this glob matches nothing today and is vacuously satisfied;
