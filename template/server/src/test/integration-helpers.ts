@@ -222,6 +222,11 @@ export interface EmailStub {
   sent: CaughtEmail[];
   /** The emails sent to one address, newest last. */
   to(address: string): CaughtEmail[];
+  /**
+   * Waits (up to 5 s) until `count` emails to the address match, for emails
+   * the app sends after it has answered (the verification email on register).
+   */
+  waitFor(address: string, match?: (email: CaughtEmail) => boolean, count?: number): Promise<CaughtEmail[]>;
   /** How later sends are answered: after `delayMs`, with `status` (default 200 after 0 ms). */
   respond(how: { delayMs?: number; status?: number }): void;
   close(): Promise<void>;
@@ -269,6 +274,13 @@ export async function startEmailStub(): Promise<EmailStub> {
   return {
     sent,
     to: (address) => sent.filter((e) => e.to.includes(address)),
+    waitFor: async (address, match = (): boolean => true, count = 1): Promise<CaughtEmail[]> => {
+      const found = (): CaughtEmail[] => sent.filter((e) => e.to.includes(address) && match(e));
+      for (let waited = 0; found().length < count && waited < 5_000; waited += 50) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return found();
+    },
     respond: ({ delayMs = 0, status = 200 }): void => {
       answer = { delayMs, status };
     },
