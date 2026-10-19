@@ -16,8 +16,15 @@ const HOUR = 60 * MINUTE;
 /** A stand-in app that records onClose hooks so the test can "close" it. */
 function fakeApp(): { app: FastifyInstance; close: () => Promise<void> } {
   const hooks: Array<() => Promise<void>> = [];
-  const app = { addHook: (name: string, fn: () => Promise<void>) => name === 'onClose' && hooks.push(fn) };
-  return { app: app as unknown as FastifyInstance, close: async () => { for (const h of hooks) await h(); } };
+  const app = {
+    addHook: (name: string, fn: () => Promise<void>): void => {
+      if (name === 'onClose') hooks.push(fn);
+    },
+  };
+  const close = async (): Promise<void> => {
+    for (const h of hooks) await h();
+  };
+  return { app: app as unknown as FastifyInstance, close };
 }
 
 beforeEach(() => {
