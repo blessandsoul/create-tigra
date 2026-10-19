@@ -26,6 +26,10 @@ jobs:
         run: npm ci --include=optional
       - name: Generate Prisma client
         run: npx prisma generate
+      # The shipped 0_init migration must still create exactly what schema.prisma
+      # describes (new projects get their tables from it; no database needed).
+      - name: Init migration matches schema
+        run: node ../../scripts/check-init-migration.mjs
       - name: Typecheck
         run: npm run typecheck
       - name: Lint

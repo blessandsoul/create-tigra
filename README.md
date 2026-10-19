@@ -63,7 +63,7 @@ docker compose up -d
 #    not copy .env.example over them: the server refuses its placeholder secret)
 npm ci
 npm run prisma:generate
-npm run prisma:migrate:dev -- --name init
+npm run prisma:migrate:dev   # creates the tables from the shipped 0_init migration
 
 # 3. Start the server
 npm run dev

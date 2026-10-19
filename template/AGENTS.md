@@ -39,7 +39,7 @@ Every implementation change MUST include a human-readability pass. Add or update
 
 - The Dockerfile in each app is its production contract. Re-check it when changing ports, entry points, build output, native dependencies, runtime files, health routes, or environment variables.
 - The client must retain Next.js `output: "standalone"`; every `NEXT_PUBLIC_*` value is public and must be available at Docker build time.
-- The server container applies `prisma migrate deploy` before startup and exposes unauthenticated `GET /api/v1/live` for orchestration.
+- The server container applies `prisma migrate deploy` before startup and exposes unauthenticated `GET /api/v1/live` for orchestration. It refuses to start when the image has no migrations (the database would have no tables), so keep `server/prisma/migrations/` committed, starting with the shipped `0_init`, and never switch to `prisma db push` for production.
 - Both Dockerfiles build sharp against a pinned libvips so images run on CPUs without x86-64-v2. When upgrading sharp (or Next, which brings its own sharp), check the new sharp's `config.libvips` range; if `LIBVIPS_VERSION` no longer satisfies it, bump `LIBVIPS_VERSION` and `LIBVIPS_SHA256` in both Dockerfiles. The build fails with a clear message if they do not match.
 - Write `package-lock.json` with npm 11.19 or newer (`npm -v`). The images run `npm ci` with npm 11.19.1, which rejects lockfiles from npm 10 and from early npm 11 (11.6.1 was seen failing).
 - `server/docker-compose.yml` is local-development infrastructure, not a production topology. Keep host ports loopback-bound and admin UIs opt-in through the `tools` profile.

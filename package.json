@@ -42,7 +42,8 @@
   },
   "homepage": "https://github.com/blessandsoul/create-tigra#readme",
   "scripts": {
-    "create:test": "node -e \"import('fs').then(f=>f.rmSync('testapp',{recursive:true,force:true}))\" && node bin/create-tigra.js testapp"
+    "create:test": "node -e \"import('fs').then(f=>f.rmSync('testapp',{recursive:true,force:true}))\" && node bin/create-tigra.js testapp",
+    "check:init-migration": "node scripts/check-init-migration.mjs"
   },
   "dependencies": {
     "chalk": "^5.4.1",

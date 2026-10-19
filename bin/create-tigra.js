@@ -479,7 +479,9 @@ async function main() {
       console.log();
       console.log(cyan('    2 ') + 'Set up database');
       console.log(dim('      npm run prisma:generate'));
-      console.log(dim('      npm run prisma:migrate:dev -- --name init'));
+      // No `--name init`: the template ships prisma/migrations/0_init, so this
+      // only applies it (creating the tables) unless the schema was changed.
+      console.log(dim('      npm run prisma:migrate:dev'));
       console.log();
       console.log(cyan('    3 ') + 'Start the server');
       console.log(dim('      npm run dev'));

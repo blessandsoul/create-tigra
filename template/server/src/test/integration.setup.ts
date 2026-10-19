@@ -36,11 +36,11 @@
  * `beforeExit`, and rely on Testcontainers' Ryuk reaper as the backstop — it
  * removes any container we started the moment this process dies, even on crash.
  *
- * The committed template ships NO `prisma/migrations/` directory (apps run
- * `prisma migrate dev` locally to author their first migration). `prisma migrate
- * deploy` therefore has nothing to apply against a fresh container. We use
- * `prisma db push` instead — it syncs the Prisma schema straight to the empty
- * container database, which is exactly what an ephemeral test DB wants.
+ * The schema is synced with `prisma db push`, which writes the current Prisma
+ * schema straight into the empty container database: exactly what an ephemeral
+ * test DB wants, and independent of the migrations in `prisma/migrations/`
+ * (the template ships `0_init`; production applies migrations with
+ * `prisma migrate deploy` at container start).
  */
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -120,9 +120,9 @@ async function bootContainers(): Promise<IntegrationContainers> {
   process.env.UPLOAD_PUBLIC_DIR = uploadPublicDir;
   process.env.UPLOAD_PRIVATE_DIR = uploadPrivateDir;
 
-  // Sync the Prisma schema into the fresh container DB. `db push` (not
-  // `migrate deploy`) because the template ships no migrations. The container's
-  // wait strategy already guarantees MySQL is accepting connections by here.
+  // Sync the Prisma schema into the fresh container DB with `db push` (see the
+  // file header). The container's wait strategy already guarantees MySQL is
+  // accepting connections by here.
   execSync('npx prisma db push --skip-generate --accept-data-loss', {
     cwd: serverRoot,
     env: process.env,

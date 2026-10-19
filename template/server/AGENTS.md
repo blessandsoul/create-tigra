@@ -9,7 +9,7 @@
 
 ## Sources of truth
 
-- `prisma/schema.prisma` owns models, relations, indexes, and database naming. Change schema through reviewed Prisma migrations; production is forward-only with `prisma migrate deploy`.
+- `prisma/schema.prisma` owns models, relations, indexes, and database naming. Change schema through reviewed Prisma migrations; production is forward-only with `prisma migrate deploy`. `prisma/migrations/0_init` (shipped with the template) creates the first tables; never edit or delete an applied migration, add a new one with `npm run prisma:migrate:dev`.
 - `src/config/env.ts` owns runtime configuration validation. Keep `.env.example` and `.env.example.production` synchronized, but keep real secrets out of the repository and image.
 - Zod route schemas own external input validation. Services own authorization and business invariants; repositories must not decide access policy.
 
@@ -19,7 +19,7 @@
 - Rate limits have one source, `src/config/rate-limit.config.ts` (`docs/rate-limits.md` explains all of them). A new route gets the 200/min default automatically; give it its own `RATE_LIMITS` entry only when it needs another number. Every "slow down" answer must be a `TooManyRequestsError` (or `IP_BLOCKED`) carrying `retryAfterSeconds`. Any new flow that sends email anyone can trigger calls `consumeEmailQuota(email)` before looking up the account (public counter); only flows that prove the owner (e.g. a correct password) may use their own counter.
 - Use Prisma parameterization and explicit safe projections; never expose password hashes, tokens, internal errors, or secret-bearing upstream payloads.
 - Keep public uploads under the static public root. Private uploads stay outside it and are served only through authenticated, owner-scoped routes; preserve filename/path validation.
-- The production image runs non-root, applies `prisma migrate deploy` before `node dist/server.js`, and probes unauthenticated `GET /api/v1/live`. Preserve writable ownership for runtime storage and add explicit Alpine packages for new native runtime dependencies.
+- The production image runs non-root, refuses to start without any migration, applies `prisma migrate deploy` before `node dist/server.js`, and probes unauthenticated `GET /api/v1/live`. Preserve writable ownership for runtime storage and add explicit Alpine packages for new native runtime dependencies.
 
 ## Mandatory security completion gate
 

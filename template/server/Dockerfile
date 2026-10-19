@@ -285,5 +285,12 @@ ENTRYPOINT ["dumb-init", "--"]
 # when there is nothing to do. Requirements, all satisfied above:
 #   - prisma CLI in ./node_modules (installed in stage 2, copied with node_modules)
 #   - ./prisma/schema.prisma + ./prisma/migrations (copied from builder)
+# Refuses to start when the image holds NO migration at all (prisma/migrations
+# deleted, never committed, or the project switched to `db push`): `migrate
+# deploy` would then succeed with nothing to apply and the server would boot
+# healthy on a database without tables, failing only at the first real query.
+# Exiting instead fails the Coolify deploy with this message in the logs, and
+# the previous version keeps serving. New projects ship 0_init, so this only
+# fires when that safety net was removed.
 # `exec` replaces the shell so node receives signals from dumb-init directly.
-CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/server.js"]
+CMD ["sh", "-c", "if ! ls prisma/migrations/*/migration.sql >/dev/null 2>&1; then echo 'Refusing to start: no Prisma migrations in this image (prisma/migrations/*/migration.sql), so the database would have no tables. Create them with npm run prisma:migrate:dev and commit prisma/migrations.' >&2; exit 1; fi; npx prisma migrate deploy && exec node dist/server.js"]
