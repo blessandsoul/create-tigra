@@ -35,6 +35,7 @@ const mockRedis = vi.hoisted(() => ({
   expire: vi.fn(),
   set: vi.fn(),
   get: vi.fn(),
+  getdel: vi.fn(),
   del: vi.fn(),
 }));
 
@@ -749,12 +750,46 @@ describe('Auth Service', () => {
         statusCode: 503,
         code: 'SERVICE_UNAVAILABLE',
       });
-      expect(mockRedis.get).not.toHaveBeenCalled();
+      expect(mockRedis.getdel).not.toHaveBeenCalled();
     });
 
     it('forgotPassword still answers normally while Redis is connected (unknown email: no error)', async () => {
       vi.mocked(authRepo.findUserByEmail).mockResolvedValue(null);
       await expect(authService.forgotPassword('nobody@example.com')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('consumes the token in one step (GETDEL), changes the password and ends all sessions', async () => {
+      mockRedis.getdel.mockResolvedValue(testUsers.validUser.id);
+      vi.mocked(authRepo.findUserById).mockResolvedValue(testUsers.validUser);
+      vi.mocked(hashPassword).mockResolvedValue('new-hash');
+
+      await authService.resetPassword('reset-token', 'New-Passw0rd-123!');
+
+      expect(mockRedis.getdel).toHaveBeenCalledTimes(1);
+      expect(mockRedis.get).not.toHaveBeenCalled();
+      expect(authRepo.updateUserPassword).toHaveBeenCalledWith(testUsers.validUser.id, 'new-hash');
+      expect(mockRedis.del).toHaveBeenCalledWith(`pw-reset-user:${testUsers.validUser.id}`);
+      expect(sessionRepository.deleteAllUserSessions).toHaveBeenCalledWith(testUsers.validUser.id);
+      expect(authRepo.deleteRefreshTokensByUserId).toHaveBeenCalledWith(testUsers.validUser.id);
+    });
+
+    it('the same link used twice at once changes the password only once', async () => {
+      // Redis hands the token to the first GETDEL only.
+      mockRedis.getdel.mockResolvedValueOnce(testUsers.validUser.id).mockResolvedValueOnce(null);
+      vi.mocked(authRepo.findUserById).mockResolvedValue(testUsers.validUser);
+      vi.mocked(hashPassword).mockResolvedValue('new-hash');
+
+      const results = await Promise.allSettled([
+        authService.resetPassword('reset-token', 'New-Passw0rd-123!'),
+        authService.resetPassword('reset-token', 'New-Passw0rd-123!'),
+      ]);
+
+      expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+      const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect(rejected.reason).toMatchObject({ statusCode: 400, code: 'INVALID_RESET_TOKEN' });
+      expect(authRepo.updateUserPassword).toHaveBeenCalledTimes(1);
     });
   });
 

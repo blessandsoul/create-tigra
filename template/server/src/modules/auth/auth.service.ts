@@ -516,7 +516,11 @@ export async function resetPassword(token: string, newPassword: string): Promise
   assertRedisReady('Password reset'); // the token is stored in Redis
   const redis = getRedis();
 
-  const userId = await redis.get(`${PASSWORD_RESET_PREFIX}${token}`);
+  // GETDEL reads and removes the token in one step, so a link used twice at
+  // the same instant changes the password only once: the second request finds
+  // nothing. (A separate GET then DEL let both requests through.) Consumed
+  // before the work below, so a failure after this point means a new link.
+  const userId = await redis.getdel(`${PASSWORD_RESET_PREFIX}${token}`);
   if (!userId) {
     throw new BadRequestError('Invalid or expired reset token', 'INVALID_RESET_TOKEN');
   }
@@ -529,8 +533,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
   const hashedPassword = await hashPassword(newPassword);
   await authRepo.updateUserPassword(userId, hashedPassword);
 
-  // Clean up Redis tokens
-  await redis.del(`${PASSWORD_RESET_PREFIX}${token}`);
+  // The per-user pointer to the (now consumed) token
   await redis.del(`${PASSWORD_RESET_USER_PREFIX}${userId}`);
 
   // Invalidate all sessions for security (force re-login with new password)
