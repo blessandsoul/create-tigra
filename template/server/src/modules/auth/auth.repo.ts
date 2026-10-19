@@ -109,9 +109,21 @@ export async function rotateRefreshToken(
   }
 }
 
-export async function deleteRefreshTokensByUserId(userId: string): Promise<void> {
+/**
+ * Delete a user's refresh tokens; with `exceptSessionId`, keep that one
+ * session's tokens (an owner's password change keeps the asking device signed
+ * in). Tokens without a session are always deleted: the explicit `sessionId:
+ * null` branch is needed because SQL `sessionId <> x` skips NULL rows.
+ */
+export async function deleteRefreshTokensByUserId(
+  userId: string,
+  options: { exceptSessionId?: string } = {},
+): Promise<void> {
+  const { exceptSessionId } = options;
   await prisma.refreshToken.deleteMany({
-    where: { userId },
+    where: exceptSessionId
+      ? { userId, OR: [{ sessionId: null }, { sessionId: { not: exceptSessionId } }] }
+      : { userId },
   });
 }
 

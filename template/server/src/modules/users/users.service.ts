@@ -176,8 +176,16 @@ class UsersService {
   /**
    * Changes a user's password
    *
+   * Afterwards every OTHER session of the user ends at once. The owner's own
+   * session (`keepSessionId`, the device that asked) stays signed in: ending it
+   * too dropped the user on the login page right after "Password changed".
+   * An admin-forced change (skipPasswordVerification, no keepSessionId) and a
+   * password reset (auth.service) still end every session.
+   *
    * @param userId - User's unique ID
    * @param input - Current and new password
+   * @param skipPasswordVerification - true for an admin acting on another user
+   * @param keepSessionId - the owner's current session (request.user.sessionId)
    * @throws NotFoundError if user not found
    * @throws ValidationError (422 INVALID_CURRENT_PASSWORD) if the current password is wrong
    * @throws BadRequestError if new password same as current
@@ -185,7 +193,8 @@ class UsersService {
   async changePassword(
     userId: string,
     input: ChangePasswordInput | AdminChangePasswordInput,
-    skipPasswordVerification: boolean = false
+    skipPasswordVerification: boolean = false,
+    keepSessionId?: string
   ): Promise<void> {
     const user = await authRepo.findUserById(userId);
     if (!user) {
@@ -212,11 +221,20 @@ class UsersService {
 
     logger.info({ msg: 'User password changed', userId });
 
-    // Security: invalidate all sessions and refresh tokens
-    await sessionRepository.deleteAllUserSessions(userId);
-    await authRepo.deleteRefreshTokensByUserId(userId);
+    // Security: end every other session and its refresh tokens. Only an owner
+    // change keeps its own session; without a session id, end them all.
+    const keep = !skipPasswordVerification && keepSessionId ? keepSessionId : undefined;
+    if (keep) {
+      await sessionRepository.deleteOtherUserSessions(userId, keep);
+      await authRepo.deleteRefreshTokensByUserId(userId, { exceptSessionId: keep });
+    } else {
+      await sessionRepository.deleteAllUserSessions(userId);
+      await authRepo.deleteRefreshTokensByUserId(userId);
+    }
 
-    logger.info({ msg: 'All sessions invalidated after password change', userId });
+    logger.info(
+      { msg: 'Sessions invalidated after password change', userId, keptCurrentSession: Boolean(keep) },
+    );
   }
 
   /**

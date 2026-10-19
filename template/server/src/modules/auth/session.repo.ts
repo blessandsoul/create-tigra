@@ -63,6 +63,18 @@ export class SessionRepository {
   }
 
   /**
+   * Delete every session of a user EXCEPT one (the device that asked). Used by
+   * an owner's password change: other devices are signed out, this one stays.
+   * Their refresh tokens go with them (onDelete: Cascade on RefreshToken.session).
+   */
+  async deleteOtherUserSessions(userId: string, keepSessionId: string): Promise<number> {
+    const result = await prisma.session.deleteMany({
+      where: { userId, id: { not: keepSessionId } },
+    });
+    return result.count;
+  }
+
+  /**
    * Delete expired sessions (for cleanup cron job)
    */
   async deleteExpiredSessions(): Promise<number> {

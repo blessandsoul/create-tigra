@@ -81,4 +81,20 @@ describe('users.service password confirmation', () => {
     await expect(usersService.deleteAccount(user.id, 'right')).resolves.toBeUndefined();
     expect(usersRepository.softDeleteUser).toHaveBeenCalledWith(user.id);
   });
+
+  it("an owner's password change keeps the asking device signed in and ends every other session", async () => {
+    vi.mocked(verifyPassword).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await usersService.changePassword(user.id, { currentPassword: 'right', newPassword: 'New-Passw0rd-123!' }, false, 'session-here');
+    expect(sessionRepository.deleteOtherUserSessions).toHaveBeenCalledWith(user.id, 'session-here');
+    expect(authRepo.deleteRefreshTokensByUserId).toHaveBeenCalledWith(user.id, { exceptSessionId: 'session-here' });
+    expect(sessionRepository.deleteAllUserSessions).not.toHaveBeenCalled();
+  });
+
+  it('an admin-forced password change still ends every session of that user', async () => {
+    vi.mocked(verifyPassword).mockResolvedValue(false); // only the "same as current" check runs
+    await usersService.changePassword(user.id, { newPassword: 'New-Passw0rd-123!' }, true, 'admins-own-session');
+    expect(sessionRepository.deleteAllUserSessions).toHaveBeenCalledWith(user.id);
+    expect(authRepo.deleteRefreshTokensByUserId).toHaveBeenCalledWith(user.id);
+    expect(sessionRepository.deleteOtherUserSessions).not.toHaveBeenCalled();
+  });
 });

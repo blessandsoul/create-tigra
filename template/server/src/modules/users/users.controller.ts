@@ -133,7 +133,8 @@ class UsersController {
     } else {
       const parsed = ChangePasswordSchema.parse(request.body);
       logger.info({ msg: 'Change password request', userId });
-      await usersService.changePassword(userId, parsed, false);
+      // Keep the device that asked signed in; every other session ends.
+      await usersService.changePassword(userId, parsed, false, request.user.sessionId);
     }
 
     return reply.send(successResponse('Password changed successfully', null));
