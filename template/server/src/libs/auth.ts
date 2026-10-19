@@ -73,6 +73,15 @@ export async function authenticate(
       : null;
   if (!session) {
     clearAuthCookies(reply);
+    // A ban deletes every session of the account (admin.service toggleUserStatus),
+    // so a banned user's still-unexpired token lands here. Say so, as before
+    // tokens were bound to sessions: 403 ACCOUNT_DEACTIVATED lets the app explain
+    // why, instead of a bare "session ended". One extra query, on this path only.
+    const account = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isActive: true, emailVerifiedAt: true, deletedAt: true },
+    });
+    if (account && !account.deletedAt) assertAccountCanSignIn(account);
     throw new UnauthorizedError('Session ended', 'SESSION_EXPIRED');
   }
   const { user } = session;

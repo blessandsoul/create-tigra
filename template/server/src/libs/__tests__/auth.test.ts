@@ -9,7 +9,7 @@ import { authenticate, authorize } from '../auth.js';
 // and banned or deleted accounts are refused.
 
 vi.mock('@libs/prisma.js', () => ({
-  prisma: { session: { findFirst: vi.fn() } },
+  prisma: { session: { findFirst: vi.fn() }, user: { findUnique: vi.fn() } },
 }));
 vi.mock('@libs/cookies.js', () => ({ clearAuthCookies: vi.fn() }));
 
@@ -89,6 +89,7 @@ describe('authenticate', () => {
 
   it('refuses a token whose session ended (logout, revoke, password reset) and clears its cookies', async () => {
     vi.mocked(prisma.session.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ isActive: true, emailVerifiedAt: new Date(), deletedAt: null } as never);
     await expect(authenticate(makeRequest('USER'), reply)).rejects.toMatchObject({
       statusCode: 401,
       code: 'SESSION_EXPIRED',
@@ -102,6 +103,16 @@ describe('authenticate', () => {
       code: 'SESSION_EXPIRED',
     });
     expect(prisma.session.findFirst).not.toHaveBeenCalled();
+    expect(clearAuthCookies).toHaveBeenCalledWith(reply);
+  });
+
+  it("a banned user's token (the ban deleted its sessions) still says ACCOUNT_DEACTIVATED", async () => {
+    vi.mocked(prisma.session.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ isActive: false, emailVerifiedAt: new Date(), deletedAt: null } as never);
+    await expect(authenticate(makeRequest('USER'), reply)).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'ACCOUNT_DEACTIVATED',
+    });
     expect(clearAuthCookies).toHaveBeenCalledWith(reply);
   });
 });
