@@ -4,10 +4,19 @@ import { parseDurationMs } from '@libs/duration.js';
 
 const isProduction = env.NODE_ENV === 'production';
 
-// Cross-origin deployment: client and API on different subdomains require sameSite 'none'.
-// Same-origin deployment (or local dev): 'strict' is the safest default.
-const isCrossOrigin = Boolean(env.COOKIE_DOMAIN);
-const sameSitePolicy = isProduction && isCrossOrigin ? 'none' as const : 'strict' as const;
+/**
+ * SameSite per cookie. Sibling subdomains (app.example.com + api.example.com)
+ * are the SAME site, and that is the only split deployment the template
+ * supports (auth_session must be shared through COOKIE_DOMAIN), so no cookie
+ * ever needs SameSite=None (sent along with requests from any website).
+ *  - Token cookies: Strict. Only the client's own same-site fetches to the API
+ *    need them, and Strict keeps every other website's requests bare.
+ *  - auth_session: Lax. It is only a "signed in" marker read by the Next.js
+ *    middleware; Lax lets a link from another site (an email, a search result)
+ *    carry it, so signed-in users are not bounced to /login on arrival.
+ */
+const TOKEN_SAME_SITE = 'strict' as const;
+const SESSION_SAME_SITE = 'lax' as const;
 
 /**
  * Cookie scope rules:
@@ -38,7 +47,7 @@ const REFRESH_TOKEN_PATH = '/api/v1/auth';
  */
 function expireLegacyDomainTokenCookies(reply: FastifyReply): void {
   if (!sessionIndicatorDomain) return;
-  const legacy = { httpOnly: true, secure: isProduction, sameSite: sameSitePolicy, domain: sessionIndicatorDomain };
+  const legacy = { httpOnly: true, secure: isProduction, sameSite: TOKEN_SAME_SITE, domain: sessionIndicatorDomain };
   reply.clearCookie('access_token', { ...legacy, path: ACCESS_TOKEN_PATH });
   reply.clearCookie('refresh_token', { ...legacy, path: REFRESH_TOKEN_PATH });
 }
@@ -53,7 +62,7 @@ export function setAuthCookies(
   reply.setCookie('access_token', accessToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: sameSitePolicy,
+    sameSite: TOKEN_SAME_SITE,
     path: ACCESS_TOKEN_PATH,
     maxAge: Math.floor(ACCESS_TOKEN_MAX_AGE_MS / 1000), // setCookie expects seconds
   });
@@ -61,7 +70,7 @@ export function setAuthCookies(
   reply.setCookie('refresh_token', refreshToken, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: sameSitePolicy,
+    sameSite: TOKEN_SAME_SITE,
     path: REFRESH_TOKEN_PATH,
     maxAge: Math.floor(REFRESH_TOKEN_MAX_AGE_MS / 1000),
   });
@@ -71,7 +80,7 @@ export function setAuthCookies(
   reply.setCookie('auth_session', '1', {
     httpOnly: false,
     secure: isProduction,
-    sameSite: sameSitePolicy,
+    sameSite: SESSION_SAME_SITE,
     domain: sessionIndicatorDomain,
     path: '/',
     maxAge: Math.floor(REFRESH_TOKEN_MAX_AGE_MS / 1000),
@@ -84,21 +93,21 @@ export function clearAuthCookies(reply: FastifyReply): void {
   reply.clearCookie('access_token', {
     httpOnly: true,
     secure: isProduction,
-    sameSite: sameSitePolicy,
+    sameSite: TOKEN_SAME_SITE,
     path: ACCESS_TOKEN_PATH,
   });
 
   reply.clearCookie('refresh_token', {
     httpOnly: true,
     secure: isProduction,
-    sameSite: sameSitePolicy,
+    sameSite: TOKEN_SAME_SITE,
     path: REFRESH_TOKEN_PATH,
   });
 
   reply.clearCookie('auth_session', {
     httpOnly: false,
     secure: isProduction,
-    sameSite: sameSitePolicy,
+    sameSite: SESSION_SAME_SITE,
     domain: sessionIndicatorDomain,
     path: '/',
   });

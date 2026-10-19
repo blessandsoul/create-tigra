@@ -166,10 +166,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // --- CSRF defense-in-depth: Origin check on state-changing methods ---
-  // With sameSite=none cookies (cross-origin deployments), the browser attaches
-  // auth cookies to cross-site requests. If a browser sends an Origin header on
-  // a state-changing request, it must be same-origin or a configured CORS
-  // origin. Requests WITHOUT an Origin header (curl, Postman, server-to-server,
+  // Second line behind the SameSite cookies (src/libs/cookies.ts): if a browser
+  // sends an Origin header on a state-changing request, it must be same-origin
+  // or a configured CORS origin (e.g. not a compromised sibling subdomain). Requests WITHOUT an Origin header (curl, Postman, server-to-server,
   // health probes) are allowed — they carry no ambient cookies and are not
   // CSRF vectors. See src/libs/origin-check.ts for the full rationale.
   const stateChangingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

@@ -1,17 +1,19 @@
 /**
  * CSRF defense-in-depth — Origin verification for state-changing requests.
  *
- * With cross-origin cookie deployments (sameSite=none), browsers attach auth
- * cookies to cross-site requests. CORS only protects *reading* responses — it
- * does not stop the side effects of a forged POST/PUT/PATCH/DELETE. This check
- * rejects browser-originated state-changing requests whose Origin header is
- * neither the API itself (same-origin) nor a configured CORS origin.
+ * The auth cookies are SameSite Strict/Lax (src/libs/cookies.ts), so another
+ * website's requests do not carry them. This check is the second line: CORS
+ * only protects *reading* responses and does not stop the side effects of a
+ * forged POST/PUT/PATCH/DELETE, e.g. from a compromised sibling subdomain
+ * (same site, so SameSite does not help there). It rejects browser-originated
+ * state-changing requests whose Origin header is neither the API itself
+ * (same-origin) nor a configured CORS origin.
  *
  * Deliberately conservative:
  * - No Origin header → ALLOWED. Non-browser clients (curl, Postman,
  *   server-to-server) omit it, and they carry no ambient cookies, so they are
- *   not CSRF vectors. Browsers always send Origin on cross-site state-changing
- *   requests, which is the only case this defends against.
+ *   not CSRF vectors. Browsers always send Origin on cross-origin
+ *   state-changing requests, which is the only case this defends against.
  * - allowAllOrigins (development CORS) → ALLOWED.
  */
 export function isOriginAllowed(

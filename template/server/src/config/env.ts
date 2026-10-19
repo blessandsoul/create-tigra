@@ -139,8 +139,9 @@ const envSchema = z.object({
       .optional(),
   ),
 
-  // Cookie domain for cross-origin deployments (client ≠ server hostname)
-  // Required when client and API are on different subdomains (e.g., app.example.com + api.example.com)
+  // Cookie domain when client and API run on sibling subdomains of one domain
+  // (e.g., app.example.com + api.example.com; still the same "site", so the
+  // cookies stay SameSite Strict/Lax). Required in that setup.
   // Set to the shared parent domain with a leading dot: ".example.com"
   // Leave empty for same-origin deployments or local development.
   // Applies only to the non-secret auth_session cookie; the token cookies are
