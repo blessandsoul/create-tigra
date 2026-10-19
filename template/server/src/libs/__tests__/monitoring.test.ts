@@ -117,6 +117,42 @@ describe('dependency check cache (5 s, single-flight)', () => {
   });
 });
 
+describe('overall status rules', () => {
+  /** Makes the mocked call take `ms` of fake time, so the 100 ms / 50 ms thresholds apply. */
+  const takes = (ms: number, value: unknown) => (): Promise<unknown> => {
+    vi.advanceTimersByTime(ms);
+    return Promise.resolve(value);
+  };
+
+  it('all fast and memory normal: healthy, every check up', async () => {
+    const report = await monitoring.performHealthCheck();
+    expect(report.status).toBe('healthy');
+    expect(Object.values(report.checks).map((c) => c.status)).toEqual(['up', 'up', 'up', 'up']);
+  });
+
+  it('a database at 100 ms or more: degraded, not unhealthy', async () => {
+    vi.useFakeTimers();
+    vi.mocked(prisma.$queryRaw).mockImplementation(takes(100, [{ 1: 1 }]) as never);
+    const report = await monitoring.performHealthCheck();
+    expect(report.checks.database).toMatchObject({ status: 'degraded', message: 'Database responding slowly' });
+    expect(report.status).toBe('degraded');
+  });
+
+  it('Redis at 50 ms or more: degraded', async () => {
+    vi.useFakeTimers();
+    ping.mockImplementation(takes(50, 'PONG'));
+    const report = await monitoring.performHealthCheck();
+    expect(report.checks.redis).toMatchObject({ status: 'degraded', message: 'Redis responding slowly' });
+    expect(report.status).toBe('degraded');
+  });
+
+  it('the database down wins over everything: unhealthy', async () => {
+    vi.mocked(prisma.$queryRaw).mockRejectedValue(new Error('down'));
+    ping.mockRejectedValue(new Error('down'));
+    expect((await monitoring.performHealthCheck()).status).toBe('unhealthy');
+  });
+});
+
 describe('version and commit in the report', () => {
   it('readAppVersion reads package.json, else answers unknown', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tigra-version-'));
