@@ -9,13 +9,14 @@ import * as authRepo from '@modules/auth/auth.repo.js';
 import { sessionRepository } from '@modules/auth/session.repo.js';
 import { usersRepository } from '../users.repo.js';
 import { hashPassword, verifyPassword } from '@libs/password.js';
+import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { testUsers } from '@/test/setup.js';
 
 vi.mock('@modules/auth/auth.repo.js');
 vi.mock('@modules/auth/session.repo.js');
 vi.mock('../users.repo.js');
 vi.mock('@libs/password.js');
-vi.mock('@libs/storage/file-storage.service.js', () => ({ fileStorageService: {} }));
+vi.mock('@libs/storage/file-storage.service.js', () => ({ fileStorageService: { deleteAvatar: vi.fn() } }));
 vi.mock('@libs/storage/image-optimizer.service.js', () => ({ imageOptimizerService: {} }));
 
 const user = testUsers.validUser;
@@ -59,5 +60,25 @@ describe('users.service password confirmation', () => {
     await usersService.deleteAccount(user.id, 'right');
     expect(usersRepository.softDeleteUser).toHaveBeenCalledWith(user.id);
     expect(sessionRepository.deleteAllUserSessions).toHaveBeenCalledWith(user.id);
+  });
+
+  it('deleteAccount removes the public avatar at once, after the soft delete', async () => {
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    await usersService.deleteAccount(user.id, 'right');
+    expect(fileStorageService.deleteAvatar).toHaveBeenCalledWith(user.id);
+    const softDeletedAt = vi.mocked(usersRepository.softDeleteUser).mock.invocationCallOrder[0];
+    expect(vi.mocked(fileStorageService.deleteAvatar).mock.invocationCallOrder[0]).toBeGreaterThan(softDeletedAt);
+  });
+
+  it('an admin deleting an account removes its public avatar too', async () => {
+    await usersService.deleteAccount(user.id, '', true);
+    expect(fileStorageService.deleteAvatar).toHaveBeenCalledWith(user.id);
+  });
+
+  it('deleteAccount still succeeds when the avatar file cannot be removed (the purge retries)', async () => {
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    vi.mocked(fileStorageService.deleteAvatar).mockRejectedValueOnce(new Error('disk'));
+    await expect(usersService.deleteAccount(user.id, 'right')).resolves.toBeUndefined();
+    expect(usersRepository.softDeleteUser).toHaveBeenCalledWith(user.id);
   });
 });

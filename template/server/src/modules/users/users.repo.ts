@@ -93,7 +93,8 @@ class UsersRepository {
   }
 
   /**
-   * Soft deletes a user by setting deletedAt and isActive = false
+   * Soft deletes a user: deletedAt set, isActive = false, and the avatar URL
+   * cleared (its file is removed right after, see usersService.deleteAccount).
    */
   async softDeleteUser(userId: string): Promise<void> {
     await prisma.user.update({
@@ -101,6 +102,7 @@ class UsersRepository {
       data: {
         deletedAt: new Date(),
         isActive: false,
+        avatarUrl: null,
       },
     });
   }

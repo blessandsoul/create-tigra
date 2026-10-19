@@ -247,11 +247,23 @@ class UsersService {
 
     logger.info({ msg: 'Soft-deleting user account', userId });
 
+    // Also clears avatarUrl (the photo is removed just below).
     await usersRepository.softDeleteUser(userId);
 
     // Delete all sessions and refresh tokens
     await sessionRepository.deleteAllUserSessions(userId);
     await authRepo.deleteRefreshTokensByUserId(userId);
+
+    // The avatar is PUBLIC (/uploads): remove it now, not at the 30-day purge,
+    // so a deleted account's photo stops being reachable at once. A failure
+    // must not undo the deletion: log it, the purge (files first) retries.
+    // Private files stay until the purge, unreachable since the owner can no
+    // longer sign in.
+    try {
+      await fileStorageService.deleteAvatar(userId);
+    } catch (error) {
+      logger.error({ err: error, msg: 'Account deleted but its public avatar could not be removed', userId });
+    }
 
     logger.info({ msg: 'User account deleted', userId });
   }

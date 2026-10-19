@@ -2,9 +2,15 @@
  * Cleanup Deleted Accounts Job
  *
  * Permanently purges soft-deleted user accounts after a 30-day retention period.
- * Hard-deletes the user record (cascades to refresh tokens and sessions; IP
- * blocks the user created as an admin are kept, with blockedBy set to NULL),
- * then deletes all of the user's media from disk (public AND private tier).
+ * Deletes all of the user's media from disk first (public AND private tier),
+ * then hard-deletes the user record (cascades to refresh tokens and sessions;
+ * IP blocks the user created as an admin are kept, with blockedBy set to NULL).
+ *
+ * Files first, row last: while the row exists, the account is found again by
+ * the next run, so a failed file deletion is simply retried. The old order
+ * (row first) left files no run could ever find again, a public avatar
+ * included. (The public avatar is normally gone already: deleting the account
+ * removes it at once, see usersService.deleteAccount.)
  *
  * Runs once daily. `purgeDeletedAccounts()` is exported so it can also be run
  * on demand (tests, an operator script) without waiting for the interval.
@@ -57,23 +63,15 @@ export async function purgeDeletedAccounts(now: Date = new Date()): Promise<Purg
 
   for (const user of usersToDelete) {
     try {
-      // Hard delete user record first (cascades to RefreshToken + Session).
-      // DB deletion is the critical operation — if it succeeds but file cleanup
-      // fails, we only have orphaned files (harmless, cleanable later).
-      // The reverse (files deleted, DB intact) would leave a dangling user record.
+      // Media first (no-op if the folders don't exist). If it throws, the row
+      // stays and the next run retries this account.
+      await fileStorageService.deleteUserMedia(user.id);
+
+      // Then the row (cascades to RefreshToken + Session). If only this fails,
+      // the next run finds the account again; its media is already gone.
       await prisma.user.delete({
         where: { id: user.id },
       });
-
-      // Delete all user media from disk (no-op if dirs don't exist)
-      try {
-        await fileStorageService.deleteUserMedia(user.id);
-      } catch (fileError) {
-        logger.warn(
-          { err: fileError, userId: user.id },
-          'User record purged but file cleanup failed — orphaned files may remain',
-        );
-      }
 
       result.purged++;
     } catch (error) {

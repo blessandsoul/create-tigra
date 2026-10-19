@@ -4,8 +4,9 @@ import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { purgeDeletedAccounts } from '../cleanup-deleted-accounts.job.js';
 
 // The purge must complete for every account past retention: one failing
-// account is logged and skipped, never blocks the rest, and files are only
-// removed after the database row is really gone.
+// account is logged and skipped, never blocks the rest. Files go first and the
+// row last, so an account whose files could not be removed stays in the
+// database and is retried by the next run.
 
 vi.mock('@libs/prisma.js', () => ({
   prisma: { user: { findMany: vi.fn(), delete: vi.fn() } },
@@ -43,16 +44,29 @@ describe('purgeDeletedAccounts', () => {
     const result = await purgeDeletedAccounts();
 
     expect(result).toEqual({ found: 3, purged: 2, failed: 1 });
-    // Media is removed only for accounts whose row was really deleted
-    expect(fileStorageService.deleteUserMedia).toHaveBeenCalledTimes(2);
-    expect(fileStorageService.deleteUserMedia).not.toHaveBeenCalledWith('b');
+    expect(prisma.user.delete).toHaveBeenCalledTimes(3);
   });
 
-  it('counts an account as purged even if its file cleanup fails', async () => {
+  it('removes the files before the row', async () => {
     vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: 'a' }] as never);
     vi.mocked(prisma.user.delete).mockResolvedValue({} as never);
-    vi.mocked(fileStorageService.deleteUserMedia).mockRejectedValue(new Error('disk'));
 
-    await expect(purgeDeletedAccounts()).resolves.toEqual({ found: 1, purged: 1, failed: 0 });
+    await purgeDeletedAccounts();
+
+    const filesAt = vi.mocked(fileStorageService.deleteUserMedia).mock.invocationCallOrder[0];
+    const rowAt = vi.mocked(prisma.user.delete).mock.invocationCallOrder[0];
+    expect(filesAt).toBeLessThan(rowAt);
+  });
+
+  it('keeps the row when its files cannot be removed, so the next run retries', async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: 'a' }, { id: 'b' }] as never);
+    vi.mocked(prisma.user.delete).mockResolvedValue({} as never);
+    vi.mocked(fileStorageService.deleteUserMedia).mockImplementation(async (id: string) => {
+      if (id === 'a') throw new Error('disk');
+    });
+
+    await expect(purgeDeletedAccounts()).resolves.toEqual({ found: 2, purged: 1, failed: 1 });
+    expect(prisma.user.delete).toHaveBeenCalledTimes(1);
+    expect(prisma.user.delete).not.toHaveBeenCalledWith({ where: { id: 'a' } });
   });
 });
