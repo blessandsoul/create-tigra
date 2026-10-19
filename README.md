@@ -93,6 +93,13 @@ Server and client deploy as two separate Coolify applications, each from its own
 
 **First admin.** Sign up in the app with the account that should be the admin (your own password; verify the email if the email module is on). Then open the server application's **Terminal** in Coolify and run `node dist/scripts/make-admin.js you@example.com`. It only changes that account's role and marks its email verified: no password is asked for or printed. Locally: `cd server && npm run make-admin -- you@example.com`. The same command recovers a project whose last admin was demoted or banned by mistake.
 
+**Background jobs** run inside the server process, so no extra Coolify service is needed. Each first runs about a minute after the server starts, then on its own schedule:
+- expired sessions and tokens: hourly;
+- deleted accounts past their 30 days: daily;
+- Cloudflare's IP list: daily.
+
+A deploy never postpones them. With more than one server replica, each runs them too, which is safe.
+
 ## Security and Migration Notes
 
 - [Account deactivation login reactivation: issue, fix, and existing-project migration](docs/account-deactivation-login-reactivation.md)
