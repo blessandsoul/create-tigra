@@ -105,9 +105,8 @@ async function bootContainers(): Promise<IntegrationContainers> {
   // across repeated register/login calls).
   process.env.RATE_LIMIT_ENABLED = 'false';
   // In NODE_ENV=test the app's CORS config (see app.ts) is NOT the dev "allow
-  // all" branch — it reads CORS_ORIGIN, and an undefined value makes
-  // @fastify/cors throw "Invalid CORS origin option" → 500 on EVERY request.
-  // Pin a concrete origin so the real app boots a valid CORS policy.
+  // all" branch: it uses the checked CORS_ORIGIN list (env.CORS_ORIGINS).
+  // Pin a concrete origin so the real app boots a realistic CORS policy.
   process.env.CORS_ORIGIN = 'http://localhost:3000';
 
   // Two-tier upload dirs under an isolated temp root, set BEFORE env.ts is ever

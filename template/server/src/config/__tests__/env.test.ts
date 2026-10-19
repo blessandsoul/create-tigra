@@ -29,7 +29,7 @@ writeFileSync(
   `const { env } = await import(${JSON.stringify(envModuleUrl)});\n` +
     'console.log(JSON.stringify({ RATE_LIMIT_ENABLED: env.RATE_LIMIT_ENABLED, ' +
     'REQUIRE_USER_VERIFICATION: env.REQUIRE_USER_VERIFICATION, REDIS_URL: env.REDIS_URL, ' +
-    'CLIENT_URL: env.CLIENT_URL }));\n',
+    'CLIENT_URL: env.CLIENT_URL, CORS_ORIGINS: env.CORS_ORIGINS }));\n',
 );
 afterAll(() => rmSync(workDir, { recursive: true, force: true }));
 
@@ -77,6 +77,42 @@ describe('env validation at boot', { timeout: 60_000 }, () => {
 
   it('defaults REDIS_URL to the local Redis outside production', () => {
     expect(parsed({ ...BASE, NODE_ENV: 'development' }).REDIS_URL).toBe('redis://localhost:6379');
+  });
+
+  describe('CORS_ORIGIN (bare origins only)', () => {
+    const WITH_REDIS = { ...PRODUCTION, REDIS_URL: 'redis://cache.internal:6379' };
+
+    it('refuses an entry that is not a bare origin, with the corrected value', () => {
+      for (const [value, fix] of [
+        ['https://app.example.test/', 'https://app.example.test'],
+        ['https://app.example.test/login', 'https://app.example.test'],
+        ['https://App.Example.test', 'https://app.example.test'],
+        ['https://app.example.test:443', 'https://app.example.test'],
+      ]) {
+        const result = boot({ ...WITH_REDIS, CORS_ORIGIN: value });
+        expect(result.code, value).toBe(1);
+        expect(result.err).toContain(`write it as "${fix}"`);
+      }
+    });
+
+    it('refuses * and anything that is not an http(s) URL', () => {
+      for (const value of ['*', 'app.example.test', 'ftp://app.example.test']) {
+        const result = boot({ ...WITH_REDIS, CORS_ORIGIN: value });
+        expect(result.code, value).toBe(1);
+        expect(result.err).toContain('must be a full origin such as https://app.example.com');
+      }
+    });
+
+    it('trims entries and ignores empty ones', () => {
+      const env = parsed({ ...WITH_REDIS, CORS_ORIGIN: ' https://a.example.test , https://b.example.test ,' });
+      expect(env.CORS_ORIGINS).toEqual(['https://a.example.test', 'https://b.example.test']);
+    });
+
+    it('still requires at least one origin in production', () => {
+      const result = boot({ ...WITH_REDIS, CORS_ORIGIN: ' , ' });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('CORS_ORIGIN is required in production');
+    });
   });
 
   describe('CLIENT_URL (email links)', () => {

@@ -160,7 +160,8 @@ const envSchema = z.object({
   // --- CORS ---
   // In development: CORS_ORIGIN is optional (allows all origins)
   // In production: REQUIRED for security
-  // Supports comma-separated multiple origins: "https://a.com,https://b.com"
+  // Comma-separated bare origins: "https://a.com,https://b.com". Each entry is
+  // checked below and exported as env.CORS_ORIGINS.
   CORS_ORIGIN: optionalEnv(z.string().optional()),
 
   // --- Logging ---
@@ -196,8 +197,39 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+// CORS_ORIGIN as a clean list of bare origins ("https://app.example.com").
+// Browsers send Origin as exactly scheme://host[:port], lowercase, and both
+// @fastify/cors and the Origin check compare it exactly. So a trailing slash,
+// a path, "*", an uppercase host or a stray space would silently break every
+// browser request (CORS refuses the answer, the Origin check every write).
+// Refuse those at boot, with the corrected value when one exists. Empty
+// entries (a trailing comma) are ignored.
+const corsOrigins: string[] = [];
+for (const raw of (parsed.data.CORS_ORIGIN ?? '').split(',')) {
+  const entry = raw.trim();
+  if (!entry) continue;
+  let origin: string | null = null;
+  try {
+    const url = new URL(entry);
+    if (url.protocol === 'http:' || url.protocol === 'https:') origin = url.origin;
+  } catch {
+    // not a URL at all; reported below
+  }
+  if (origin === null) {
+    console.error(
+      `\nCORS_ORIGIN entry "${entry}" must be a full origin such as https://app.example.com (no *, path or trailing slash)\n`,
+    );
+    process.exit(1);
+  }
+  if (origin !== entry) {
+    console.error(`\nCORS_ORIGIN entry "${entry}" is not a bare origin: write it as "${origin}"\n`);
+    process.exit(1);
+  }
+  corsOrigins.push(origin);
+}
+
 // Validate CORS_ORIGIN in production
-if (parsed.data.NODE_ENV === 'production' && !parsed.data.CORS_ORIGIN) {
+if (parsed.data.NODE_ENV === 'production' && corsOrigins.length === 0) {
   console.error('\nCORS_ORIGIN is required in production for security\n');
   process.exit(1);
 }
@@ -232,6 +264,9 @@ if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
 
 export const env = {
   ...parsed.data,
+  // The checked, trimmed CORS_ORIGIN entries (empty when unset). app.ts uses
+  // these for @fastify/cors and the Origin check, never the raw string.
+  CORS_ORIGINS: corsOrigins,
   // Outside production a missing REDIS_URL means the local default (checked above).
   REDIS_URL: parsed.data.REDIS_URL ?? 'redis://localhost:6379',
   // A missing CLIENT_URL means the local client (production with email is checked above).

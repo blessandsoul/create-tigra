@@ -63,12 +63,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.setSerializerCompiler(serializerCompiler);
 
   // --- Plugins ---
-  // CORS: Allow all origins in development, specific origin(s) in production
-  const corsOrigin = env.NODE_ENV === 'development'
-    ? true
-    : env.CORS_ORIGIN?.includes(',')
-      ? env.CORS_ORIGIN.split(',').map((o) => o.trim())
-      : env.CORS_ORIGIN;
+  // CORS: Allow all origins in development, the checked CORS_ORIGIN list
+  // otherwise (env.CORS_ORIGINS: bare origins, validated at boot in env.ts).
+  const corsOrigin: true | string[] = env.NODE_ENV === 'development' ? true : env.CORS_ORIGINS;
 
   await app.register(cors, {
     origin: corsOrigin,
@@ -177,9 +174,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   // CSRF vectors. See src/libs/origin-check.ts for the full rationale.
   const stateChangingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
   const allowAllOrigins = corsOrigin === true;
-  const allowedOrigins = new Set<string>(
-    Array.isArray(corsOrigin) ? corsOrigin : typeof corsOrigin === 'string' ? [corsOrigin] : [],
-  );
+  const allowedOrigins = new Set<string>(Array.isArray(corsOrigin) ? corsOrigin : []);
 
   app.addHook('onRequest', async (request: FastifyRequest) => {
     if (!stateChangingMethods.has(request.method)) return;
