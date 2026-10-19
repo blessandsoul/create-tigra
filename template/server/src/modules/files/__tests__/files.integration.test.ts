@@ -5,7 +5,7 @@
  * Drives the REAL Fastify app via `app.inject()` against the MySQL 8 + Redis
  * booted by `src/test/integration.setup.ts`. The setup file points
  * UPLOAD_PUBLIC_DIR / UPLOAD_PRIVATE_DIR at isolated temp dirs (exported via
- * `containerInfo`) BEFORE env.ts is evaluated, so this test controls the files
+ * `integrationServices`) BEFORE env.ts is evaluated, so this test controls the files
  * on disk and asserts exactly what is and isn't reachable.
  *
  * What this proves:
@@ -22,7 +22,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { containerInfo } from '@/test/integration.setup.js';
+import { integrationServices } from '@/test/integration.setup.js';
 
 let app: FastifyInstance;
 
@@ -75,18 +75,18 @@ beforeAll(async () => {
 
   // --- Seed fixtures directly on disk, in the temp tiers the app reads. ---
   // PUBLIC avatar (served statically, no auth).
-  const publicAvatarDir = path.join(containerInfo.uploadPublicDir, 'users', userId, 'avatar');
+  const publicAvatarDir = path.join(integrationServices.uploadPublicDir, 'users', userId, 'avatar');
   await fs.mkdir(publicAvatarDir, { recursive: true });
   await fs.writeFile(path.join(publicAvatarDir, 'x.webp'), Buffer.from('PUBLIC-AVATAR-BYTES'));
 
   // PRIVATE file (auth-gated route only).
-  const privateUserDir = path.join(containerInfo.uploadPrivateDir, 'users', userId);
+  const privateUserDir = path.join(integrationServices.uploadPrivateDir, 'users', userId);
   await fs.mkdir(privateUserDir, { recursive: true });
   await fs.writeFile(path.join(privateUserDir, 'doc.txt'), Buffer.from(PRIVATE_BODY));
 
   // A SECRET file in the private tier, addressable only via traversal from the
   // static root — used to prove the static mount cannot reach the private tier.
-  await fs.writeFile(path.join(containerInfo.uploadPrivateDir, 'secret.txt'), Buffer.from('TOP-SECRET'));
+  await fs.writeFile(path.join(integrationServices.uploadPrivateDir, 'secret.txt'), Buffer.from('TOP-SECRET'));
 });
 
 afterAll(async () => {
