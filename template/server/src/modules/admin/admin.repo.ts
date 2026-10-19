@@ -90,12 +90,14 @@ class AdminRepository {
     isActive?: boolean;
     sortBy: 'createdAt' | 'email' | 'firstName';
     sortOrder: 'asc' | 'desc';
+    deleted?: boolean;
   }): Promise<{ items: AdminUser[]; totalItems: number }> {
-    const { page, limit, search, role, isActive, sortBy, sortOrder } = params;
+    const { page, limit, search, role, isActive, sortBy, sortOrder, deleted = false } = params;
     const offset = (page - 1) * limit;
 
+    // Live accounts by default; `deleted` lists only soft-deleted ones instead.
     const where: Record<string, unknown> = {
-      deletedAt: null,
+      deletedAt: deleted ? { not: null } : null,
     };
 
     if (search) {
@@ -188,6 +190,24 @@ class AdminRepository {
       data: approveEmail ? { isActive, emailVerifiedAt: new Date() } : { isActive },
       select: adminUserSelect,
     });
+  }
+
+  /**
+   * Undo a soft delete: one conditional update, so only a deleted account
+   * changes. Returns false when there was nothing to restore (no such row, or
+   * the account is not deleted); the caller tells those two apart.
+   */
+  async restoreUser(userId: string): Promise<boolean> {
+    const { count } = await prisma.user.updateMany({
+      where: { id: userId, deletedAt: { not: null } },
+      data: { deletedAt: null, isActive: true },
+    });
+    return count === 1;
+  }
+
+  /** Whether a user row exists at all, deleted or not (purged rows are gone). */
+  async userExists(userId: string): Promise<boolean> {
+    return (await prisma.user.count({ where: { id: userId } })) === 1;
   }
 
   /**

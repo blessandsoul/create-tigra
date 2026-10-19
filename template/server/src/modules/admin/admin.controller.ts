@@ -113,6 +113,15 @@ export async function updateUserStatus(
   reply.send(successResponse(`User ${action} successfully`, user));
 }
 
+export async function restoreUser(
+  request: FastifyRequest<{ Params: UserIdParams }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const parsed = parseInput(userIdParamsSchema, request.params);
+  const user = await adminService.restoreUser(parsed.userId);
+  reply.send(successResponse('User restored successfully', user));
+}
+
 export async function updateUserRole(
   request: FastifyRequest<{ Params: UserIdParams; Body: UpdateUserRoleInput }>,
   reply: FastifyReply,

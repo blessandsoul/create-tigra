@@ -5,7 +5,8 @@
  */
 
 import { logger } from '@libs/logger.js';
-import { NotFoundError, ForbiddenError } from '@shared/errors/errors.js';
+import { NotFoundError, ForbiddenError, ConflictError } from '@shared/errors/errors.js';
+import { RETENTION_DAYS } from '@/jobs/cleanup-deleted-accounts.job.js';
 import { adminRepository } from './admin.repo.js';
 import { sessionRepository } from '@modules/auth/session.repo.js';
 import { deleteRefreshTokensByUserId } from '@modules/auth/auth.repo.js';
@@ -25,8 +26,43 @@ class AdminService {
     isActive?: boolean;
     sortBy: 'createdAt' | 'email' | 'firstName';
     sortOrder: 'asc' | 'desc';
-  }): Promise<{ items: AdminUser[]; totalItems: number }> {
-    return adminRepository.getUsers(params);
+    deleted?: boolean;
+  }): Promise<{ items: (AdminUser & { purgeAt?: Date })[]; totalItems: number }> {
+    const result = await adminRepository.getUsers(params);
+    if (!params.deleted) return result;
+    // Deleted accounts say when the nightly purge removes them for good.
+    return {
+      ...result,
+      items: result.items.map((user) => ({
+        ...user,
+        purgeAt: new Date(user.deletedAt!.getTime() + RETENTION_DAYS * 24 * 60 * 60 * 1000),
+      })),
+    };
+  }
+
+  /**
+   * Restore a soft-deleted account (before the purge removes it). It can sign
+   * in again with its old password: isActive is set back to true, since the
+   * deletion overwrote it (a ban from before the deletion is not kept; ban
+   * again if needed). No sessions come back, and no avatar (removed at
+   * deletion). The email was reserved while deleted, so it never conflicts.
+   *
+   * @throws NotFoundError 404 USER_NOT_FOUND if the account does not exist (or was purged)
+   * @throws ConflictError 409 USER_NOT_DELETED if the account is not deleted
+   */
+  async restoreUser(userId: string): Promise<AdminUser> {
+    if (!(await adminRepository.restoreUser(userId))) {
+      if (!(await adminRepository.userExists(userId))) {
+        throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+      }
+      throw new ConflictError('This account is not deleted', 'USER_NOT_DELETED');
+    }
+
+    const user = await adminRepository.findUserById(userId);
+    if (!user) throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+
+    logger.info({ msg: 'Deleted account restored', userId });
+    return user;
   }
 
   /**

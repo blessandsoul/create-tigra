@@ -93,7 +93,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    *
    * GET /api/v1/admin/users
    * Auth: Required (ADMIN)
-   * Query: ?page=1&limit=10&search=&role=&isActive=&sortBy=createdAt&sortOrder=desc
+   * Query: ?page=1&limit=10&search=&role=&isActive=&sortBy=createdAt&sortOrder=desc&deleted=false
+   * deleted=true lists ONLY soft-deleted accounts, each with purgeAt (when the purge removes it)
    */
   fastify.get('/admin/users', {
     schema: { querystring: getUsersQuerySchema },
@@ -126,6 +127,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     schema: { params: userIdParamsSchema, body: updateUserStatusSchema },
     config: { rateLimit: RATE_LIMITS.ADMIN_DEFAULT },
     handler: adminController.updateUserStatus,
+  });
+
+  /**
+   * Restore a soft-deleted account (until the 30-day purge removes it)
+   *
+   * POST /api/v1/admin/users/:userId/restore
+   * Auth: Required (ADMIN)
+   * 200 with the user; 404 USER_NOT_FOUND (none, or already purged); 409 USER_NOT_DELETED
+   */
+  fastify.post('/admin/users/:userId/restore', {
+    schema: { params: userIdParamsSchema },
+    config: { rateLimit: RATE_LIMITS.ADMIN_DEFAULT },
+    handler: adminController.restoreUser,
   });
 
   /**

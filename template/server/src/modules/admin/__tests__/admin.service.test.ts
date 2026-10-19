@@ -98,3 +98,36 @@ describe('force-expire a session', () => {
     expect(adminRepository.deleteSession).not.toHaveBeenCalled();
   });
 });
+
+describe('deleted accounts and restore', () => {
+  it('lists deleted accounts with purgeAt = deletedAt + 30 days', async () => {
+    const deletedAt = new Date('2026-10-01T10:00:00Z');
+    vi.mocked(adminRepository.getUsers).mockResolvedValue({ items: [adminUser({ deletedAt })], totalItems: 1 });
+    const { items } = await adminService.getUsers({ page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc', deleted: true });
+    expect(items[0]?.purgeAt?.toISOString()).toBe('2026-10-31T10:00:00.000Z');
+  });
+
+  it('the normal list carries no purgeAt', async () => {
+    vi.mocked(adminRepository.getUsers).mockResolvedValue({ items: [adminUser()], totalItems: 1 });
+    const { items } = await adminService.getUsers({ page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' });
+    expect(items[0]).not.toHaveProperty('purgeAt');
+  });
+
+  it('restores a deleted account and returns it', async () => {
+    vi.mocked(adminRepository.restoreUser).mockResolvedValue(true);
+    await expect(adminService.restoreUser(USER_ID)).resolves.toMatchObject({ id: USER_ID, isActive: true });
+  });
+
+  it('answers 409 USER_NOT_DELETED for an account that is not deleted', async () => {
+    vi.mocked(adminRepository.restoreUser).mockResolvedValue(false);
+    vi.mocked(adminRepository.userExists).mockResolvedValue(true);
+    await expect(adminService.restoreUser(USER_ID)).rejects.toMatchObject({ statusCode: 409, code: 'USER_NOT_DELETED' });
+  });
+
+  it('answers 404 USER_NOT_FOUND when there is no such account (or it was purged)', async () => {
+    vi.mocked(adminRepository.restoreUser).mockResolvedValue(false);
+    vi.mocked(adminRepository.userExists).mockResolvedValue(false);
+    await expect(adminService.restoreUser(USER_ID)).rejects.toMatchObject({ statusCode: 404, code: 'USER_NOT_FOUND' });
+  });
+});
+

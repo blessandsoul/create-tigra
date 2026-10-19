@@ -22,7 +22,8 @@ import { logger } from '@libs/logger.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const RETENTION_DAYS = 30;
+/** Days a soft-deleted account is kept (restorable by an admin) before the purge. */
+export const RETENTION_DAYS = 30;
 
 export interface PurgeResult {
   found: number;

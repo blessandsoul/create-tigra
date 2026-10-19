@@ -31,6 +31,11 @@ export const getUsersQuerySchema = z.object({
     .optional(),
   sortBy: z.enum(['createdAt', 'email', 'firstName']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  // true: ONLY soft-deleted accounts (still restorable until the purge), with purgeAt.
+  deleted: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .default(false),
 });
 
 export const userIdParamsSchema = z.object({
