@@ -3,7 +3,7 @@ import { successResponse } from '@shared/responses/successResponse.js';
 import { paginatedResponse } from '@shared/responses/paginatedResponse.js';
 import { parseInput } from '@libs/validation-errors.js';
 import { blockIp, unblockIp, getBlockedIps } from '@libs/ip-block.js';
-import { resolveClientIp } from '@libs/client-ip.js';
+import { getClientIp, resolveClientIp } from '@libs/client-ip.js';
 import { adminService } from './admin.service.js';
 import {
   blockIpSchema,
@@ -46,7 +46,9 @@ export async function blockIpHandler(
   reply: FastifyReply,
 ): Promise<void> {
   const parsed = parseInput(blockIpSchema, request.body);
-  const blocked = await blockIp(parsed.ip, request.user.userId, parsed.reason);
+  // The admin's own address is passed so it can never be blocked (that would
+  // lock them out of every route, the unblock route included).
+  const blocked = await blockIp(parsed.ip, request.user.userId, parsed.reason, getClientIp(request));
   reply.status(201).send(successResponse('IP blocked successfully', blocked));
 }
 

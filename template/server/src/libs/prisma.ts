@@ -77,6 +77,19 @@ export function isPrismaWriteConflict(error: unknown): boolean {
   );
 }
 
+/**
+ * Check if a caught error is Prisma's unique-constraint violation (P2002): a
+ * row with the same unique value already exists. Typical cause: two parallel
+ * requests that both checked first and then both inserted.
+ */
+export function isPrismaUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error as { code: string }).code === 'P2002'
+  );
+}
+
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
     await prisma.$queryRaw`SELECT 1`;

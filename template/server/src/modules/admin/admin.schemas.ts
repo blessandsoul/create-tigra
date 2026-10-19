@@ -2,13 +2,17 @@ import { z } from 'zod';
 
 // ─── IP Blocking ────────────────────────────────────────────────────────────
 
+// Any spelling of an IPv4 or IPv6 address is accepted; libs/ip-block.ts stores
+// and matches the canonical form (libs/ip-address.ts).
+const ipAddress = z.union([z.ipv4(), z.ipv6()], { message: 'Invalid IP address' });
+
 export const blockIpSchema = z.object({
-  ip: z.union([z.ipv4(), z.ipv6()], { message: 'Invalid IP address' }),
+  ip: ipAddress,
   reason: z.string().max(500).optional(),
 });
 
 export const unblockIpParamsSchema = z.object({
-  ip: z.string().min(1, 'IP address is required'),
+  ip: ipAddress,
 });
 
 export type BlockIpInput = z.infer<typeof blockIpSchema>;

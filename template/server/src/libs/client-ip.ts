@@ -42,11 +42,11 @@
  * Cloudflare and Traefik, the result is that proxy's address: counters are then shared, which
  * is strict but cannot be forged. See docs/client-ip-behind-proxies.md.
  */
-import { isIP } from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import { env } from '@config/env.js';
 import { isCloudflareIp } from '@libs/cloudflare-ranges.js';
+import { normalizeIp } from '@libs/ip-address.js';
 import { logger } from '@libs/logger.js';
 
 /** Header the owner's Cloudflare Transform Rule adds (names starting with cf- or x-cf- cannot be set there). */
@@ -74,35 +74,9 @@ export interface ResolvedClientIp {
   source: ClientIpSource;
 }
 
-/**
- * Canonical form of an address so one visitor always maps to one key, and an admin's IP
- * block matches however the address was written (libs/ip-block.ts uses this too):
- * - IPv4-mapped IPv6 (`::ffff:203.0.113.7`, or its hex spelling `::ffff:cb00:7107`)
- *   becomes plain IPv4;
- * - other IPv6 gets the one standard spelling (lower case, zeros compressed:
- *   `2001:0DB8:0000::0001` → `2001:db8::1`);
- * - an IPv6 with a zone id (`fe80::1%eth0`, link-local only) is just lower-cased.
- * Returns undefined for anything that is not an IP literal.
- */
-export function normalizeIp(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  let ip = value.trim();
-  if (ip.toLowerCase().startsWith('::ffff:') && isIP(ip.slice(7)) === 4) ip = ip.slice(7);
-  const family = isIP(ip);
-  if (family === 0) return undefined;
-  return family === 4 ? ip : canonicalIpv6(ip);
-}
-
-/** The WHATWG URL parser's IPv6 serialization, with hex IPv4-mapped turned into IPv4. */
-function canonicalIpv6(ip: string): string {
-  if (ip.includes('%')) return ip.toLowerCase(); // a zone id: the URL parser refuses it
-  const host = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
-  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
-  if (!mapped) return host;
-  const high = parseInt(mapped[1], 16);
-  const low = parseInt(mapped[2], 16);
-  return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
-}
+// Every address the resolver returns goes through the one canonical spelling
+// (libs/ip-address.ts), shared with the IP block list. Re-exported for callers.
+export { normalizeIp } from '@libs/ip-address.js';
 
 /**
  * Resolve the visitor address and say where it came from. Synchronous and always returns a

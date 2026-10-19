@@ -11,14 +11,21 @@
  * - On server boot, syncBlockedIpsToRedis() loads all permanent blocks from DB into Redis
  * - Fails open: if Redis is down, requests are NOT blocked (availability > security for rate limiting)
  * - Lazy cleanup: expired auto-blocks are removed on check, no separate cleanup job needed
+ * - One spelling: every stored or removed block is the canonical form
+ *   (normalizeIp, libs/ip-address.ts), the same string the visitor's requests
+ *   are checked with. A block typed as `2001:DB8::1` used to never match.
+ * - No self-lockout: a block applies to every route, the unblock route
+ *   included, so an admin may not block the address they are using, nor a
+ *   private/reserved address (a proxy or Docker address would block everyone).
  */
 
 import { env } from '@config/env.js';
-import { prisma } from '@libs/prisma.js';
+import { prisma, isPrismaUniqueViolation } from '@libs/prisma.js';
 import { getRedis } from '@libs/redis.js';
 import { logger } from '@libs/logger.js';
-import { ConflictError } from '@shared/errors/errors.js';
+import { ConflictError, ValidationError } from '@shared/errors/errors.js';
 import { isPrivateOrReservedIp } from '@libs/url-safety.js';
+import { normalizeIp } from '@libs/ip-address.js';
 
 // Redis keys
 const BLOCKED_IPS_KEY = 'blocked_ips';
@@ -107,24 +114,48 @@ export async function getIpBlock(ip: string): Promise<IpBlock> {
 /**
  * Block an IP permanently. Writes to DB (source of truth) + Redis (hot cache).
  *
- * @param ip - IP address to block
+ * @param rawIp - IP address to block, in any spelling (stored canonical)
  * @param blockedBy - Admin user ID who initiated the block
  * @param reason - Optional reason for the block
+ * @param requesterIp - The admin's own resolved address (getClientIp), never blockable
+ * @throws ValidationError 422 CANNOT_BLOCK_OWN_IP / IP_NOT_BLOCKABLE / INVALID_IP
+ * @throws ConflictError 409 IP_ALREADY_BLOCKED (also for a parallel duplicate)
  */
 export async function blockIp(
-  ip: string,
+  rawIp: string,
   blockedBy: string,
-  reason?: string,
+  reason: string | undefined,
+  requesterIp: string,
 ): Promise<{ id: string; ip: string; reason: string | null; blockedBy: string | null; createdAt: Date }> {
+  const ip = normalizeIp(rawIp);
+  if (!ip) {
+    throw new ValidationError('Invalid IP address', 'INVALID_IP');
+  }
+  if (ip === normalizeIp(requesterIp)) {
+    throw new ValidationError('You cannot block the address you are using', 'CANNOT_BLOCK_OWN_IP');
+  }
+  if (isPrivateOrReservedIp(ip)) {
+    throw new ValidationError('Private and reserved addresses cannot be blocked', 'IP_NOT_BLOCKABLE');
+  }
+
   // Write to DB (source of truth)
   const existing = await prisma.blockedIp.findUnique({ where: { ip } });
   if (existing) {
     throw new ConflictError('IP is already blocked', 'IP_ALREADY_BLOCKED');
   }
 
-  const blocked = await prisma.blockedIp.create({
-    data: { ip, blockedBy, reason: reason ?? null },
-  });
+  let blocked;
+  try {
+    blocked = await prisma.blockedIp.create({
+      data: { ip, blockedBy, reason: reason ?? null },
+    });
+  } catch (error) {
+    // A parallel request blocked the same address between our check and insert.
+    if (isPrismaUniqueViolation(error)) {
+      throw new ConflictError('IP is already blocked', 'IP_ALREADY_BLOCKED');
+    }
+    throw error;
+  }
 
   // Sync to Redis cache
   try {
@@ -141,9 +172,10 @@ export async function blockIp(
 /**
  * Unblock an IP. Removes from DB + Redis + auto-block list.
  *
- * @param ip - IP address to unblock
+ * @param rawIp - IP address to unblock, in any spelling (matched canonical)
  */
-export async function unblockIp(ip: string): Promise<void> {
+export async function unblockIp(rawIp: string): Promise<void> {
+  const ip = normalizeIp(rawIp) ?? rawIp.trim();
   // Remove from DB
   await prisma.blockedIp.deleteMany({ where: { ip } });
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getRedis } from '@libs/redis.js';
-import { getIpBlock, recordRateLimitViolation } from '../ip-block.js';
+import { prisma } from '@libs/prisma.js';
+import { blockIp, getIpBlock, recordRateLimitViolation, unblockIp } from '../ip-block.js';
 
 // Self-contained env so ip-block.ts can read its threshold constants at import
 // time without loading/validating the real environment.
@@ -13,6 +14,7 @@ vi.mock('@config/env.js', () => ({
 }));
 
 vi.mock('@libs/prisma.js', () => ({
+  isPrismaUniqueViolation: (e: unknown): boolean => (e as { code?: string })?.code === 'P2002',
   prisma: {
     blockedIp: {
       findMany: vi.fn(),
@@ -36,6 +38,8 @@ const redisMock = {
   sismember: vi.fn(),
   zscore: vi.fn(),
   zrem: vi.fn(),
+  sadd: vi.fn(),
+  srem: vi.fn(),
 };
 
 describe('recordRateLimitViolation — infra-IP guard', () => {
@@ -91,5 +95,65 @@ describe('getIpBlock — block state with the time left', () => {
   it('fails open when Redis is down', async () => {
     redisMock.sismember.mockRejectedValue(new Error('down'));
     expect(await getIpBlock('93.184.216.34')).toEqual({ blocked: false });
+  });
+});
+
+// Admin blocks: stored and matched in the one canonical spelling (the visitor
+// key uses the same), and an admin can never lock themselves or everyone out.
+describe('blockIp / unblockIp — one spelling, no self-lockout', () => {
+  const ADMIN_IP = '198.51.100.9';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getRedis).mockReturnValue(redisMock as never);
+    vi.mocked(prisma.blockedIp.findUnique).mockResolvedValue(null);
+    vi.mocked(prisma.blockedIp.create).mockImplementation((async ({ data }: { data: { ip: string } }) => ({
+      id: 'b1', ip: data.ip, reason: null, blockedBy: 'admin-1', createdAt: new Date(),
+    })) as never);
+  });
+
+  it('stores any spelling of an address in its canonical form, in the DB and in Redis', async () => {
+    const blocked = await blockIp('2001:0DB8:0000::0001', 'admin-1', undefined, ADMIN_IP);
+    expect(blocked.ip).toBe('2001:db8::1');
+    expect(redisMock.sadd).toHaveBeenCalledWith('blocked_ips', '2001:db8::1');
+
+    await blockIp('::ffff:203.0.113.7', 'admin-1', undefined, ADMIN_IP);
+    expect(vi.mocked(prisma.blockedIp.create).mock.calls[1]?.[0]).toMatchObject({ data: { ip: '203.0.113.7' } });
+  });
+
+  it("refuses the admin's own address, however it is written", async () => {
+    await expect(blockIp(`::ffff:${ADMIN_IP}`, 'admin-1', undefined, ADMIN_IP)).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'CANNOT_BLOCK_OWN_IP',
+    });
+    expect(prisma.blockedIp.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['10.0.0.5', '192.168.1.1', '127.0.0.1', '::1'])('refuses the private/reserved address %s', async (ip) => {
+    await expect(blockIp(ip, 'admin-1', undefined, ADMIN_IP)).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'IP_NOT_BLOCKABLE',
+    });
+  });
+
+  it('answers 409 for an address already blocked, and for a parallel duplicate insert', async () => {
+    vi.mocked(prisma.blockedIp.findUnique).mockResolvedValueOnce({ id: 'b0' } as never);
+    await expect(blockIp('203.0.113.7', 'admin-1', undefined, ADMIN_IP)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'IP_ALREADY_BLOCKED',
+    });
+
+    vi.mocked(prisma.blockedIp.create).mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }));
+    await expect(blockIp('203.0.113.8', 'admin-1', undefined, ADMIN_IP)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'IP_ALREADY_BLOCKED',
+    });
+  });
+
+  it('unblocks by the canonical form, in the DB and both Redis lists', async () => {
+    await unblockIp('2001:DB8::1');
+    expect(prisma.blockedIp.deleteMany).toHaveBeenCalledWith({ where: { ip: '2001:db8::1' } });
+    expect(redisMock.srem).toHaveBeenCalledWith('blocked_ips', '2001:db8::1');
+    expect(redisMock.zrem).toHaveBeenCalledWith('auto_blocked_ips', '2001:db8::1');
   });
 });

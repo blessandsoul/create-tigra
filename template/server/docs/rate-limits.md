@@ -138,6 +138,7 @@ On a correct setup this never happens. The server logs `[CLIENT-IP] Cloudflare r
 - **Whether an email has an account can be found out.** Sign-up answers `409 EMAIL_ALREADY_EXISTS` for an existing account (and for one deleted recently, while its email stays reserved), and forgot-password gives the same answer for every address but takes noticeably longer for a real account, because it sends the email before replying. This is accepted on purpose (most apps do the same, and hiding it would make sign-up confusing). Sign-in and the lockout still reveal nothing: unknown emails cost the same time and lock the same way.
 - **Parallel sign-in attempts can get ahead of the lockout.** A burst of simultaneous failed sign-ins from one IP is checked before any of them is counted, so it can try more than 15 passwords. It is still capped by the login route limit (100 per 15 minutes per IP).
 - **`HEAD` requests count separately from `GET`.** Fastify adds a `HEAD` route for each `GET`, and it gets its own counter.
+- **IP blocks are single addresses.** An IPv6 visitor usually controls a whole /64 network and can switch to another address in it, so blocking one IPv6 address only slows such a visitor down. Ranges (CIDR) are not supported. Blocks are stored in one canonical spelling, so `2001:DB8::1` and `2001:0db8:0:0::1` are the same block. An admin cannot block their own current address, nor a private or reserved one.
 
 ## Porting to an app made with an older create-tigra
 
