@@ -16,6 +16,7 @@ import {
 } from '@shared/errors/errors.js';
 import { consumeEmailQuota } from '@libs/email-quota.js';
 import { assertRedisReady } from '@libs/redis-required.js';
+import { hashToken } from '@libs/token-hash.js';
 import type { UserRole } from '@shared/types/index.js';
 import * as authRepo from './auth.repo.js';
 import { sessionRepository } from './session.repo.js';
@@ -25,6 +26,9 @@ import type { RegisterInput, LoginInput } from './auth.schemas.js';
 export const REFRESH_TOKEN_ROTATED = 'REFRESH_TOKEN_ROTATED';
 
 const PASSWORD_RESET_TTL = 3600; // 1 hour in seconds
+// Reset tokens in Redis are stored by fingerprint only (libs/token-hash.ts):
+// `pw-reset:<sha256>` -> userId, and `pw-reset-user:<userId>` -> that sha256
+// (to invalidate a user's previous link). The raw token exists only in the email.
 const PASSWORD_RESET_PREFIX = 'pw-reset:';
 const PASSWORD_RESET_USER_PREFIX = 'pw-reset-user:';
 
@@ -440,18 +444,19 @@ export async function forgotPassword(email: string): Promise<void> {
 
   const redis = getRedis();
 
-  // Invalidate any existing token for this user
-  const existingToken = await redis.get(`${PASSWORD_RESET_USER_PREFIX}${user.id}`);
-  if (existingToken) {
-    await redis.del(`${PASSWORD_RESET_PREFIX}${existingToken}`);
+  // Invalidate any existing token for this user (the pointer holds its fingerprint)
+  const existingTokenHash = await redis.get(`${PASSWORD_RESET_USER_PREFIX}${user.id}`);
+  if (existingTokenHash) {
+    await redis.del(`${PASSWORD_RESET_PREFIX}${existingTokenHash}`);
     await redis.del(`${PASSWORD_RESET_USER_PREFIX}${user.id}`);
   }
 
-  // Generate secure token and store in Redis with 1 hour TTL
+  // Generate a secure token; only its fingerprint goes to Redis (1 hour TTL)
   const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(token);
 
-  await redis.set(`${PASSWORD_RESET_PREFIX}${token}`, user.id, 'EX', PASSWORD_RESET_TTL);
-  await redis.set(`${PASSWORD_RESET_USER_PREFIX}${user.id}`, token, 'EX', PASSWORD_RESET_TTL);
+  await redis.set(`${PASSWORD_RESET_PREFIX}${tokenHash}`, user.id, 'EX', PASSWORD_RESET_TTL);
+  await redis.set(`${PASSWORD_RESET_USER_PREFIX}${user.id}`, tokenHash, 'EX', PASSWORD_RESET_TTL);
 
   // Build reset URL and send email
   const resetUrl = `${env.CLIENT_URL}/reset-password?token=${token}`;
@@ -513,7 +518,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
   // the same instant changes the password only once: the second request finds
   // nothing. (A separate GET then DEL let both requests through.) Consumed
   // before the work below, so a failure after this point means a new link.
-  const userId = await redis.getdel(`${PASSWORD_RESET_PREFIX}${token}`);
+  const userId = await redis.getdel(`${PASSWORD_RESET_PREFIX}${hashToken(token)}`);
   if (!userId) {
     throw new BadRequestError('Invalid or expired reset token', 'INVALID_RESET_TOKEN');
   }

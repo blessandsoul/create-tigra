@@ -1,4 +1,5 @@
 import { prisma, isPrismaNotFound } from '@libs/prisma.js';
+import { hashToken } from '@libs/token-hash.js';
 import type { User, RefreshToken } from '@prisma/client';
 
 export async function findUserByEmail(email: string): Promise<User | null> {
@@ -32,6 +33,10 @@ export async function createUser(data: {
   });
 }
 
+// Refresh tokens: callers pass the RAW token (from the cookie); the table only
+// ever holds its fingerprint (libs/token-hash.ts), so reading the table gives
+// nobody a usable login. Every function below hashes before touching it.
+
 export async function createRefreshToken(data: {
   token: string;
   userId: string;
@@ -39,20 +44,20 @@ export async function createRefreshToken(data: {
   expiresAt: Date;
 }): Promise<RefreshToken> {
   return prisma.refreshToken.create({
-    data,
+    data: { ...data, token: hashToken(data.token) },
   });
 }
 
 export async function findRefreshToken(token: string): Promise<RefreshToken | null> {
   return prisma.refreshToken.findUnique({
-    where: { token },
+    where: { token: hashToken(token) },
   });
 }
 
 export async function deleteRefreshToken(token: string): Promise<void> {
   try {
     await prisma.refreshToken.delete({
-      where: { token },
+      where: { token: hashToken(token) },
     });
   } catch (error) {
     if (isPrismaNotFound(error)) return;
@@ -70,8 +75,9 @@ export async function deleteRefreshToken(token: string): Promise<void> {
  * JWT_REFRESH_EXPIRY window a still-used login vanished from session lists and
  * could no longer be force-expired.
  *
- * Returns false when the old token (or the session) is already gone — a
- * concurrent redemption, which the caller treats as reuse.
+ * Returns false when the old token (or the session) is already gone: a
+ * parallel refresh rotated it first (see refresh() in auth.service.ts).
+ * Both tokens are passed raw and stored as fingerprints.
  */
 export async function rotateRefreshToken(
   oldToken: string,
@@ -79,12 +85,12 @@ export async function rotateRefreshToken(
 ): Promise<boolean> {
   try {
     await prisma.$transaction([
-      prisma.refreshToken.delete({ where: { token: oldToken } }),
+      prisma.refreshToken.delete({ where: { token: hashToken(oldToken) } }),
       prisma.session.update({
         where: { id: newData.sessionId },
         data: { expiresAt: newData.expiresAt, lastActiveAt: new Date() },
       }),
-      prisma.refreshToken.create({ data: newData }),
+      prisma.refreshToken.create({ data: { ...newData, token: hashToken(newData.token) } }),
     ]);
     return true;
   } catch (error) {

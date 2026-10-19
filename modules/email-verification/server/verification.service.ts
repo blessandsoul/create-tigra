@@ -7,6 +7,7 @@ import { env } from '@config/env.js';
 import { ACCOUNT_DEACTIVATED } from '@libs/account-status.js';
 import { consumeEmailQuota, type EmailQuotaBucket } from '@libs/email-quota.js';
 import { assertRedisReady } from '@libs/redis-required.js';
+import { hashToken } from '@libs/token-hash.js';
 import {
   BadRequestError,
   ForbiddenError,
@@ -19,6 +20,8 @@ import { sanitizeUser } from './auth.service.js';
 import type { AuthResult } from './auth.service.js';
 
 const VERIFICATION_TTL = 3600; // 1 hour in seconds
+// Stored by fingerprint only (libs/token-hash.ts): `verify:<sha256>` -> userId,
+// `verify-user:<userId>` -> that sha256. The raw token exists only in the email.
 const VERIFICATION_PREFIX = 'verify:';
 const VERIFICATION_USER_PREFIX = 'verify-user:';
 
@@ -65,18 +68,19 @@ export async function sendVerification(
 
   const redis = getRedis();
 
-  // Invalidate any existing verification token for this user
-  const existingToken = await redis.get(`${VERIFICATION_USER_PREFIX}${user.id}`);
-  if (existingToken) {
-    await redis.del(`${VERIFICATION_PREFIX}${existingToken}`);
+  // Invalidate any existing verification token for this user (the pointer holds its fingerprint)
+  const existingTokenHash = await redis.get(`${VERIFICATION_USER_PREFIX}${user.id}`);
+  if (existingTokenHash) {
+    await redis.del(`${VERIFICATION_PREFIX}${existingTokenHash}`);
     await redis.del(`${VERIFICATION_USER_PREFIX}${user.id}`);
   }
 
-  // Generate secure token and store in Redis with 1 hour TTL
+  // Generate a secure token; only its fingerprint goes to Redis (1 hour TTL)
   const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(token);
 
-  await redis.set(`${VERIFICATION_PREFIX}${token}`, user.id, 'EX', VERIFICATION_TTL);
-  await redis.set(`${VERIFICATION_USER_PREFIX}${user.id}`, token, 'EX', VERIFICATION_TTL);
+  await redis.set(`${VERIFICATION_PREFIX}${tokenHash}`, user.id, 'EX', VERIFICATION_TTL);
+  await redis.set(`${VERIFICATION_USER_PREFIX}${user.id}`, tokenHash, 'EX', VERIFICATION_TTL);
 
   // Build verification URL and send email
   const verifyUrl = `${env.CLIENT_URL}/verify-account?token=${token}`;
@@ -140,7 +144,7 @@ export async function verifyAccount(
 
   // Atomic get-and-delete to prevent token reuse via concurrent requests
   // ioredis exposes GETDEL as getdel (all lowercase); getDel does not exist.
-  const userId = await redis.getdel(`${VERIFICATION_PREFIX}${token}`);
+  const userId = await redis.getdel(`${VERIFICATION_PREFIX}${hashToken(token)}`);
   if (!userId) {
     throw new BadRequestError('Invalid or expired verification token', 'INVALID_VERIFICATION_TOKEN');
   }
