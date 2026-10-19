@@ -18,6 +18,20 @@ dotenv.config();
 const optionalEnv = <T extends z.ZodTypeAny>(schema: T): z.ZodPreprocess<T> =>
   z.preprocess((v) => (v === '' ? undefined : v), schema);
 
+/**
+ * An on/off switch. Accepts `true` / `false` in any letter case (spaces around
+ * ignored) and stops the boot on anything else. A plain `val === 'true'` used
+ * to read `True`, `TRUE` or `1` as OFF without a word, which silently switched
+ * rate limits or email verification off. Empty or unset means `defaultValue`.
+ */
+const envBoolean = (defaultValue: boolean): z.ZodType<boolean> =>
+  z
+    .preprocess(
+      (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim().toLowerCase() : undefined),
+      z.enum(['true', 'false'], { message: 'must be true or false' }).default(defaultValue ? 'true' : 'false'),
+    )
+    .transform((v) => v === 'true');
+
 const envSchema = z.object({
   // --- Application ---
   // Fail-closed default: an unset NODE_ENV means production. Development mode
@@ -42,14 +56,16 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
   // --- Redis ---
-  REDIS_URL: optionalEnv(z.string().default('redis://localhost:6379')),
+  // Required in production (checked below); elsewhere it defaults to the local
+  // redis://localhost:6379. See the production check for why.
+  REDIS_URL: optionalEnv(z.string().optional()),
   // Retries for a single Redis command. The connection itself reconnects
   // forever with capped backoff (see src/libs/redis.ts).
   REDIS_MAX_RETRIES: optionalEnv(z.coerce.number().int().min(0).default(3)),
   REDIS_CONNECT_TIMEOUT: optionalEnv(z.coerce.number().int().min(1000).default(10000)), // ms
 
   // --- Rate Limiting ---
-  RATE_LIMIT_ENABLED: optionalEnv(z.string().default('true').transform((val) => val === 'true')),
+  RATE_LIMIT_ENABLED: envBoolean(true),
   RATE_LIMIT_MULTIPLIER: optionalEnv(z.coerce.number().min(0.1).max(100).default(1)),
   // Per-limit overrides, e.g. "AUTH_LOGIN=100/15m,DEFAULT=300/1m,EMAIL_PER_ADDRESS=3/1h".
   // Parsed and validated (names and format) in src/config/rate-limit.config.ts, which stops
@@ -135,7 +151,7 @@ const envSchema = z.object({
   // When true (default), new users start with emailVerifiedAt = null and cannot
   // sign in until they verify their email. When false, they count as verified
   // immediately. This never touches isActive, which is only the admin ban switch.
-  REQUIRE_USER_VERIFICATION: optionalEnv(z.string().default('true').transform((val) => val === 'true')),
+  REQUIRE_USER_VERIFICATION: envBoolean(true),
 
   // --- CORS ---
   // In development: CORS_ORIGIN is optional (allows all origins)
@@ -178,6 +194,18 @@ if (parsed.data.NODE_ENV === 'production' && !parsed.data.CORS_ORIGIN) {
   process.exit(1);
 }
 
+// Require REDIS_URL in production. Redis-backed protections fail OPEN by design
+// (a Redis outage must not take the API down), so a missing URL would not
+// crash anything: inside a container the localhost default reaches nothing,
+// and the app would run with rate limits, login lockout and IP blocks all off
+// while its health check still passes. A missing setting must be loud instead.
+if (parsed.data.NODE_ENV === 'production' && !parsed.data.REDIS_URL) {
+  console.error(
+    '\nREDIS_URL is required in production: without Redis, rate limits, login lockout and IP blocks are all off\n',
+  );
+  process.exit(1);
+}
+
 // Validate RESEND_API_KEY when email verification is enabled
 if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
   console.error('\nRESEND_API_KEY is required when REQUIRE_USER_VERIFICATION is enabled.\nGet your API key from: https://resend.com/api-keys\n');
@@ -186,6 +214,8 @@ if (parsed.data.REQUIRE_USER_VERIFICATION && !parsed.data.RESEND_API_KEY) {
 
 export const env = {
   ...parsed.data,
+  // Outside production a missing REDIS_URL means the local default (checked above).
+  REDIS_URL: parsed.data.REDIS_URL ?? 'redis://localhost:6379',
   // Default the Sentry environment tag to NODE_ENV when not explicitly set.
   SENTRY_ENVIRONMENT: parsed.data.SENTRY_ENVIRONMENT ?? parsed.data.NODE_ENV,
 };

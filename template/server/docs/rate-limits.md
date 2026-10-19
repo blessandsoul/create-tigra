@@ -123,6 +123,8 @@ The app keeps serving, but while Redis is unreachable:
 
 `/api/v1/health` reports `degraded`. Everything returns on its own when Redis is back; permanent blocks are re-loaded from the database on reconnect.
 
+A missing `REDIS_URL` is different from an outage: in production the server refuses to start without it, because it would otherwise run with every protection above switched off while its health check still passes. Outside production it defaults to `redis://localhost:6379`.
+
 ## Behind Cloudflare
 
 Cloudflare requests that cannot be verified as your own zone's traffic share **one** counter. This happens in two cases:
