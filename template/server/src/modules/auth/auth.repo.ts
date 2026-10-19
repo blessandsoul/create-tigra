@@ -1,4 +1,4 @@
-import { prisma, isPrismaNotFound } from '@libs/prisma.js';
+import { prisma, isPrismaNotFound, isPrismaWriteConflict } from '@libs/prisma.js';
 import { hashToken } from '@libs/token-hash.js';
 import type { User, RefreshToken } from '@prisma/client';
 
@@ -75,8 +75,17 @@ export async function deleteRefreshToken(token: string): Promise<void> {
  * JWT_REFRESH_EXPIRY window a still-used login vanished from session lists and
  * could no longer be force-expired.
  *
- * Returns false when the old token (or the session) is already gone: a
- * parallel refresh rotated it first (see refresh() in auth.service.ts).
+ * Exactly one of several parallel rotations of the same token wins. The old
+ * row is removed with deleteMany, a locking DELETE whose count says whether
+ * THIS transaction removed it: a parallel one waits for the row lock, then
+ * removes nothing and returns false. (delete() checked the row in a snapshot
+ * first, so under MySQL's REPEATABLE READ two parallel refreshes both "found"
+ * it and both created a new token, forking the login; sometimes they
+ * deadlocked instead and answered 500.)
+ *
+ * Returns false when this request did not win: the token was already rotated
+ * by a parallel refresh, the session is gone, or MySQL reported a write
+ * conflict with the parallel transaction. See refresh() in auth.service.ts.
  * Both tokens are passed raw and stored as fingerprints.
  */
 export async function rotateRefreshToken(
@@ -84,17 +93,18 @@ export async function rotateRefreshToken(
   newData: { token: string; userId: string; sessionId: string; expiresAt: Date },
 ): Promise<boolean> {
   try {
-    await prisma.$transaction([
-      prisma.refreshToken.delete({ where: { token: hashToken(oldToken) } }),
-      prisma.session.update({
+    return await prisma.$transaction(async (tx) => {
+      const { count } = await tx.refreshToken.deleteMany({ where: { token: hashToken(oldToken) } });
+      if (count !== 1) return false; // a parallel refresh rotated it first
+      await tx.session.update({
         where: { id: newData.sessionId },
         data: { expiresAt: newData.expiresAt, lastActiveAt: new Date() },
-      }),
-      prisma.refreshToken.create({ data: { ...newData, token: hashToken(newData.token) } }),
-    ]);
-    return true;
+      });
+      await tx.refreshToken.create({ data: { ...newData, token: hashToken(newData.token) } });
+      return true;
+    });
   } catch (error) {
-    if (isPrismaNotFound(error)) return false;
+    if (isPrismaNotFound(error) || isPrismaWriteConflict(error)) return false;
     throw error;
   }
 }

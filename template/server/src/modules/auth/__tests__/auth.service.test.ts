@@ -632,6 +632,41 @@ describe('Auth Service', () => {
       expect(authLib.signAccessToken).not.toHaveBeenCalled();
     });
 
+    it('a refresh whose token was rotated a moment ago by a parallel one is a lost race (cookies kept)', async () => {
+      vi.mocked(authRepo.findRefreshToken).mockResolvedValue(null);
+      mockRedis.exists.mockResolvedValue(1); // the winner's "just rotated" note
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({
+        statusCode: 401,
+        code: 'REFRESH_TOKEN_ROTATED',
+      });
+      expect(mockRedis.exists).toHaveBeenCalledWith(expect.stringMatching(/^rt-rotated:[0-9a-f]{64}$/));
+    });
+
+    it('an unknown refresh token without that note is still INVALID_REFRESH_TOKEN', async () => {
+      vi.mocked(authRepo.findRefreshToken).mockResolvedValue(null);
+      mockRedis.exists.mockResolvedValue(0);
+      await expect(authService.refresh(validRefreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+    });
+
+    it('notes the rotation (fingerprint key, 60 s) before rotating', async () => {
+      const storedToken = { ...testRefreshToken, sessionId: testSession.id, expiresAt: new Date(Date.now() + 86_400_000) };
+      vi.mocked(authRepo.findRefreshToken).mockResolvedValue(storedToken);
+      vi.mocked(authRepo.findUserById).mockResolvedValue(testUsers.validUser);
+      vi.mocked(authLib.signAccessToken).mockReturnValue('access');
+      vi.mocked(authLib.generateRefreshToken).mockReturnValue('refresh');
+      vi.mocked(authLib.getRefreshTokenExpiresAt).mockReturnValue(new Date());
+      vi.mocked(authRepo.rotateRefreshToken).mockResolvedValue(true);
+
+      await authService.refresh(validRefreshToken);
+
+      const note = mockRedis.set.mock.calls.find(([key]) => String(key).startsWith('rt-rotated:'));
+      expect(note).toEqual([expect.stringMatching(/^rt-rotated:[0-9a-f]{64}$/), '1', 'EX', 60]);
+      expect(String(note?.[0])).not.toContain(validRefreshToken);
+      expect(mockRedis.set.mock.invocationCallOrder[mockRedis.set.mock.calls.indexOf(note as never)]).toBeLessThan(
+        vi.mocked(authRepo.rotateRefreshToken).mock.invocationCallOrder[0] as number,
+      );
+    });
+
     it('a refresh that loses a race with a parallel one is refused alone: nothing is revoked', async () => {
       // Two tabs share the cookie and refresh at the same moment; the atomic
       // rotation lets one win. The loser must get its own code (so the

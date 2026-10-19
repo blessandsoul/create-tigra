@@ -16,7 +16,12 @@ const prismaMock = vi.hoisted(() => ({
   session: { update: vi.fn() },
   $transaction: vi.fn(),
 }));
-vi.mock('@libs/prisma.js', () => ({ prisma: prismaMock, isPrismaNotFound: (): boolean => false }));
+// rotateRefreshToken runs an interactive transaction: hand it the same mock as `tx`.
+vi.mock('@libs/prisma.js', () => ({
+  prisma: prismaMock,
+  isPrismaNotFound: (): boolean => false,
+  isPrismaWriteConflict: (e: unknown): boolean => (e as { code?: string })?.code === 'P2034',
+}));
 
 const redisMock = vi.hoisted(() => ({ status: 'ready', get: vi.fn(), set: vi.fn(), del: vi.fn(), getdel: vi.fn() }));
 vi.mock('@libs/redis.js', () => ({ getRedis: (): typeof redisMock => redisMock }));
@@ -58,12 +63,32 @@ describe('refresh tokens in MySQL', () => {
     expect(prismaMock.refreshToken.delete).toHaveBeenCalledWith({ where: { token: sha256(raw) } });
   });
 
-  it('rotation deletes the old fingerprint and stores the new one', async () => {
-    await authRepo.rotateRefreshToken(raw, { token: 'new-raw', userId: 'u1', sessionId: 's1', expiresAt: new Date() });
-    expect(prismaMock.refreshToken.delete).toHaveBeenCalledWith({ where: { token: sha256(raw) } });
+  const newData = { token: 'new-raw', userId: 'u1', sessionId: 's1', expiresAt: new Date() };
+  const runTx = (): void => {
+    prismaMock.$transaction.mockImplementation(async (fn: (tx: typeof prismaMock) => unknown) => fn(prismaMock));
+  };
+
+  it('rotation removes the old fingerprint with a counted delete and stores the new one', async () => {
+    runTx();
+    prismaMock.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
+    await expect(authRepo.rotateRefreshToken(raw, newData)).resolves.toBe(true);
+    expect(prismaMock.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { token: sha256(raw) } });
     expect(prismaMock.refreshToken.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ token: sha256('new-raw') }),
     });
+  });
+
+  it('exactly one parallel rotation wins: the one that removed nothing creates nothing', async () => {
+    runTx();
+    prismaMock.refreshToken.deleteMany.mockResolvedValue({ count: 0 }); // a parallel refresh removed it
+    await expect(authRepo.rotateRefreshToken(raw, newData)).resolves.toBe(false);
+    expect(prismaMock.refreshToken.create).not.toHaveBeenCalled();
+    expect(prismaMock.session.update).not.toHaveBeenCalled();
+  });
+
+  it('a write conflict with the parallel transaction counts as a lost race, not a 500', async () => {
+    prismaMock.$transaction.mockRejectedValue(Object.assign(new Error('write conflict'), { code: 'P2034' }));
+    await expect(authRepo.rotateRefreshToken(raw, newData)).resolves.toBe(false);
   });
 });
 

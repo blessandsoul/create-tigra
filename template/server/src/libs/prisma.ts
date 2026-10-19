@@ -63,6 +63,20 @@ export function isPrismaNotFound(error: unknown): boolean {
   );
 }
 
+/**
+ * Check if a caught error is Prisma's "transaction failed due to a write
+ * conflict or a deadlock" (P2034): a concurrent transaction touched the same
+ * rows. Treat it as "a parallel request got there first" where that is the
+ * meaning (e.g. two refreshes rotating the same token).
+ */
+export function isPrismaWriteConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error as { code: string }).code === 'P2034'
+  );
+}
+
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
     await prisma.$queryRaw`SELECT 1`;

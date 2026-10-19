@@ -25,6 +25,30 @@ import type { RegisterInput, LoginInput } from './auth.schemas.js';
 /** A refresh that lost a race with a parallel one (see refresh()); its cookies must stay. */
 export const REFRESH_TOKEN_ROTATED = 'REFRESH_TOKEN_ROTATED';
 
+// "Just rotated" notes: `rt-rotated:<sha256 of the old refresh token>`, kept
+// for a minute. A parallel refresh that arrives a few ms after the winner
+// finds its token already gone; the note tells it apart from a stale or
+// stolen token, so it gets REFRESH_TOKEN_ROTATED (cookies kept) instead of
+// INVALID_REFRESH_TOKEN (cookies cleared, signing that browser out).
+const ROTATED_NOTE_PREFIX = 'rt-rotated:';
+const ROTATED_NOTE_SECONDS = 60;
+
+async function noteRotation(refreshToken: string): Promise<void> {
+  try {
+    await getRedis().set(`${ROTATED_NOTE_PREFIX}${hashToken(refreshToken)}`, '1', 'EX', ROTATED_NOTE_SECONDS);
+  } catch {
+    // Redis down: a late parallel refresh then falls back to INVALID_REFRESH_TOKEN
+  }
+}
+
+async function wasJustRotated(refreshToken: string): Promise<boolean> {
+  try {
+    return (await getRedis().exists(`${ROTATED_NOTE_PREFIX}${hashToken(refreshToken)}`)) === 1;
+  } catch {
+    return false;
+  }
+}
+
 const PASSWORD_RESET_TTL = 3600; // 1 hour in seconds
 // Reset tokens in Redis are stored by fingerprint only (libs/token-hash.ts):
 // `pw-reset:<sha256>` -> userId, and `pw-reset-user:<userId>` -> that sha256
@@ -325,6 +349,10 @@ export async function login(
 export async function refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
   const storedToken = await authRepo.findRefreshToken(refreshToken);
   if (!storedToken) {
+    // Gone a moment ago because a parallel refresh rotated it: lost race, not a bad token.
+    if (await wasJustRotated(refreshToken)) {
+      throw new UnauthorizedError('Refresh token already used by a parallel request', REFRESH_TOKEN_ROTATED);
+    }
     throw new UnauthorizedError('Invalid refresh token', 'INVALID_REFRESH_TOKEN');
   }
 
@@ -359,8 +387,14 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
   });
   const newRefreshToken = generateRefreshToken();
 
-  // Atomic rotation: delete old + create new in a single transaction.
-  // Returns false if old token was already consumed by a concurrent request.
+  // Note the rotation BEFORE doing it, so a parallel refresh that finds the
+  // token already gone (it arrived just after this one won) is recognised as a
+  // lost race. Harmless if this rotation then fails: the note only matters to
+  // requests whose token no longer exists.
+  await noteRotation(refreshToken);
+
+  // Single-winner rotation (see rotateRefreshToken): false when a parallel
+  // request rotated this token first.
   const rotated = await authRepo.rotateRefreshToken(refreshToken, {
     token: newRefreshToken,
     userId: user.id,
