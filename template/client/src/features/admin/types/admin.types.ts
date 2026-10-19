@@ -9,7 +9,8 @@ export interface IAdminUser extends IUser {
 
 export interface IAdminUserDetail extends IAdminUser {
   sessionCount: number;
-  lastLogin: string | null;
+  /** Latest activity of a session that still exists; null once all sessions ended. */
+  lastActiveAt: string | null;
 }
 
 // ─── Admin Session ──────────────────────────────────────────────────────────

@@ -49,7 +49,12 @@ export type AdminUser = {
 
 export type AdminUserDetail = AdminUser & {
   sessionCount: number;
-  lastLogin: Date | null;
+  /**
+   * Most recent activity of a session that still exists (its lastActiveAt).
+   * Null once every session has ended or expired and been cleaned up: this is
+   * NOT a stored last-login time (it was called lastLogin, which misled).
+   */
+  lastActiveAt: Date | null;
 };
 
 export type AdminSession = {
@@ -142,7 +147,7 @@ class AdminRepository {
   }
 
   /**
-   * Get detailed user info including session count and last login
+   * Get detailed user info including session count and last activity
    */
   async getUserDetail(userId: string): Promise<AdminUserDetail | null> {
     const now = new Date();
@@ -163,7 +168,7 @@ class AdminRepository {
 
     if (!user) return null;
 
-    // Get last login from most recent session
+    // Last activity of the most recently used session that still exists
     const latestSession = await prisma.session.findFirst({
       where: { userId },
       orderBy: { lastActiveAt: 'desc' },
@@ -175,7 +180,7 @@ class AdminRepository {
     return {
       ...userData,
       sessionCount: _count.sessions,
-      lastLogin: latestSession?.lastActiveAt ?? null,
+      lastActiveAt: latestSession?.lastActiveAt ?? null,
     };
   }
 

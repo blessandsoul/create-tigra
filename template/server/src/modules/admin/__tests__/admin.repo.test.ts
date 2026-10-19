@@ -8,7 +8,10 @@ import { prisma } from '@libs/prisma.js';
 import { adminRepository } from '../admin.repo.js';
 
 vi.mock('@libs/prisma.js', () => ({
-  prisma: { user: { findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() } },
+  prisma: {
+    user: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
+    session: { findFirst: vi.fn() },
+  },
   isPrismaNotFound: (): boolean => false,
 }));
 
@@ -39,5 +42,14 @@ describe('adminRepository', () => {
       where: { id: 'u1', deletedAt: { not: null } },
       data: { deletedAt: null, isActive: true },
     });
+  });
+
+  it('user detail reports lastActiveAt (the latest still-existing session), not lastLogin', async () => {
+    const seen = new Date('2026-10-19T08:00:00Z');
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', _count: { sessions: 2 } } as never);
+    vi.mocked(prisma.session.findFirst).mockResolvedValue({ lastActiveAt: seen } as never);
+    const detail = await adminRepository.getUserDetail('u1');
+    expect(detail).toMatchObject({ sessionCount: 2, lastActiveAt: seen });
+    expect(detail).not.toHaveProperty('lastLogin');
   });
 });

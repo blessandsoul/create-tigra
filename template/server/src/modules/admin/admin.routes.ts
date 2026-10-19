@@ -107,7 +107,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    *
    * GET /api/v1/admin/users/:userId
    * Auth: Required (ADMIN)
-   * Returns: User with sessionCount and lastLogin
+   * Returns: User with sessionCount and lastActiveAt (latest activity of a still-existing session)
    */
   fastify.get('/admin/users/:userId', {
     schema: { params: userIdParamsSchema },
