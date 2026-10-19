@@ -7,7 +7,6 @@
 import type { FastifyInstance } from 'fastify';
 import { usersController } from './users.controller.js';
 import {
-  GetUserAvatarSchema,
   UserIdParamSchema,
   UpdateProfileSchema,
   ChangePasswordSchema,
@@ -25,12 +24,14 @@ import { RATE_LIMITS } from '@config/rate-limit.config.js';
  * - DELETE /users/me              - Delete account (authenticated)
  * - POST   /users/avatar          - Upload avatar (authenticated)
  * - DELETE /users/avatar          - Delete avatar (authenticated)
- * - GET    /users/:userId/avatar  - Get avatar (public)
  * - PATCH  /users/:userId         - Update profile (owner or admin)
  * - PATCH  /users/:userId/password - Change password (owner or admin)
  * - DELETE /users/:userId         - Delete account (owner or admin)
  * - POST   /users/:userId/avatar  - Upload avatar (owner or admin)
  * - DELETE /users/:userId/avatar  - Delete avatar (owner or admin)
+ *
+ * Avatars are read from their public URL (/uploads/users/{id}/avatar/...,
+ * served statically by app.ts), never through a /users route.
  *
  * @param fastify - Fastify instance
  */
@@ -141,26 +142,6 @@ export async function usersRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     usersController.deleteAvatar.bind(usersController)
-  );
-
-  /**
-   * Get user avatar
-   *
-   * GET /api/v1/users/:userId/avatar
-   * Auth: Not required (public)
-   * Rate limit: 100 requests per minute per IP
-   */
-  fastify.get<{ Params: { userId: string } }>(
-    '/users/:userId/avatar',
-    {
-      schema: {
-        params: GetUserAvatarSchema,
-      },
-      config: {
-        rateLimit: RATE_LIMITS.USERS_GET_AVATAR,
-      },
-    },
-    usersController.getAvatar.bind(usersController)
   );
 
   // --- /users/:userId variants (owner or admin) ---

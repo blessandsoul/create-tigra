@@ -124,11 +124,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   // whole uploads/ tree. The PRIVATE tier (uploads/private) lives OUTSIDE this
   // root and is unreachable through /uploads/* — it is served only by the
   // auth-gated, owner-scoped route GET /api/v1/files/:filename (filesRoutes).
-  // The public avatar URL shape is unchanged: serving UPLOAD_PUBLIC_DIR at
-  // prefix '/uploads/' keeps avatars at /uploads/users/{id}/avatar/x.webp.
+  // Serving UPLOAD_PUBLIC_DIR at prefix '/uploads/' puts avatars at
+  // /uploads/users/{id}/avatar/avatar-<hex>.webp.
+  // Cached for a year, immutable: a public file never changes under its name
+  // (every new avatar gets a new random name, see file-storage.service.ts), so
+  // browsers and CDNs never need to re-check it. Anything else written to the
+  // public tier must follow the same rule.
   await app.register(fastifyStatic, {
     root: fileStorageService.getPublicDir(),
     prefix: '/uploads/',
+    maxAge: 365 * 24 * 60 * 60 * 1000, // ms
+    immutable: true,
   });
 
   // --- Sync permanent IP blocks from DB to Redis ---

@@ -13,22 +13,28 @@
  *   root and is reachable ONLY through the auth-gated, owner-scoped streaming
  *   route GET /api/v1/files/:filename (see src/modules/files/).
  *
- * The public avatar URL shape is UNCHANGED — `/uploads/users/{id}/avatar/x.webp`
- * — because the static mount serves UPLOAD_PUBLIC_DIR at prefix `/uploads/`, so
- * the file just moves one level down on disk (under public/) with no URL churn.
+ * Public avatar URLs look like `/uploads/users/{id}/avatar/avatar-<16 hex>.webp`:
+ * the static mount serves UPLOAD_PUBLIC_DIR at prefix `/uploads/`.
+ *
+ * ── Public files never change under the same name ──────────────────────────
+ * Every new avatar gets a NEW random filename, so a URL always means the same
+ * bytes. That is what lets app.ts serve /uploads with a one-year immutable
+ * cache, and it keeps any cache keyed by URL (browsers, CDNs, the Next.js image
+ * optimizer) from showing an old photo. Anything else stored in the public
+ * tier must follow the same rule: new content, new name.
  */
 
+import { randomBytes } from 'node:crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { InternalError } from '@shared/errors/errors.js';
-import { generateAvatarFilename } from './filename-sanitizer.js';
 
 /**
  * File Storage Service
  *
- * Manages local file storage with per-user directories and SEO-friendly naming.
+ * Manages local file storage with per-user directories.
  * All user media lives under {tier}/users/{userId}/ for easy per-user cleanup.
  */
 class FileStorageService {
@@ -82,62 +88,25 @@ class FileStorageService {
   }
 
   /**
-   * Saves an avatar image to user-specific directory
+   * Writes a NEW avatar file under a fresh random name and returns its URL.
    *
-   * Process:
-   * 1. Create user avatar directory if it doesn't exist
-   * 2. Generate SEO-friendly filename
-   * 3. Save buffer to file (overwrites existing avatar)
-   * 4. Return filename and public URL
+   * It never overwrites or deletes anything: the old avatar keeps serving until
+   * the database points at the new one, and the caller then removes exactly
+   * the file it replaced (see usersService.uploadAvatar). The name carries no
+   * personal data (no user name) and is unique per upload.
    *
    * @param userId - User's unique ID
-   * @param buffer - Optimized image buffer
-   * @param firstName - User's first name (for SEO filename)
-   * @param lastName - User's last name (for SEO filename)
-   * @returns Filename and URL of saved avatar
-   *
-   * @example
-   * ```typescript
-   * const { filename, url } = await fileStorageService.saveAvatar(
-   *   userId,
-   *   imageBuffer,
-   *   'John',
-   *   'Doe'
-   * );
-   * // filename: "john-doe-avatar.webp"
-   * // url: "/uploads/users/{userId}/avatar/john-doe-avatar.webp"
-   * ```
+   * @param buffer - Optimized image buffer (always WebP)
+   * @returns Filename and public URL, e.g. /uploads/users/{userId}/avatar/avatar-3f9c0a1b2c3d4e5f.webp
    */
-  async saveAvatar(
-    userId: string,
-    buffer: Buffer,
-    firstName: string,
-    lastName: string
-  ): Promise<{ filename: string; url: string }> {
+  async saveAvatar(userId: string, buffer: Buffer): Promise<{ filename: string; url: string }> {
     try {
-      // Ensure user's avatar directory exists
       const avatarDir = this.getUserAvatarDir(userId);
       await this.ensureDirectoryExists(avatarDir);
 
-      // Generate SEO-friendly filename
-      const filename = generateAvatarFilename(firstName, lastName, 'webp');
-      const filePath = path.join(avatarDir, filename);
+      const filename = `avatar-${randomBytes(8).toString('hex')}.webp`;
+      await fs.writeFile(path.join(avatarDir, filename), buffer);
 
-      // Write file to disk (overwrites existing)
-      await fs.writeFile(filePath, buffer);
-
-      // Remove any previous avatar files. The filename comes from the user's
-      // name, so after a name change the old file would otherwise stay publicly
-      // reachable at its old URL (possibly with metadata from before EXIF
-      // stripping). New file is written first, so there is never a moment with
-      // no avatar.
-      for (const entry of await fs.readdir(avatarDir)) {
-        if (entry !== filename) {
-          await fs.rm(path.join(avatarDir, entry), { force: true, recursive: true });
-        }
-      }
-
-      // Generate public URL
       const url = `/uploads/users/${userId}/avatar/${filename}`;
 
       logger.info({
@@ -218,25 +187,21 @@ class FileStorageService {
   }
 
   /**
-   * Gets the full file system path for an avatar
+   * Removes ONE avatar file of this user. Best effort: never throws, because it
+   * runs while cleaning up (the replaced file after a new upload, or the new
+   * file after a failed one). A miss is logged; the account purge removes any
+   * leftover with the whole folder.
    *
-   * @param userId - User's unique ID
-   * @param filename - Avatar filename
-   * @returns Absolute file path
+   * Only the basename is used, so whatever a stored URL says, the path stays
+   * inside this user's avatar folder.
    */
-  getAvatarPath(userId: string, filename: string): string {
-    return path.join(this.getUserAvatarDir(userId), filename);
-  }
-
-  /**
-   * Gets the public URL for an avatar
-   *
-   * @param userId - User's unique ID
-   * @param filename - Avatar filename
-   * @returns Public URL path
-   */
-  getAvatarUrl(userId: string, filename: string): string {
-    return `/uploads/users/${userId}/avatar/${filename}`;
+  async removeAvatarFile(userId: string, filename: string): Promise<void> {
+    const safeName = path.basename(filename);
+    try {
+      await fs.rm(path.join(this.getUserAvatarDir(userId), safeName), { force: true });
+    } catch (error) {
+      logger.error({ err: error, msg: 'Failed to remove avatar file', userId, filename: safeName });
+    }
   }
 
   /**
@@ -319,21 +284,6 @@ class FileStorageService {
   getPrivateFilePath(userId: string, filename: string): string {
     const safeName = this.sanitizePrivateFilename(filename);
     return path.join(this.getUserPrivateDir(userId), safeName);
-  }
-
-  /**
-   * Checks if a file exists
-   *
-   * @param filePath - Full file path
-   * @returns True if file exists
-   */
-  async fileExists(filePath: string): Promise<boolean> {
-    try {
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   /**

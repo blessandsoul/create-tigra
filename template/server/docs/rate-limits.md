@@ -29,7 +29,6 @@ Everything that slows down or stops a visitor, in one place. The limits themselv
 | `DELETE /users/me`, `DELETE /users/:userId` | 10 per minute | `USERS_DELETE_ACCOUNT` |
 | `POST /users/avatar`, `POST /users/:userId/avatar` | 10 per minute | `USERS_UPLOAD_AVATAR` |
 | `DELETE /users/avatar`, `DELETE /users/:userId/avatar` | 30 per minute | `USERS_DELETE_AVATAR` |
-| `GET /users/:userId/avatar` | 100 per minute | `USERS_GET_AVATAR` |
 | `GET /files/:filename` | 100 per minute | `FILES_GET` |
 | every `/admin/*` route | 30 per minute | `ADMIN_DEFAULT` |
 | **any other route** (including routes you add) | 200 per minute | `DEFAULT` |

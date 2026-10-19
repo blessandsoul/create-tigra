@@ -15,9 +15,6 @@ export const UserIdParamSchema = z.object({
   userId: z.string().uuid({ message: 'Invalid user ID format' }),
 });
 
-/** Alias for backward compatibility */
-export const GetUserAvatarSchema = UserIdParamSchema;
-
 /**
  * Schema for updating user profile
  *
@@ -82,7 +79,6 @@ export const AdminChangePasswordSchema = z.object({
  * Type inference from schemas
  */
 export type UserIdParams = z.infer<typeof UserIdParamSchema>;
-export type GetUserAvatarParams = UserIdParams;
 export type UpdateProfileInput = z.infer<typeof UpdateProfileSchema>;
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 export type AdminChangePasswordInput = z.infer<typeof AdminChangePasswordSchema>;

@@ -161,7 +161,6 @@ export const RATE_LIMITS = {
   // Users — avatar management (an upload decodes up to 50 MP: real CPU work)
   USERS_UPLOAD_AVATAR: routeLimit('USERS_UPLOAD_AVATAR', 10, '1m'),
   USERS_DELETE_AVATAR: routeLimit('USERS_DELETE_AVATAR', 30, '1m'),
-  USERS_GET_AVATAR: routeLimit('USERS_GET_AVATAR', 100, '1m'),
 
   // Files — auth-gated private file streaming
   FILES_GET: routeLimit('FILES_GET', 100, '1m'),

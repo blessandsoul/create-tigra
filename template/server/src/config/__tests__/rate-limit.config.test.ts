@@ -33,7 +33,6 @@ const EXPECTED: Record<string, { max: number; timeWindow: number }> = {
   USERS_DELETE_ACCOUNT: { max: 10, timeWindow: MIN },
   USERS_UPLOAD_AVATAR: { max: 10, timeWindow: MIN },
   USERS_DELETE_AVATAR: { max: 30, timeWindow: MIN },
-  USERS_GET_AVATAR: { max: 100, timeWindow: MIN },
   FILES_GET: { max: 100, timeWindow: MIN },
   ADMIN_DEFAULT: { max: 30, timeWindow: MIN },
 };

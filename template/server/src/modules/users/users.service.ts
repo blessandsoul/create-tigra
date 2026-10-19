@@ -11,10 +11,17 @@ import { sessionRepository } from '@modules/auth/session.repo.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { imageOptimizerService } from '@libs/storage/image-optimizer.service.js';
 import { verifyPassword, hashPassword } from '@libs/password.js';
-import { NotFoundError, BadRequestError, ValidationError } from '@shared/errors/errors.js';
+import { NotFoundError, BadRequestError, ValidationError, ConflictError } from '@shared/errors/errors.js';
 import { logger } from '@libs/logger.js';
 import path from 'path';
 import type { UpdateProfileInput, ChangePasswordInput, AdminChangePasswordInput } from './users.schemas.js';
+
+/**
+ * How often an upload retries pointing the database at its new file when a
+ * parallel upload or delete keeps changing the avatar. Each retry means
+ * someone else won a swap; 5 is plenty for one person's clicks and tabs.
+ */
+const AVATAR_SWAP_ATTEMPTS = 5;
 
 /**
  * Users Service Class
@@ -26,24 +33,29 @@ class UsersService {
    * Uploads and sets a user's avatar
    *
    * Process:
-   * 1. Get user from database (need first/last name for SEO filename)
-   * 2. Optimize image (resize, compress, convert to WebP)
-   * 3. Generate SEO-friendly filename
-   * 4. Save to user-specific directory
-   * 5. Update user record with avatar URL
+   * 1. Optimize the image (bytes decide the format; WebP out, no metadata)
+   * 2. Write it under a NEW random filename (the old avatar keeps serving)
+   * 3. Point the database at it with a compare-and-swap, retrying when a
+   *    parallel upload or delete changed the avatar in between
+   * 4. Delete exactly the file this swap replaced
+   *
+   * Why the swap: two uploads at once (double click, two tabs) must end with
+   * one file on disk, the one the database names. Each replaced URL is replaced
+   * by exactly one swap, and only that upload deletes its file, so no upload
+   * can delete a file another upload is about to point the database at.
    *
    * @param userId - User's unique ID
    * @param fileBuffer - Uploaded image buffer
    * @param originalFilename - Original filename (for logging)
-   * @returns Updated user with new avatar URL
+   * @returns The new avatar URL
    * @throws NotFoundError if user not found
+   * @throws ConflictError (AVATAR_BUSY) if the avatar kept changing during the upload
    */
   async uploadAvatar(
     userId: string,
     fileBuffer: Buffer,
     originalFilename: string
-  ): Promise<SafeUser> {
-    // Get current user
+  ): Promise<{ avatarUrl: string }> {
     const user = await usersRepository.getUserById(userId);
     if (!user) {
       throw new NotFoundError('User not found', 'USER_NOT_FOUND');
@@ -56,30 +68,38 @@ class UsersService {
       fileSize: fileBuffer.length,
     });
 
-    // Optimize image (resize, compress, convert to WebP)
     const optimizedBuffer = await imageOptimizerService.optimizeAvatar(fileBuffer);
+    const { filename, url } = await fileStorageService.saveAvatar(userId, optimizedBuffer);
 
-    // Save to user-specific directory with SEO-friendly filename
-    const { filename, url } = await fileStorageService.saveAvatar(
-      userId,
-      optimizedBuffer,
-      user.firstName,
-      user.lastName
-    );
+    // undefined = not swapped yet; null = swapped and there was no old avatar.
+    let replaced: string | null | undefined;
+    try {
+      let expected = user.avatarUrl;
+      for (let attempt = 0; attempt < AVATAR_SWAP_ATTEMPTS && replaced === undefined; attempt++) {
+        if (await usersRepository.swapAvatarUrl(userId, expected, url)) {
+          replaced = expected;
+          break;
+        }
+        const current = await usersRepository.getUserById(userId);
+        if (!current) throw new NotFoundError('User not found', 'USER_NOT_FOUND');
+        expected = current.avatarUrl;
+      }
+    } catch (error) {
+      await fileStorageService.removeAvatarFile(userId, filename);
+      throw error;
+    }
+    if (replaced === undefined) {
+      await fileStorageService.removeAvatarFile(userId, filename);
+      throw new ConflictError('The avatar changed while uploading. Please try again.', 'AVATAR_BUSY');
+    }
 
-    logger.info({
-      msg: 'Avatar file saved',
-      userId,
-      filename,
-      url,
-    });
-
-    // Update user record with avatar URL
-    const updatedUser = await usersRepository.updateUserAvatar(userId, url);
+    if (replaced) {
+      await fileStorageService.removeAvatarFile(userId, path.basename(replaced));
+    }
 
     logger.info({ msg: 'Avatar upload complete', userId, avatarUrl: url });
 
-    return updatedUser;
+    return { avatarUrl: url };
   }
 
   /**
@@ -116,56 +136,6 @@ class UsersService {
     await usersRepository.clearUserAvatar(userId);
 
     logger.info({ msg: 'Avatar deleted successfully', userId });
-  }
-
-  /**
-   * Gets a user's avatar file path
-   *
-   * Process:
-   * 1. Get user from database
-   * 2. Verify user has an avatar
-   * 3. Extract filename from avatar URL
-   * 4. Build and verify file path
-   *
-   * @param userId - User's unique ID
-   * @returns Absolute file path and public URL
-   * @throws NotFoundError if user not found or has no avatar
-   */
-  async getAvatar(userId: string): Promise<{ path: string; url: string }> {
-    // Get user
-    const user = await usersRepository.getUserById(userId);
-    if (!user) {
-      throw new NotFoundError('User not found', 'USER_NOT_FOUND');
-    }
-
-    // Check if user has an avatar
-    if (!user.avatarUrl) {
-      throw new NotFoundError('User has no avatar', 'NO_AVATAR');
-    }
-
-    // Extract filename from URL (last segment)
-    // URL format: /uploads/users/{userId}/avatar/{filename}
-    const filename = path.basename(user.avatarUrl);
-
-    // Build full file path
-    const filePath = fileStorageService.getAvatarPath(userId, filename);
-
-    // Verify file exists on disk
-    const exists = await fileStorageService.fileExists(filePath);
-    if (!exists) {
-      logger.error({
-        msg: 'Avatar file missing from disk',
-        userId,
-        avatarUrl: user.avatarUrl,
-        filePath,
-      });
-      throw new NotFoundError('Avatar file not found on disk', 'AVATAR_FILE_NOT_FOUND');
-    }
-
-    return {
-      path: filePath,
-      url: user.avatarUrl,
-    };
   }
 
   /**

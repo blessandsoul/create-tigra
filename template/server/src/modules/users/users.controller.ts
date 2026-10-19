@@ -5,13 +5,12 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import path from 'path';
 import { usersService } from './users.service.js';
 import { validateImageFile, validateFileSize } from '@libs/storage/file-validator.js';
 import { successResponse } from '@shared/responses/successResponse.js';
 import { clearAuthCookies } from '@libs/cookies.js';
 import { ChangePasswordSchema, AdminChangePasswordSchema, DeleteAccountSchema } from './users.schemas.js';
-import type { GetUserAvatarParams, UpdateProfileInput } from './users.schemas.js';
+import type { UpdateProfileInput } from './users.schemas.js';
 import type { AuthenticatedRequest } from '@shared/types/index.js';
 import { logger } from '@libs/logger.js';
 import { BadRequestError } from '@shared/errors/errors.js';
@@ -62,13 +61,9 @@ class UsersController {
     });
 
     // Call service to process and save avatar
-    const updatedUser = await usersService.uploadAvatar(userId, buffer, data.filename);
+    const { avatarUrl } = await usersService.uploadAvatar(userId, buffer, data.filename);
 
-    return reply.send(
-      successResponse('Avatar uploaded successfully', {
-        avatarUrl: updatedUser.avatarUrl,
-      })
-    );
+    return reply.send(successResponse('Avatar uploaded successfully', { avatarUrl }));
   }
 
   /**
@@ -90,32 +85,6 @@ class UsersController {
     await usersService.deleteAvatar(userId);
 
     return reply.send(successResponse('Avatar deleted successfully', null));
-  }
-
-  /**
-   * Get avatar handler
-   *
-   * GET /api/v1/users/:userId/avatar
-   * Auth: Not required (public endpoint)
-   *
-   * Returns the avatar file directly or 404 if not found.
-   *
-   * @param request - Fastify request
-   * @param reply - Fastify reply
-   */
-  async getAvatar(
-    request: FastifyRequest<{ Params: GetUserAvatarParams }>,
-    reply: FastifyReply
-  ): Promise<void> {
-    const { userId } = request.params;
-
-    logger.info({ msg: 'Avatar fetch request', userId });
-
-    // Get avatar file path
-    const { path: filePath } = await usersService.getAvatar(userId);
-
-    // Send file directly
-    return reply.sendFile(path.basename(filePath), path.dirname(filePath));
   }
 
   /**

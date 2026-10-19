@@ -53,14 +53,18 @@ class UsersRepository {
   }
 
   /**
-   * Updates a user's avatar URL
+   * Compare-and-swap of the avatar URL: sets `next` only if the stored URL is
+   * still `expected` (null matches "no avatar"). Returns whether THIS call made
+   * the change. One counted UPDATE, so of two parallel uploads exactly one
+   * replaces any given URL, and only that one deletes the replaced file (see
+   * usersService.uploadAvatar). Deleted accounts never match.
    */
-  async updateUserAvatar(userId: string, avatarUrl: string): Promise<SafeUser> {
-    return prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl },
-      select: userSelect,
+  async swapAvatarUrl(userId: string, expected: string | null, next: string): Promise<boolean> {
+    const { count } = await prisma.user.updateMany({
+      where: { id: userId, deletedAt: null, avatarUrl: expected },
+      data: { avatarUrl: next },
     });
+    return count === 1;
   }
 
   /**
