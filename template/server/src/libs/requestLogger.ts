@@ -33,8 +33,19 @@ export function shouldColorize(isTty: boolean | undefined, nodeEnv: string): boo
   return isTty === true && nodeEnv !== 'production';
 }
 
+/**
+ * Whether request lines carry their parts as separate JSON fields. Only where
+ * logs are JSON (production, the same switch as the pino-pretty transport in
+ * logger.ts): pino-pretty would print each field on its own line under every
+ * request, while a developer reads the one-line summary anyway.
+ */
+export function shouldAttachFields(nodeEnv: string): boolean {
+  return nodeEnv === 'production';
+}
+
 // Decided once at startup: neither stdout nor NODE_ENV changes at runtime.
 const useColor = shouldColorize(process.stdout.isTTY, env.NODE_ENV);
+const attachFields = shouldAttachFields(env.NODE_ENV);
 
 function getStatusColor(statusCode: number): string {
   if (statusCode >= 500) return colors.serverError;
@@ -60,8 +71,41 @@ export interface RequestLineParts {
 }
 
 /**
+ * The URL without its query string or fragment. Queries carry search terms,
+ * email addresses and the like (`/admin/users?search=jane@example.com`), and
+ * links in emails carry tokens, so no request log keeps them; route params
+ * stay (they are ids, not secrets).
+ */
+export function requestPath(url: string): string {
+  const end = url.search(/[?#]/);
+  return end === -1 ? url : url.slice(0, end);
+}
+
+/** The request line's parts as JSON fields, for searching and alerting on production logs. */
+export interface RequestLogFields {
+  reqId: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  durationMs: number;
+  ip: string;
+}
+
+export function requestLogFields(parts: RequestLineParts): RequestLogFields {
+  return {
+    reqId: parts.requestId,
+    method: parts.method,
+    path: requestPath(parts.url),
+    statusCode: parts.statusCode,
+    durationMs: parts.durationMs,
+    ip: parts.clientIp,
+  };
+}
+
+/**
  * Build the one-line summary. Pure (no I/O), so the colour rule is testable.
- * With `color: false` the line contains no escape codes at all.
+ * With `color: false` the line contains no escape codes at all. The URL is
+ * printed without its query (requestPath).
  */
 export function formatRequestLine(parts: RequestLineParts, { color }: { color: boolean }): string {
   const paint = (code: string, text: string): string => (color ? `${code}${text}${colors.reset}` : text);
@@ -69,7 +113,7 @@ export function formatRequestLine(parts: RequestLineParts, { color }: { color: b
 
   return [
     paint(methodColor, parts.method.padEnd(7)),
-    `${parts.url} `,
+    `${requestPath(parts.url)} `,
     paint(getStatusColor(parts.statusCode), `${parts.statusCode} ${parts.statusMessage}`),
     ' ',
     paint(colors.dim, `(${formatDuration(parts.durationMs)}) [ip=${parts.clientIp} reqId=${parts.requestId}]`),
@@ -87,32 +131,37 @@ export function markRequestStart(request: FastifyRequest): void {
  * Log a single-line request/response summary (called in onResponse)
  *
  * Format: GET /api/v1/auth/me 200 OK (12ms) [ip=203.0.113.7 reqId=<uuid>]
+ * In production the same parts also go out as JSON fields
+ * ({ reqId, method, path, statusCode, durationMs, ip }), so log search can
+ * filter on them instead of parsing the text. Neither keeps the query string.
  *
  * The IP is the proxy-aware resolved client IP (getClientIp): the verified
  * CF-Connecting-IP behind Cloudflare, otherwise the address our own proxy saw.
  * reqId is request.id (inbound X-Request-Id or the minted UUID) for log↔Sentry
  * tie-up. Colours follow shouldColorize(); production lines are plain text.
+ * `options` exists for tests; the app always uses the startup decision.
  */
-export function logRequestLine(request: FastifyRequest, reply: FastifyReply): void {
+export function logRequestLine(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  options: { color: boolean; fields: boolean } = { color: useColor, fields: attachFields },
+): void {
   const statusCode = reply.statusCode;
-  const line = formatRequestLine(
-    {
-      method: request.method,
-      url: request.url,
-      statusCode,
-      statusMessage: reply.raw.statusMessage || '',
-      durationMs: request.startTime ? Date.now() - request.startTime : 0,
-      clientIp: getClientIp(request),
-      requestId: String(request.id),
-    },
-    { color: useColor },
-  );
+  const parts: RequestLineParts = {
+    method: request.method,
+    url: request.url,
+    statusCode,
+    statusMessage: reply.raw.statusMessage || '',
+    durationMs: request.startTime ? Date.now() - request.startTime : 0,
+    clientIp: getClientIp(request),
+    requestId: String(request.id),
+  };
+  const line = formatRequestLine(parts, { color: options.color });
+  const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
 
-  if (statusCode >= 500) {
-    logger.error(line);
-  } else if (statusCode >= 400) {
-    logger.warn(line);
+  if (options.fields) {
+    logger[level](requestLogFields(parts), line);
   } else {
-    logger.info(line);
+    logger[level](line);
   }
 }

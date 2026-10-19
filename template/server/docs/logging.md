@@ -12,7 +12,29 @@ Each completed request produces a single log line:
 GET    /api/v1/auth/me 200 OK (12ms) [ip=203.0.113.7 reqId=<uuid>]
 ```
 
-Format: `METHOD  URL  STATUS STATUS_MESSAGE  (DURATION) [ip=CLIENT_IP reqId=REQUEST_ID]`
+Format: `METHOD  PATH  STATUS STATUS_MESSAGE  (DURATION) [ip=CLIENT_IP reqId=REQUEST_ID]`
+
+`PATH` is the URL without its query string or fragment: queries carry search terms and email
+addresses (`/admin/users?search=jane@example.com`), and links from emails carry tokens, so no
+request log keeps them. Route params (ids) stay.
+
+In production (JSON logs) the same parts are also separate fields on the line, so log search can
+filter on them instead of parsing `msg`:
+
+```json
+{"level":30,"time":1760918400000,"reqId":"<uuid>","method":"GET","path":"/api/v1/auth/me","statusCode":200,"durationMs":12,"ip":"203.0.113.7","msg":"GET    /api/v1/auth/me 200 OK (12ms) [ip=203.0.113.7 reqId=<uuid>]"}
+```
+
+| Field | Meaning |
+|---|---|
+| `reqId` | the request id (also the `x-request-id` response header) |
+| `method` | HTTP method |
+| `path` | URL without query or fragment |
+| `statusCode` | response status |
+| `durationMs` | time from the route's preHandler to the response, in ms |
+| `ip` | resolved client IP (Cloudflare or proxy aware, `src/libs/client-ip.ts`) |
+
+Development logs (pino-pretty) show only the line, without the field list under it.
 
 `REQUEST_ID` is also sent back as the `x-request-id` response header. An inbound `X-Request-Id` (from a proxy in front) is kept only when it is at most 128 letters, digits, `.`, `_` or `-`; anything else gets a fresh UUID (`src/libs/request-id.ts`).
 
