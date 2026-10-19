@@ -11,7 +11,7 @@ import { sessionRepository } from '@modules/auth/session.repo.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { imageOptimizerService } from '@libs/storage/image-optimizer.service.js';
 import { verifyPassword, hashPassword } from '@libs/password.js';
-import { NotFoundError, BadRequestError, UnauthorizedError } from '@shared/errors/errors.js';
+import { NotFoundError, BadRequestError, ValidationError } from '@shared/errors/errors.js';
 import { logger } from '@libs/logger.js';
 import path from 'path';
 import type { UpdateProfileInput, ChangePasswordInput, AdminChangePasswordInput } from './users.schemas.js';
@@ -211,7 +211,7 @@ class UsersService {
    * @param userId - User's unique ID
    * @param input - Current and new password
    * @throws NotFoundError if user not found
-   * @throws UnauthorizedError if current password is wrong
+   * @throws ValidationError (422 INVALID_CURRENT_PASSWORD) if the current password is wrong
    * @throws BadRequestError if new password same as current
    */
   async changePassword(
@@ -227,8 +227,10 @@ class UsersService {
     if (!skipPasswordVerification) {
       const fullInput = input as ChangePasswordInput;
       const isValid = await verifyPassword(fullInput.currentPassword, user.password);
+      // 422, not 401: the caller IS signed in, and a 401 would make the client
+      // treat it as an expired session and run a pointless token refresh.
       if (!isValid) {
-        throw new UnauthorizedError('Current password is incorrect', 'INVALID_CREDENTIALS');
+        throw new ValidationError('Current password is incorrect', 'INVALID_CURRENT_PASSWORD');
       }
     }
 
@@ -255,7 +257,7 @@ class UsersService {
    * @param userId - User's unique ID
    * @param password - Password confirmation
    * @throws NotFoundError if user not found
-   * @throws UnauthorizedError if password is wrong
+   * @throws ValidationError (422 INVALID_PASSWORD) if the password is wrong
    */
   async deleteAccount(
     userId: string,
@@ -269,8 +271,9 @@ class UsersService {
 
     if (!skipPasswordVerification) {
       const isValid = await verifyPassword(password, user.password);
+      // 422, not 401 (see changePassword): a wrong confirmation is wrong input.
       if (!isValid) {
-        throw new UnauthorizedError('Incorrect password', 'INVALID_CREDENTIALS');
+        throw new ValidationError('Incorrect password', 'INVALID_PASSWORD');
       }
     }
 
