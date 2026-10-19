@@ -57,9 +57,23 @@ jobs:
       - name: Build
         run: npm run build
 
+  # Generates a project exactly as a user would (both variants: plain, and with
+  # the email-verification module patched in), then runs the generated
+  # project's own gate on it: install from its shipped lockfiles, typecheck,
+  # lint, unit tests with coverage, build, integration tests against real
+  # MySQL + Redis (Testcontainers), and the client build. The template jobs
+  # above check template/ directly; this one checks what users get.
   cli-smoke:
-    name: cli-smoke (scaffold a project end-to-end)
+    name: cli-smoke (${{ matrix.variant }}) - scaffold, install, test, build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: plain
+            answer: '\n'
+          - variant: email
+            answer: '1\n'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,6 +91,9 @@ jobs:
             const [pack] = JSON.parse(fs.readFileSync(process.env.PACK_JSON, "utf8"));
             const files = new Set(pack.files.map(({ path }) => path));
             const required = [
+              "template/.github/workflows/ci.yml",
+              "template/.github/workflows/audit.yml",
+              "template/.github/dependabot.yml",
               "template/AGENTS.md",
               "template/client/AGENTS.md",
               "template/server/AGENTS.md",
@@ -86,14 +103,14 @@ jobs:
             const missing = required.filter((path) => !files.has(path));
             if (missing.length > 0) throw new Error(`npm package is missing: ${missing.join(", ")}`);
           '
-      - name: Scaffold a smoke app non-interactively
+      - name: Scaffold a smoke app non-interactively (${{ matrix.variant }})
         run: |
           # The CLI exits 1 if the email-verification prompt is abandoned on a
-          # closed stdin, so we MUST pipe an answer. A single newline takes the
-          # default (No), which is what we want for the smoke scaffold.
+          # closed stdin, so we MUST pipe an answer: a single newline takes the
+          # default (No, plain), "1" adds the email-verification module.
           smoke_dir="$(mktemp -d)"
           cd "$smoke_dir"
-          printf '\n' | node "$GITHUB_WORKSPACE/bin/create-tigra.js" ci-smoke
+          printf '${{ matrix.answer }}' | node "$GITHUB_WORKSPACE/bin/create-tigra.js" ci-smoke
           echo "SMOKE_APP=$smoke_dir/ci-smoke" >> "$GITHUB_ENV"
       - name: Assert generated app includes Codex guidance
         run: |
@@ -145,3 +162,38 @@ jobs:
             exit 1
           fi
           echo "No unreplaced placeholders found."
+      - name: Assert the generated app ships its CI, audit and Dependabot files
+        run: |
+          app="$SMOKE_APP"
+          test -f "$app/.github/workflows/ci.yml"
+          test -f "$app/.github/workflows/audit.yml"
+          test -f "$app/.github/dependabot.yml"
+      - name: Assert the email module ships its integration tests
+        if: matrix.variant == 'email'
+        run: test -f "$SMOKE_APP/server/src/modules/auth/__tests__/verification.integration.test.ts"
+      - name: Install both apps from their shipped lockfiles, unchanged
+        run: |
+          for app in server client; do
+            before="$(sha256sum "$SMOKE_APP/$app/package-lock.json")"
+            (cd "$SMOKE_APP/$app" && npm ci --include=optional)
+            after="$(sha256sum "$SMOKE_APP/$app/package-lock.json")"
+            [ "$before" = "$after" ] || { echo "::error::$app/package-lock.json changed during npm ci"; exit 1; }
+          done
+      - name: Server - prisma generate, typecheck, lint, unit tests with coverage, build
+        run: |
+          cd "$SMOKE_APP/server"
+          npx prisma generate
+          npm run typecheck
+          npm run lint
+          npm run test:coverage
+          npm run build
+      - name: Server - integration tests (Testcontainers MySQL + Redis)
+        run: |
+          cd "$SMOKE_APP/server"
+          npm run test:integration
+      - name: Client - typecheck, lint, build
+        run: |
+          cd "$SMOKE_APP/client"
+          npm run typecheck
+          npm run lint
+          npm run build
