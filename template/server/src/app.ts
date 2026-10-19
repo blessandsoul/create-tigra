@@ -5,7 +5,6 @@ import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { randomUUID } from 'node:crypto';
 import { env } from '@config/env.js';
 import { markRequestStart, logRequestLine } from '@libs/requestLogger.js';
 import { initAuth } from '@libs/auth.js';
@@ -24,6 +23,7 @@ import { getRedis, onRedisReady } from '@libs/redis.js';
 import { getClientIp, TRUSTED_PROXY_RANGES } from '@libs/client-ip.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
 import { registerErrorHandler } from '@libs/error-handler.js';
+import { requestIdFrom } from '@libs/request-id.js';
 import { ForbiddenError, describeWait } from '@shared/errors/errors.js';
 import {
   serializerCompiler,
@@ -39,8 +39,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     logger: false,
     // Request-id correlation: honour an inbound X-Request-Id (set by a reverse
     // proxy / upstream service) so logs and Sentry events share one id across
-    // hops; otherwise mint a UUID. Works even with logger:false.
-    genReqId: (req) => (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
+    // hops, but only a short plain one; otherwise mint a UUID. See libs/request-id.ts.
+    genReqId: (req) => requestIdFrom(req.headers['x-request-id']),
     // Trust X-Forwarded-* only from our own proxy (loopback / private networks, i.e. Coolify's
     // Traefik), in every environment. request.ip is then the right-most untrusted hop, never an
     // entry the visitor wrote. `true` here would trust every hop, letting any client choose its
