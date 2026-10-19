@@ -22,6 +22,8 @@ beforeEach(() => {
   vi.mocked(prisma.$queryRaw).mockResolvedValue([{ 1: 1 }] as never);
   ping.mockResolvedValue('PONG');
   vi.mocked(getRedis).mockReturnValue({ ping } as never);
+  monitoring.resetHealthCacheForTests();
+  vi.useRealTimers();
 });
 
 describe('checkMemory', () => {
@@ -57,5 +59,57 @@ describe('failing checks log the real error', () => {
     const report = await monitoring.performHealthCheck();
     expect(report.status).toBe('degraded');
     expect(logger.warn).toHaveBeenCalledWith({ err: failure }, 'Redis health check failed');
+  });
+});
+
+describe('dependency check cache (5 s, single-flight)', () => {
+  it('100 probes inside 5 s run one database query and one PING', async () => {
+    vi.useFakeTimers();
+    for (let i = 0; i < 100; i++) await monitoring.performHealthCheck();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(ping).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks again once 5 s have passed', async () => {
+    vi.useFakeTimers();
+    await monitoring.performHealthCheck();
+    vi.advanceTimersByTime(monitoring.DEPENDENCY_CHECK_TTL_MS - 1);
+    await monitoring.performHealthCheck();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    const report = await monitoring.performHealthCheck();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(report.checkedAt).toBe(new Date(Date.now()).toISOString());
+  });
+
+  it('concurrent probes during a slow check share it instead of queueing more queries', async () => {
+    let answer!: (rows: unknown) => void;
+    vi.mocked(prisma.$queryRaw).mockReturnValue(new Promise((resolve) => (answer = resolve)) as never);
+    const probes = Promise.all([
+      ...Array.from({ length: 10 }, () => monitoring.performHealthCheck()),
+      monitoring.checkReadiness(),
+    ]);
+    answer([{ 1: 1 }]);
+    const results = await probes;
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(results.at(-1)).toBe(true);
+  });
+
+  it('/ready reuses the check /health just made, and a cached failure is not retried', async () => {
+    vi.mocked(prisma.$queryRaw).mockRejectedValue(new Error('down'));
+    expect((await monitoring.performHealthCheck()).status).toBe('unhealthy');
+    expect(await monitoring.checkReadiness()).toBe(false);
+    expect((await monitoring.performHealthCheck()).status).toBe('unhealthy');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('a slow database is still ready (only down is not ready)', async () => {
+    vi.useFakeTimers();
+    vi.mocked(prisma.$queryRaw).mockImplementation((() => {
+      vi.advanceTimersByTime(150);
+      return Promise.resolve([{ 1: 1 }]);
+    }) as never);
+    expect(await monitoring.checkReadiness()).toBe(true);
+    expect((await monitoring.performHealthCheck()).checks.database.status).toBe('degraded');
   });
 });

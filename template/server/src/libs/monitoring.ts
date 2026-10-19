@@ -13,6 +13,8 @@ export interface HealthCheckResult {
     uptime: CheckStatus;
   };
   timestamp: string;
+  /** When the database and Redis were last actually checked (the answer can be up to 5 s old). */
+  checkedAt: string;
   version: string;
   environment: string;
 }
@@ -83,6 +85,54 @@ async function checkRedis(): Promise<CheckStatus> {
   }
 }
 
+/**
+ * How long one database + Redis check answers every probe (/health,
+ * /admin/health, /ready). The probes are public and unlimited (MONITORING_PATHS),
+ * so without this each request would run a query: a flood of /health calls
+ * would become a flood of database work. 5 s is far below any monitor's
+ * interval, so an outage still shows within one probe.
+ */
+export const DEPENDENCY_CHECK_TTL_MS = 5_000;
+
+interface DependencyChecks {
+  database: CheckStatus;
+  redis: CheckStatus;
+  checkedAt: number;
+}
+
+let cachedChecks: DependencyChecks | null = null;
+let checksInFlight: Promise<DependencyChecks> | null = null;
+
+/**
+ * The database and Redis checks, cached for DEPENDENCY_CHECK_TTL_MS and
+ * single-flight: callers arriving while a check runs share its promise
+ * instead of starting another (a hung database would otherwise collect one
+ * pending query per probe). Failures are cached too, so a down database is
+ * not retried by every probe. checkDatabase/checkRedis never throw.
+ */
+function checkDependencies(): Promise<DependencyChecks> {
+  if (cachedChecks && Date.now() - cachedChecks.checkedAt < DEPENDENCY_CHECK_TTL_MS) {
+    return Promise.resolve(cachedChecks);
+  }
+  if (!checksInFlight) {
+    checksInFlight = Promise.all([checkDatabase(), checkRedis()])
+      .then(([database, redis]) => {
+        cachedChecks = { database, redis, checkedAt: Date.now() };
+        return cachedChecks;
+      })
+      .finally(() => {
+        checksInFlight = null;
+      });
+  }
+  return checksInFlight;
+}
+
+/** Forget the cached checks, so each test starts with a real check. */
+export function resetHealthCacheForTests(): void {
+  cachedChecks = null;
+  checksInFlight = null;
+}
+
 /** Heap use above this share of the heap LIMIT counts as degraded. */
 export const HEAP_DEGRADED_RATIO = 0.85;
 
@@ -151,15 +201,13 @@ function checkUptime(): CheckStatus {
 }
 
 /**
- * Perform comprehensive health check
+ * Full health report. Database and Redis come from the shared 5 s cache
+ * (checkDependencies); memory and uptime are read fresh, they cost nothing.
  */
 export async function performHealthCheck(): Promise<HealthCheckResult> {
-  const [database, redis, memory, uptime] = await Promise.all([
-    checkDatabase(),
-    checkRedis(),
-    checkMemory(),
-    checkUptime(),
-  ]);
+  const { database, redis, checkedAt } = await checkDependencies();
+  const memory = checkMemory();
+  const uptime = checkUptime();
 
   // Determine overall status
   let status: 'healthy' | 'degraded' | 'unhealthy';
@@ -187,22 +235,19 @@ export async function performHealthCheck(): Promise<HealthCheckResult> {
       uptime,
     },
     timestamp: new Date().toISOString(),
+    checkedAt: new Date(checkedAt).toISOString(),
     version: '1.0.0',
     environment: env.NODE_ENV,
   };
 }
 
 /**
- * Simple readiness check (for load balancers)
+ * Readiness (for load balancers): ready while the database answers, slow or
+ * not. Shares the cached check with /health, so it adds no query of its own.
  */
 export async function checkReadiness(): Promise<boolean> {
-  try {
-    // Only check database - critical dependency
-    await prisma.$queryRaw`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  }
+  const { database } = await checkDependencies();
+  return database.status !== 'down';
 }
 
 /**
