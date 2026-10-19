@@ -97,4 +97,33 @@ describe('users.service password confirmation', () => {
     expect(authRepo.deleteRefreshTokensByUserId).toHaveBeenCalledWith(user.id);
     expect(sessionRepository.deleteOtherUserSessions).not.toHaveBeenCalled();
   });
+
+  it('the last active admin cannot delete their own account (409 LAST_ADMIN), and nothing is deleted', async () => {
+    vi.mocked(authRepo.findUserById).mockResolvedValue({ ...user, role: 'ADMIN' });
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    vi.mocked(usersRepository.countOtherActiveAdmins).mockResolvedValue(0);
+    await expect(usersService.deleteAccount(user.id, 'right')).rejects.toMatchObject({ statusCode: 409, code: 'LAST_ADMIN' });
+    expect(usersRepository.softDeleteUser).not.toHaveBeenCalled();
+  });
+
+  it('an admin can delete their own account when another active admin exists', async () => {
+    vi.mocked(authRepo.findUserById).mockResolvedValue({ ...user, role: 'ADMIN' });
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    vi.mocked(usersRepository.countOtherActiveAdmins).mockResolvedValue(1);
+    await usersService.deleteAccount(user.id, 'right');
+    expect(usersRepository.softDeleteUser).toHaveBeenCalledWith(user.id);
+  });
+
+  it('a wrong password still answers 422 first, even for the last admin', async () => {
+    vi.mocked(authRepo.findUserById).mockResolvedValue({ ...user, role: 'ADMIN' });
+    vi.mocked(verifyPassword).mockResolvedValue(false);
+    await expect(usersService.deleteAccount(user.id, 'wrong')).rejects.toMatchObject({ code: 'INVALID_PASSWORD' });
+    expect(usersRepository.countOtherActiveAdmins).not.toHaveBeenCalled();
+  });
+
+  it('a normal user never triggers the admin check', async () => {
+    vi.mocked(verifyPassword).mockResolvedValue(true);
+    await usersService.deleteAccount(user.id, 'right');
+    expect(usersRepository.countOtherActiveAdmins).not.toHaveBeenCalled();
+  });
 });

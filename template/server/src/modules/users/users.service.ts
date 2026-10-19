@@ -261,6 +261,17 @@ class UsersService {
       if (!isValid) {
         throw new ValidationError('Incorrect password', 'INVALID_PASSWORD');
       }
+
+      // The last active admin deleting their own account would leave nobody
+      // able to manage the project. Checked after the password, so a wrong
+      // password still answers INVALID_PASSWORD. (An admin deleting ANOTHER
+      // admin always leaves themselves, so that path needs no check.)
+      if (user.role === 'ADMIN' && (await usersRepository.countOtherActiveAdmins(userId)) === 0) {
+        throw new ConflictError(
+          'You are the only admin. Make someone else an admin before deleting your account.',
+          'LAST_ADMIN',
+        );
+      }
     }
 
     logger.info({ msg: 'Soft-deleting user account', userId });

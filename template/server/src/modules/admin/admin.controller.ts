@@ -106,6 +106,7 @@ export async function updateUserStatus(
   const user = await adminService.toggleUserStatus(
     paramsParsed.userId,
     bodyParsed.isActive,
+    request.user.userId,
   );
 
   const action = bodyParsed.isActive ? 'activated' : 'deactivated';

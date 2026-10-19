@@ -93,6 +93,16 @@ class UsersRepository {
   }
 
   /**
+   * How many OTHER admins could still manage the project: role ADMIN, not
+   * banned, not deleted. Zero means `userId` is the last one.
+   */
+  async countOtherActiveAdmins(userId: string): Promise<number> {
+    return prisma.user.count({
+      where: { role: 'ADMIN', isActive: true, deletedAt: null, id: { not: userId } },
+    });
+  }
+
+  /**
    * Soft deletes a user: deletedAt set, isActive = false, and the avatar URL
    * cleared (its file is removed right after, see usersService.deleteAccount).
    */

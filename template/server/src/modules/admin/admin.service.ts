@@ -48,8 +48,14 @@ class AdminService {
    * lifted here: email verification no longer touches isActive.
    * Activating a user who never verified their email also approves the email,
    * so admins keep the ability to let a user in manually.
+   * An admin can never ban themselves (like changing their own role): it would
+   * end their own sessions and could leave the project with no admin at all.
    */
-  async toggleUserStatus(userId: string, isActive: boolean): Promise<AdminUser> {
+  async toggleUserStatus(userId: string, isActive: boolean, adminUserId: string): Promise<AdminUser> {
+    if (!isActive && userId === adminUserId) {
+      throw new ForbiddenError('You cannot ban your own account', 'CANNOT_BAN_SELF');
+    }
+
     const user = await adminRepository.findUserById(userId);
 
     if (!user) {
