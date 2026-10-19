@@ -12,6 +12,7 @@ import { purgeDeletedAccounts, startCleanupDeletedAccountsJob } from '../cleanup
 
 vi.mock('@libs/prisma.js', () => ({
   prisma: { user: { findMany: vi.fn(), delete: vi.fn() } },
+  isPrismaNotFound: (e: unknown): boolean => (e as { code?: string })?.code === 'P2025',
 }));
 vi.mock('@libs/storage/file-storage.service.js', () => ({
   fileStorageService: { deleteUserMedia: vi.fn() },
@@ -70,6 +71,15 @@ describe('purgeDeletedAccounts', () => {
     await expect(purgeDeletedAccounts()).resolves.toEqual({ found: 2, purged: 1, failed: 1 });
     expect(prisma.user.delete).toHaveBeenCalledTimes(1);
     expect(prisma.user.delete).not.toHaveBeenCalledWith({ where: { id: 'a' } });
+  });
+
+  it('an account another process purged a moment ago counts as purged, without an error log', async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: 'z' }] as never);
+    vi.mocked(fileStorageService.deleteUserMedia).mockResolvedValue(undefined);
+    vi.mocked(prisma.user.delete).mockRejectedValue(Object.assign(new Error('not found'), { code: 'P2025' }));
+
+    await expect(purgeDeletedAccounts()).resolves.toEqual({ found: 1, purged: 1, failed: 0 });
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('logs one line per run even when nothing was due (so the log shows it runs)', async () => {

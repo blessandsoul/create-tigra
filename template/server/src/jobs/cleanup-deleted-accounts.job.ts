@@ -19,7 +19,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { prisma } from '@libs/prisma.js';
+import { prisma, isPrismaNotFound } from '@libs/prisma.js';
 import { logger } from '@libs/logger.js';
 import { fileStorageService } from '@libs/storage/file-storage.service.js';
 import { startRecurringJob } from './schedule.js';
@@ -69,9 +69,16 @@ export async function purgeDeletedAccounts(now: Date = new Date()): Promise<Purg
 
       // Then the row (cascades to RefreshToken + Session). If only this fails,
       // the next run finds the account again; its media is already gone.
-      await prisma.user.delete({
-        where: { id: user.id },
-      });
+      try {
+        await prisma.user.delete({
+          where: { id: user.id },
+        });
+      } catch (error) {
+        // Another server process (a replica, or the old container during a
+        // deploy) purged it a moment ago: the account is gone, which is the
+        // goal. Not a failure, so no error log.
+        if (!isPrismaNotFound(error)) throw error;
+      }
 
       result.purged++;
     } catch (error) {
