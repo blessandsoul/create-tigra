@@ -223,10 +223,7 @@ export async function register(
     };
   }
 
-  const accessToken = signAccessToken({
-    userId: user.id,
-    role: user.role,
-  });
+  // Session first: the access token carries its id (see authenticate()).
   const refreshToken = generateRefreshToken();
   const refreshTokenExpiresAt = getRefreshTokenExpiresAt();
 
@@ -235,6 +232,12 @@ export async function register(
     deviceInfo,
     ipAddress,
     expiresAt: refreshTokenExpiresAt,
+  });
+
+  const accessToken = signAccessToken({
+    userId: user.id,
+    role: user.role,
+    sessionId: session.id,
   });
 
   await authRepo.createRefreshToken({
@@ -288,10 +291,7 @@ export async function login(
   // caller cannot learn whether an email is banned or unverified.
   assertAccountCanSignIn(user);
 
-  const accessToken = signAccessToken({
-    userId: user.id,
-    role: user.role,
-  });
+  // Session first: the access token carries its id (see authenticate()).
   const refreshToken = generateRefreshToken();
   const refreshTokenExpiresAt = getRefreshTokenExpiresAt();
 
@@ -300,6 +300,12 @@ export async function login(
     deviceInfo,
     ipAddress,
     expiresAt: refreshTokenExpiresAt,
+  });
+
+  const accessToken = signAccessToken({
+    userId: user.id,
+    role: user.role,
+    sessionId: session.id,
   });
 
   await authRepo.createRefreshToken({
@@ -349,6 +355,7 @@ export async function refresh(refreshToken: string): Promise<{ accessToken: stri
   const newAccessToken = signAccessToken({
     userId: user.id,
     role: user.role,
+    sessionId: session.id,
   });
   const newRefreshToken = generateRefreshToken();
 

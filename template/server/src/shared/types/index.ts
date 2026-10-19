@@ -5,6 +5,13 @@ export type UserRole = 'USER' | 'ADMIN';
 export interface JwtPayload {
   userId: string;
   role: UserRole;
+  /**
+   * The login session this access token belongs to. authenticate() rejects the
+   * token as soon as that session is gone (logout, logout-all, password change
+   * or reset, admin revoke), instead of letting it live until it expires.
+   * Tokens signed before this field existed lack it and are rejected.
+   */
+  sessionId: string;
 }
 
 declare module '@fastify/jwt' {

@@ -181,10 +181,7 @@ export async function verifyAccount(
   }
 
   // Generate tokens and create session (same pattern as login)
-  const accessToken = signAccessToken({
-    userId: user.id,
-    role: user.role,
-  });
+  // Session first: the access token carries its id (see authenticate()).
   const refreshToken = generateRefreshToken();
   const refreshTokenExpiresAt = getRefreshTokenExpiresAt();
 
@@ -193,6 +190,12 @@ export async function verifyAccount(
     deviceInfo,
     ipAddress,
     expiresAt: refreshTokenExpiresAt,
+  });
+
+  const accessToken = signAccessToken({
+    userId: user.id,
+    role: user.role,
+    sessionId: session.id,
   });
 
   await authRepo.createRefreshToken({

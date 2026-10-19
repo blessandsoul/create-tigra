@@ -108,6 +108,7 @@ describe('Auth Service', () => {
       expect(authLib.signAccessToken).toHaveBeenCalledWith({
         userId: createdUser.id,
         role: createdUser.role,
+        sessionId: testSession.id, // the access token is bound to the new session
       });
       expect(authLib.generateRefreshToken).toHaveBeenCalled();
       expect(sessionRepository.createSession).toHaveBeenCalledWith({
@@ -559,6 +560,7 @@ describe('Auth Service', () => {
       expect(authLib.signAccessToken).toHaveBeenCalledWith({
         userId: testUsers.validUser.id,
         role: testUsers.validUser.role,
+        sessionId: testSession.id,
       });
       expect(authRepo.rotateRefreshToken).toHaveBeenCalledWith(validRefreshToken, {
         token: newRefreshToken,

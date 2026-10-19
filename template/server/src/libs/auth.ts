@@ -28,7 +28,7 @@ function getApp(): FastifyInstance {
 
 export function signAccessToken(payload: JwtPayload): string {
   return getApp().jwt.sign(
-    { userId: payload.userId, role: payload.role },
+    { userId: payload.userId, role: payload.role, sessionId: payload.sessionId },
     { expiresIn: env.JWT_ACCESS_EXPIRY },
   );
 }
@@ -52,15 +52,30 @@ export async function authenticate(
     throw new UnauthorizedError('Invalid or expired token');
   }
 
-  // Verify user still exists, is not banned/unverified, and not soft-deleted.
-  // When the session is definitively dead (user gone/deleted/banned), clear auth
-  // cookies on the response so the browser stops replaying stale credentials.
-  // Without this, middleware keeps seeing the (still-unexpired) JWT cookie and
-  // bounces /login → /dashboard → 401 → /login in an infinite loop.
-  const user = await prisma.user.findUnique({
-    where: { id: request.user.userId },
-    select: { isActive: true, emailVerifiedAt: true, deletedAt: true, role: true },
-  });
+  // The token is only as alive as its login session: one query fetches the
+  // session (must exist, belong to this user and be unexpired) together with
+  // the account state. A session ended by logout, logout-all, a password
+  // change or reset, or an admin revoke therefore stops this token at once,
+  // not when its 15 minutes run out. A token without a session id (signed
+  // before tokens carried one) is refused the same way; the client refreshes.
+  //
+  // When the session or account is definitively dead, clear auth cookies on
+  // the response so the browser stops replaying stale credentials. Without
+  // this, middleware keeps seeing the (still-unexpired) JWT cookie and bounces
+  // /login → /dashboard → 401 → /login in an infinite loop.
+  const { userId, sessionId } = request.user;
+  const session =
+    typeof sessionId === 'string' && sessionId
+      ? await prisma.session.findFirst({
+          where: { id: sessionId, userId, expiresAt: { gt: new Date() } },
+          select: { user: { select: { isActive: true, emailVerifiedAt: true, deletedAt: true, role: true } } },
+        })
+      : null;
+  if (!session) {
+    clearAuthCookies(reply);
+    throw new UnauthorizedError('Session ended', 'SESSION_EXPIRED');
+  }
+  const { user } = session;
 
   if (!user || user.deletedAt) {
     clearAuthCookies(reply);
@@ -81,6 +96,11 @@ export async function authenticate(
   request.user.role = user.role;
 }
 
+/**
+ * Verifies the token's signature ONLY: no session, ban or deletion check. Use
+ * it to personalise public responses, never to authorize anything (use
+ * authenticate for that).
+ */
 export async function optionalAuth(
   request: FastifyRequest,
   _reply: FastifyReply,
