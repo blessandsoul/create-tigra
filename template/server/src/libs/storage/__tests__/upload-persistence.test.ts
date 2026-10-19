@@ -13,7 +13,7 @@ const DIRS = ['/app/uploads/public', '/app/uploads/private'];
 function disk({ container = true, mounted = [] as string[], broken = [] as string[] } = {}): DiskProbe {
   return {
     exists: (p) => container && p === '/.dockerenv',
-    device: (p) => {
+    device: (p): number => {
       if (broken.includes(p)) throw new Error('EACCES');
       return mounted.some((m) => p === m || p.startsWith(`${m}/`)) ? 2 : 1;
     },
