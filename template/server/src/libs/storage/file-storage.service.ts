@@ -25,11 +25,55 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { existsSync, statSync } from 'node:fs';
 import fs from 'fs/promises';
 import path from 'path';
 import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { InternalError } from '@shared/errors/errors.js';
+
+/** How uploadDirsOnContainerDisk looks at the disk (injectable for tests). */
+export interface DiskProbe {
+  exists(p: string): boolean;
+  /** The filesystem device id of a path (fs.stat().dev). */
+  device(p: string): number;
+}
+
+const realDisk: DiskProbe = {
+  exists: (p) => existsSync(p),
+  device: (p) => statSync(p).dev,
+};
+
+/**
+ * Upload folders that sit on the container's own disk and would therefore be
+ * lost on the next deploy (Coolify starts a fresh container each time).
+ *
+ * Only in production inside a Docker container (/.dockerenv exists): there the
+ * container's writable layer is "/", and a folder on the same device as "/" is
+ * not on a mounted volume. Never in dev or test, never outside a container (a
+ * plain server's disk is persistent), and a folder that cannot be checked is
+ * left out rather than guessed. The caller only warns: a project that stores
+ * no files must still start.
+ */
+export function uploadDirsOnContainerDisk(
+  dirs: readonly string[],
+  nodeEnv: string,
+  disk: DiskProbe = realDisk,
+): string[] {
+  if (nodeEnv !== 'production' || !disk.exists('/.dockerenv')) return [];
+  try {
+    const rootDevice = disk.device('/');
+    return dirs.filter((dir) => {
+      try {
+        return disk.device(dir) === rootDevice;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return [];
+  }
+}
 
 /**
  * File Storage Service
@@ -339,6 +383,22 @@ class FileStorageService {
     } catch (error) {
       logger.error({ err: error, msg: 'Failed to initialize file storage' });
       throw new InternalError('Failed to initialize file storage', 'STORAGE_INIT_FAILED');
+    }
+  }
+
+  /**
+   * Warns (once per tier, at boot) when an upload tier is not on a mounted
+   * volume in a production container, so uploads would vanish on the next
+   * deploy. The deploy step it points to is in the README and
+   * .env.example.production. Never stops the server.
+   */
+  warnIfUploadsNotPersistent(): void {
+    for (const dir of uploadDirsOnContainerDisk([this.publicDir, this.privateDir], env.NODE_ENV)) {
+      logger.warn(
+        { dir },
+        `[STORAGE] ${dir} is not on a mounted volume: uploaded files will be lost on the next deploy. ` +
+          'In Coolify add a volume mount at /app/uploads (Storages → Add Volume Mount).',
+      );
     }
   }
 }

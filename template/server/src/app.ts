@@ -118,6 +118,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Initialize file storage (create both upload tiers) BEFORE mounting static,
   // so the public root exists when @fastify/static checks it.
   await fileStorageService.initialize();
+  // Production container without an uploads volume: say so loudly, every
+  // deploy would otherwise delete all avatars without a word.
+  fileStorageService.warnIfUploadsNotPersistent();
 
   // Static file serving for uploads — PUBLIC tier ONLY.
   // SECURITY: the root is scoped to UPLOAD_PUBLIC_DIR (uploads/public), NOT the

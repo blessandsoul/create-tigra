@@ -85,6 +85,12 @@ cd my-app/server
 docker compose --profile tools up -d
 ```
 
+## Deploying to Coolify
+
+Server and client deploy as two separate Coolify applications, each from its own Dockerfile (`server/Dockerfile`, `client/Dockerfile`).
+
+**The server needs a persistent volume for uploads.** Avatars (and any other uploaded files) are written to `/app/uploads` inside the container, and every deploy starts a fresh container. Without a volume, all uploaded files are lost on each redeploy. In the server application: **Storages → Add Volume Mount**, leave *Source Path* empty (Coolify manages the volume), *Destination Path* `/app/uploads`. The server warns at boot (`[STORAGE] … is not on a mounted volume`) when it runs in production without one. Details: `server/.env.example.production`, section FILE UPLOAD.
+
 ## Security and Migration Notes
 
 - [Account deactivation login reactivation: issue, fix, and existing-project migration](docs/account-deactivation-login-reactivation.md)
