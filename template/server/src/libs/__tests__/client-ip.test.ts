@@ -195,6 +195,14 @@ describe('normalizeIp', () => {
     expect(normalizeIp(undefined)).toBeUndefined();
     expect(normalizeIp('example.com')).toBeUndefined();
   });
+
+  it('gives every spelling of one address the same canonical form', () => {
+    expect(normalizeIp('2001:0DB8:0000::0001')).toBe('2001:db8::1');
+    expect(normalizeIp('2001:db8:0:0:0:0:0:1')).toBe('2001:db8::1');
+    expect(normalizeIp('::ffff:cb00:7107')).toBe('203.0.113.7'); // hex IPv4-mapped
+    expect(normalizeIp('::1')).toBe('::1');
+    expect(normalizeIp('FE80::1%ETH0')).toBe('fe80::1%eth0'); // zone id: lower-cased only
+  });
 });
 
 describe('TRUST_CLOUDFLARE is gone', () => {
