@@ -56,4 +56,6 @@ async function start(): Promise<void> {
   }
 }
 
-start();
+// start() handles its own failures (it logs them and exits 1 through shutdown),
+// so nothing waits on its promise.
+void start();
