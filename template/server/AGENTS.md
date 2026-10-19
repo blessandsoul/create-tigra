@@ -6,6 +6,7 @@
 - Domain modules live in `src/modules/<domain>/` with `<domain>.routes.ts`, `.controller.ts`, `.service.ts`, `.repo.ts`, and `.schemas.ts`.
 - All API routes use the `/api/v1` prefix. Use the shared `successResponse`, `paginatedResponse`, and typed `AppError` contracts rather than custom response/error shapes.
 - Use the shared logger and outbound HTTP client. Never add ad-hoc `console.log`, raw `fetch`, or per-call HTTP clients that bypass redaction, timeouts, and error mapping.
+- Fetch a URL that came from a user (a link, webhook, import or avatar URL) only with `safeHttpClient` (`src/libs/safe-http.ts`), never `httpClient` or `fetch`: it refuses internal addresses on every hop.
 
 ## Sources of truth
 

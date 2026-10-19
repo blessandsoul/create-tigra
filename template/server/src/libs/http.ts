@@ -105,6 +105,9 @@ export function createHttpClient(config: CreateAxiosDefaults = {}): AxiosInstanc
       return requestConfig;
     },
     (error: unknown): never => {
+      // A guard registered after this interceptor (it runs first) refused the
+      // request: keep its typed error, do not turn it into a setup failure.
+      if (error instanceof OutboundHttpError) throw error;
       logger.error({ err: error }, '[HTTP] Request setup failed');
       throw new InternalError('Outbound HTTP request could not be constructed');
     },

@@ -485,6 +485,12 @@ describe('httpClient — secrets never logged, failures typed', () => {
     expect(Object.keys(thrown)).not.toContain('cause');
   });
 
+  it("keeps a guard's OutboundHttpError when it passes through the request chain", () => {
+    const own = new OutboundHttpError('blocked');
+    expect(() => captured.requestRejected!(own)).toThrow(own);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it("passes our own guard's OutboundHttpError through unchanged", () => {
     const own = new OutboundHttpError('blocked');
     captured.mockIsAxiosError.mockReturnValue(false);
