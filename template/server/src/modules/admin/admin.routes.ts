@@ -72,6 +72,23 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     handler: adminController.unblockIpHandler,
   });
 
+  // ─── Health ───────────────────────────────────────────────────────────
+
+  /**
+   * Full health report: per-check status and timings for the database and
+   * Redis (cached for 5 s, see libs/monitoring.ts), memory against the heap
+   * limit, uptime, checkedAt, version and deployed commit. The public
+   * GET /api/v1/health answers only { status }.
+   *
+   * GET /api/v1/admin/health
+   * Auth: Required (ADMIN)
+   * Returns: { status, checks: { database, redis, memory, uptime }, timestamp, checkedAt, version, commit, environment }
+   */
+  fastify.get('/admin/health', {
+    config: { rateLimit: RATE_LIMITS.ADMIN_DEFAULT },
+    handler: adminController.getHealthReport,
+  });
+
   // ─── Dashboard Stats ──────────────────────────────────────────────────
 
   /**

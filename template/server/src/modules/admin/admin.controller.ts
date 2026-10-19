@@ -4,6 +4,7 @@ import { paginatedResponse } from '@shared/responses/paginatedResponse.js';
 import { parseInput } from '@libs/validation-errors.js';
 import { blockIp, unblockIp, getBlockedIps } from '@libs/ip-block.js';
 import { getClientIp, resolveClientIp } from '@libs/client-ip.js';
+import { performHealthCheck } from '@libs/monitoring.js';
 import { adminService } from './admin.service.js';
 import {
   blockIpSchema,
@@ -39,6 +40,23 @@ export async function getResolvedClientIp(
 ): Promise<void> {
   const { ip, source } = resolveClientIp(request);
   reply.send(successResponse('Client IP resolved', { ip, source }));
+}
+
+// ─── Health ─────────────────────────────────────────────────────────────────
+
+/**
+ * The full health report (database, Redis, memory, uptime, version, commit).
+ * Always 200: it is a report for a person, not a probe (monitors use the public
+ * GET /api/v1/health, which answers 503 when unhealthy). While the database is
+ * down this route is unreachable anyway, because sign-in checks the session in
+ * the database; a Redis outage, the likelier case, shows here in full.
+ */
+export async function getHealthReport(
+  _request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const report = await performHealthCheck();
+  reply.send(successResponse('Health report', report));
 }
 
 export async function blockIpHandler(

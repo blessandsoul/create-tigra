@@ -3,6 +3,9 @@
  * memory rule judges the heap LIMIT, not V8's current heap size, and a failing
  * check logs the real error.
  */
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '@libs/prisma.js';
 import { getRedis } from '@libs/redis.js';
@@ -111,5 +114,36 @@ describe('dependency check cache (5 s, single-flight)', () => {
     }) as never);
     expect(await monitoring.checkReadiness()).toBe(true);
     expect((await monitoring.performHealthCheck()).checks.database.status).toBe('degraded');
+  });
+});
+
+describe('version and commit in the report', () => {
+  it('readAppVersion reads package.json, else answers unknown', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tigra-version-'));
+    try {
+      expect(monitoring.readAppVersion(dir)).toBe('unknown'); // no package.json
+      writeFileSync(path.join(dir, 'package.json'), '{ not json');
+      expect(monitoring.readAppVersion(dir)).toBe('unknown');
+      writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'x' }));
+      expect(monitoring.readAppVersion(dir)).toBe('unknown');
+      writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ version: '2.4.0' }));
+      expect(monitoring.readAppVersion(dir)).toBe('2.4.0');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('shortCommit keeps 12 characters, trims, and turns empty into null', () => {
+    expect(monitoring.shortCommit('abc1234def5678901234')).toBe('abc1234def56');
+    expect(monitoring.shortCommit('  abc1234  ')).toBe('abc1234');
+    expect(monitoring.shortCommit('   ')).toBeNull();
+    expect(monitoring.shortCommit(undefined)).toBeNull();
+  });
+
+  it('the report carries the server package version and a null commit when SOURCE_COMMIT is unset', async () => {
+    const report = await monitoring.performHealthCheck();
+    expect(report.version).toBe(monitoring.readAppVersion());
+    expect(report.version).not.toBe('unknown');
+    expect(report.commit).toBeNull();
   });
 });

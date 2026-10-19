@@ -48,6 +48,28 @@ Health check endpoints are excluded from logging to reduce noise:
 - `/api/v1/ready`
 - `/api/v1/live`
 
+## Health checks
+
+Public, never rate limited or IP-blocked (`src/libs/health-routes.ts`):
+
+| Route | Answer | Use |
+|---|---|---|
+| `GET /api/v1/health` | `{ status }`: `healthy` / `degraded` → 200, `unhealthy` → 503 | uptime monitors |
+| `GET /api/v1/ready` | `{ ready, timestamp }`, 503 while the database is down | load balancers |
+| `GET /api/v1/live` | `{ alive, timestamp }` | the Docker `HEALTHCHECK` |
+
+`unhealthy` means the database is down. `degraded` means the database is slow (100 ms or more),
+Redis is down or slow (so rate limits and IP blocks are off), or the heap is above 85% of its limit.
+
+The public answer never says which check failed. Admins get the full report at
+`GET /api/v1/admin/health`: per check status and timing, memory (heap used and limit, RSS),
+uptime, `checkedAt`, `version` (from `package.json`) and `commit` (`SOURCE_COMMIT`, which
+Coolify sets).
+
+The database and Redis are checked at most once per 5 s; every probe in between gets the same
+answer (`checkedAt` says when it was taken). A failing check logs the error at `error`
+(database) or `warn` (Redis).
+
 ## Configuration
 
 ### Development

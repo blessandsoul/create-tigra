@@ -185,6 +185,11 @@ const envSchema = z.object({
   SENTRY_TRACES_SAMPLE_RATE: optionalEnv(z.coerce.number().min(0).max(1).default(0.1)),
   // Environment tag attached to Sentry events; defaults to NODE_ENV when unset.
   SENTRY_ENVIRONMENT: optionalEnv(z.string().optional()),
+
+  // --- Deployment ---
+  // The deployed git commit. Coolify sets it (a predefined variable); you never
+  // need to. Shown in GET /api/v1/admin/health; null there when unset.
+  SOURCE_COMMIT: optionalEnv(z.string().optional()),
 });
 
 const parsed = envSchema.safeParse(process.env);

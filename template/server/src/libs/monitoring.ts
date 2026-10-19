@@ -1,3 +1,12 @@
+/**
+ * Health checks. Two audiences:
+ * - the public probes (/health, /ready, /live in libs/health-routes.ts) answer
+ *   only up/down-style status, nothing about the internals;
+ * - the full report (performHealthCheck) is served to admins only, at
+ *   GET /api/v1/admin/health.
+ */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { getHeapStatistics } from 'node:v8';
 import { prisma } from '@libs/prisma.js';
 import { getRedis } from '@libs/redis.js';
@@ -15,7 +24,10 @@ export interface HealthCheckResult {
   timestamp: string;
   /** When the database and Redis were last actually checked (the answer can be up to 5 s old). */
   checkedAt: string;
+  /** package.json "version" of the running build, or 'unknown'. */
   version: string;
+  /** The deployed commit (SOURCE_COMMIT, first 12 characters), or null when not set. */
+  commit: string | null;
   environment: string;
 }
 
@@ -42,7 +54,7 @@ async function checkDatabase(): Promise<CheckStatus> {
       message: responseTime < 100 ? 'Database is healthy' : 'Database responding slowly',
       responseTime,
       // No pool details: the pool is sized by connection_limit inside DATABASE_URL, which
-      // this public endpoint must not echo.
+      // no answer may echo, the admin report included.
     };
   } catch (error) {
     const responseTime = Date.now() - start;
@@ -201,7 +213,29 @@ function checkUptime(): CheckStatus {
 }
 
 /**
- * Full health report. Database and Redis come from the shared 5 s cache
+ * The "version" from package.json in `dir` (the server folder: npm scripts run
+ * there, and the Docker image copies package.json into WORKDIR /app), or
+ * 'unknown' when it cannot be read. Read once; it cannot change while running.
+ */
+export function readAppVersion(dir: string = process.cwd()): string {
+  try {
+    const { version } = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as { version?: unknown };
+    return typeof version === 'string' && version.trim() ? version.trim() : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** A commit SHA shortened to 12 characters (enough to be unique), or null when empty. */
+export function shortCommit(raw: string | undefined): string | null {
+  const commit = raw?.trim();
+  return commit ? commit.slice(0, 12) : null;
+}
+
+const APP_VERSION = readAppVersion();
+
+/**
+ * Full health report (admins only). Database and Redis come from the shared 5 s cache
  * (checkDependencies); memory and uptime are read fresh, they cost nothing.
  */
 export async function performHealthCheck(): Promise<HealthCheckResult> {
@@ -236,7 +270,8 @@ export async function performHealthCheck(): Promise<HealthCheckResult> {
     },
     timestamp: new Date().toISOString(),
     checkedAt: new Date(checkedAt).toISOString(),
-    version: '1.0.0',
+    version: APP_VERSION,
+    commit: shortCommit(env.SOURCE_COMMIT),
     environment: env.NODE_ENV,
   };
 }

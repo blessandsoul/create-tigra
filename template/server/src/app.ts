@@ -9,7 +9,6 @@ import { env } from '@config/env.js';
 import { markRequestStart, logRequestLine } from '@libs/requestLogger.js';
 import { initAuth } from '@libs/auth.js';
 import { registerQueryCounter } from '@libs/query-counter.js';
-import { successResponse } from '@shared/responses/successResponse.js';
 import { authRoutes } from '@modules/auth/auth.routes.js';
 import { usersRoutes } from '@modules/users/users.routes.js';
 import { adminRoutes } from '@modules/admin/admin.routes.js';
@@ -24,6 +23,7 @@ import { getRedis, onRedisReady } from '@libs/redis.js';
 import { getClientIp, TRUSTED_PROXY_RANGES } from '@libs/client-ip.js';
 import { isOriginAllowed } from '@libs/origin-check.js';
 import { registerErrorHandler } from '@libs/error-handler.js';
+import { registerHealthRoutes } from '@libs/health-routes.js';
 import { requestIdFrom } from '@libs/request-id.js';
 import { ForbiddenError, describeWait } from '@shared/errors/errors.js';
 import {
@@ -215,51 +215,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // --- Unknown URLs: error envelope + DEFAULT_LIMIT (see src/libs/rate-limiting.ts) ---
   registerNotFoundHandler(app);
 
-  // --- Monitoring & Health Checks ---
-  // rateLimit: false — never limited (see MONITORING_PATHS in src/libs/rate-limiting.ts).
-  const { performHealthCheck, checkReadiness, checkLiveness } = await import('@libs/monitoring.js');
-
-  // Comprehensive health check (DB + Redis + Memory + Uptime)
-  app.get('/api/v1/health', { config: { rateLimit: false } }, async (_request, reply) => {
-    const health = await performHealthCheck();
-
-    const statusCode = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 200 : 503;
-
-    return reply.status(statusCode).send(
-      successResponse(
-        health.status === 'healthy'
-          ? 'All systems operational'
-          : health.status === 'degraded'
-            ? 'Some systems degraded'
-            : 'System unhealthy',
-        health,
-      ),
-    );
-  });
-
-  // Readiness probe (for load balancers / K8s)
-  app.get('/api/v1/ready', { config: { rateLimit: false } }, async (_request, reply) => {
-    const ready = await checkReadiness();
-    const statusCode = ready ? 200 : 503;
-    return reply.status(statusCode).send(
-      successResponse(ready ? 'Service is ready' : 'Service not ready', {
-        ready,
-        timestamp: new Date().toISOString(),
-      })
-    );
-  });
-
-  // Liveness probe (for container orchestration)
-  app.get('/api/v1/live', { config: { rateLimit: false } }, (_request, reply) => {
-    const alive = checkLiveness();
-    const statusCode = alive ? 200 : 503;
-    return reply.status(statusCode).send(
-      successResponse(alive ? 'Service is alive' : 'Service not alive', {
-        alive,
-        timestamp: new Date().toISOString(),
-      })
-    );
-  });
+  // --- Monitoring & Health Checks: public /health, /ready, /live (see src/libs/health-routes.ts) ---
+  // The full report is admin-only: GET /api/v1/admin/health (modules/admin).
+  registerHealthRoutes(app);
 
   // --- Routes ---
   await app.register(authRoutes, { prefix: '/api/v1' });

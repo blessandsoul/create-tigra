@@ -120,7 +120,7 @@ The app keeps serving, but while Redis is unreachable:
 - IP blocks are not enforced;
 - forgot-password, reset-password, send-verification and verify-account answer `503 SERVICE_UNAVAILABLE` ("Password reset is temporarily unavailable. Please try again in a few minutes."). Their tokens live in Redis, so they cannot work. The check runs before any account lookup, so the answer is the same for every address and reveals nothing (`src/libs/redis-required.ts`).
 
-`/api/v1/health` reports `degraded`. Everything returns on its own when Redis is back; permanent blocks are re-loaded from the database on reconnect.
+`/api/v1/health` reports `degraded`; admins see that it is Redis at `/api/v1/admin/health`. Everything returns on its own when Redis is back; permanent blocks are re-loaded from the database on reconnect.
 
 A missing `REDIS_URL` is different from an outage: in production the server refuses to start without it, because it would otherwise run with every protection above switched off while its health check still passes. Outside production it defaults to `redis://localhost:6379`.
 
