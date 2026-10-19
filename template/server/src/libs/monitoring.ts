@@ -1,3 +1,4 @@
+import { getHeapStatistics } from 'node:v8';
 import { prisma } from '@libs/prisma.js';
 import { getRedis } from '@libs/redis.js';
 import { env } from '@config/env.js';
@@ -43,7 +44,7 @@ async function checkDatabase(): Promise<CheckStatus> {
     };
   } catch (error) {
     const responseTime = Date.now() - start;
-    logger.error({ error }, 'Database health check failed');
+    logger.error({ err: error }, 'Database health check failed');
     return {
       status: 'down',
       message: 'Database connection failed',
@@ -73,7 +74,7 @@ async function checkRedis(): Promise<CheckStatus> {
     };
   } catch (error) {
     const responseTime = Date.now() - start;
-    logger.warn({ error }, 'Redis health check failed');
+    logger.warn({ err: error }, 'Redis health check failed');
     return {
       status: 'down',
       message: 'Redis connection failed (non-fatal)',
@@ -82,32 +83,39 @@ async function checkRedis(): Promise<CheckStatus> {
   }
 }
 
-/**
- * Check memory usage
- */
-function checkMemory(): CheckStatus {
-  const used = process.memoryUsage();
-  const heapUsedMB = Math.round(used.heapUsed / 1024 / 1024);
-  const heapTotalMB = Math.round(used.heapTotal / 1024 / 1024);
-  const rssMB = Math.round(used.rss / 1024 / 1024);
-  const heapUsagePercent = Math.round((used.heapUsed / used.heapTotal) * 100);
+/** Heap use above this share of the heap LIMIT counts as degraded. */
+export const HEAP_DEGRADED_RATIO = 0.85;
 
-  // Warn if heap usage > 80%
-  const status = heapUsagePercent > 80 ? 'degraded' : 'up';
-  const message =
-    status === 'degraded'
-      ? `High memory usage: ${heapUsagePercent}%`
-      : `Memory usage normal: ${heapUsagePercent}%`;
+/**
+ * Check memory usage against the heap LIMIT (v8 heap_size_limit), the point
+ * where the process would crash with "heap out of memory".
+ *
+ * Not against heapTotal: V8 grows heapTotal just ahead of use, so
+ * heapUsed/heapTotal sits at 70-99% in a perfectly healthy process (a fresh
+ * one already reads 72%), and the old rule reported "degraded" constantly.
+ * RSS is reported too: it is what the container's memory limit sees.
+ */
+export function checkMemory(
+  heap: { used_heap_size: number; heap_size_limit: number } = getHeapStatistics(),
+  usage: { rss: number; external: number } = process.memoryUsage(),
+): CheckStatus {
+  const mb = (bytes: number): number => Math.round(bytes / 1024 / 1024);
+  const ratio = heap.heap_size_limit > 0 ? heap.used_heap_size / heap.heap_size_limit : 0;
+  const heapUsagePercent = Math.round(ratio * 100);
+  const status = ratio > HEAP_DEGRADED_RATIO ? 'degraded' : 'up';
 
   return {
     status,
-    message,
+    message:
+      status === 'degraded'
+        ? `High memory usage: ${heapUsagePercent}% of the heap limit`
+        : `Memory usage normal: ${heapUsagePercent}% of the heap limit`,
     details: {
-      heapUsedMB,
-      heapTotalMB,
-      rssMB,
+      heapUsedMB: mb(heap.used_heap_size),
+      heapLimitMB: mb(heap.heap_size_limit),
       heapUsagePercent,
-      external: Math.round(used.external / 1024 / 1024),
+      rssMB: mb(usage.rss),
+      externalMB: mb(usage.external),
     },
   };
 }
