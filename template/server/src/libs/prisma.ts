@@ -1,12 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '@libs/logger.js';
 import { env } from '@config/env.js';
+import { queryCountExtension } from '@libs/query-counter.js';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma =
+const baseClient =
   globalForPrisma.prisma ??
   new PrismaClient({
     // Note: Connection pool size is configured via DATABASE_URL query params
@@ -29,7 +30,7 @@ export const prisma =
 
 // Log slow queries in production (queries taking > 2000ms)
 if (env.NODE_ENV === 'production') {
-  prisma.$on('query' as never, (e: { duration: number; query: string }) => {
+  baseClient.$on('query' as never, (e: { duration: number; query: string }) => {
     if (e.duration > 2000) {
       logger.warn(
         { duration: e.duration, query: e.query },
@@ -41,14 +42,29 @@ if (env.NODE_ENV === 'production') {
 
 // Log all queries in development for debugging
 if (env.NODE_ENV === 'development') {
-  prisma.$on('query' as never, (e: { duration: number; query: string }) => {
+  baseClient.$on('query' as never, (e: { duration: number; query: string }) => {
     logger.debug({ duration: e.duration, query: e.query }, 'Database query');
   });
 }
 
 if (env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
+  globalForPrisma.prisma = baseClient;
 }
+
+/**
+ * The app's database client. Outside production it carries
+ * queryCountExtension, which fills the dev/test X-Query-Count header
+ * (libs/query-counter.ts); production gets the plain client, untouched.
+ *
+ * Typed as the plain PrismaClient on purpose: the extension adds no methods,
+ * it only observes each operation, so every caller keeps the same types. One
+ * difference: an extended client has no `$on`; register event listeners on
+ * baseClient, in this file.
+ */
+export const prisma: PrismaClient =
+  env.NODE_ENV === 'production'
+    ? baseClient
+    : (baseClient.$extends(queryCountExtension) as unknown as PrismaClient);
 
 /**
  * Check if a caught error is Prisma's "record not found" error (P2025).
