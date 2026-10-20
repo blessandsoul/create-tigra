@@ -20,4 +20,4 @@
 - Treat client validation as UX only; the server must validate and authorize every request.
 - Use the shared credentialed API client. Auth tokens remain in httpOnly cookies and must never enter browser storage or Redux.
 - Sanitize any intentionally rendered HTML and untrusted URLs. Never log passwords, tokens, credentials, or complete sensitive user objects.
-- Preserve `output: "standalone"`, the non-root container, and the root health check. Add every new public environment variable to the Docker builder as `ARG` + `ENV`; public variables are compiled into the bundle.
+- Preserve `output: "standalone"`, the non-root container, and the `/healthz` health check (`src/app/healthz/route.ts`, used by the Dockerfile HEALTHCHECK; keep it answering 200 without rendering a page). Add every new public environment variable to the Docker builder as `ARG` + `ENV`; public variables are compiled into the bundle.

@@ -146,6 +146,8 @@ export function middleware(request: NextRequest): NextResponse {
 
 export const config = {
   // Apply security headers site-wide, but skip Next's static assets and the
-  // favicon (no CSP needed on immutable static files / images).
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // favicon (no CSP needed on immutable static files / images), and the
+  // container health check /healthz (src/app/healthz/route.ts), which must
+  // answer 200 whatever this middleware decides for pages.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|healthz).*)'],
 };

@@ -263,11 +263,14 @@ ENV HOSTNAME="0.0.0.0"
 ENV PORT=3000
 EXPOSE 3000
 
-# Health check for container orchestration.
+# Health check for container orchestration. Coolify uses this one (not its
+# dashboard check) to decide when a rolling deploy may switch over.
+# /healthz (src/app/healthz/route.ts) answers 200 without rendering a page, so
+# it stays healthy when a project makes its home page redirect; `/` did not.
 # 127.0.0.1, never localhost: Next listens on IPv4 (HOSTNAME=0.0.0.0), and
 # localhost can resolve to IPv6 ::1 first, which would refuse the probe.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "const p=process.env.PORT||3000;require('http').get('http://127.0.0.1:'+p+'/',(r)=>{process.exit(r.statusCode===200?0:1)})"
+  CMD node -e "const p=process.env.PORT||3000;require('http').get('http://127.0.0.1:'+p+'/healthz',(r)=>{process.exit(r.statusCode===200?0:1)})"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
