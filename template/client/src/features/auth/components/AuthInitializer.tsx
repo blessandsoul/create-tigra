@@ -12,6 +12,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { onSessionEnded } from '@/lib/api/session-events';
 import { ROUTES } from '@/lib/constants/routes';
 import { isErrorCode, isLimitError, ERROR_CODES } from '@/lib/utils/error';
+import { hasSessionMarker } from '@/lib/utils/session-marker';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { logout } from '../store/authSlice';
 
@@ -60,13 +61,16 @@ export const AuthInitializer = ({ children }: AuthInitializerProps): React.React
     [dispatch]
   );
 
-  // Skip getMe() on auth pages and during logout.
+  // Skip getMe() on auth pages, during logout, and whenever this browser holds
+  // no session marker: then there is no session to ask about, and an anonymous
+  // visitor would pay two failing calls (me 401, refresh 401) per page view
+  // and window focus, enough on a shared IP to hit the refresh rate limit.
   // React Query handles deduping, refetch-on-focus, and invalidation —
   // any mutation that touches the current user (profile update, role change,
   // avatar upload, email verification) should call:
   //   queryClient.invalidateQueries({ queryKey: authKeys.me() })
   // to refresh Redux state automatically.
-  const enabled = !isAuthPage(pathname) && !isLoggingOut;
+  const enabled = !isAuthPage(pathname) && !isLoggingOut && hasSessionMarker();
 
   const { error } = useCurrentUser({ enabled });
 
