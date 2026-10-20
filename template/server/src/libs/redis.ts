@@ -100,10 +100,36 @@ export async function connectRedis(): Promise<boolean> {
     await client.connect();
     return true;
   } catch (error) {
-    logger.warn('[REDIS] Initial connection failed — server starts without Redis and keeps retrying in the background');
+    // What happens next is server.ts's call: production waits a little, then
+    // refuses to start; elsewhere the server starts without Redis.
+    logger.warn('[REDIS] Initial connection failed — retrying in the background');
     logger.debug(error);
     return false;
   }
+}
+
+/**
+ * Resolves true as soon as the client is ready (connected and usable), or
+ * false once `timeoutMs` has passed without that. Never throws; the connection
+ * keeps retrying in the background either way (see getRedis). server.ts uses
+ * it at boot in production, where an unreachable Redis must stop the start.
+ */
+export function waitForRedisReady(
+  timeoutMs: number,
+  client: Pick<Redis, 'status' | 'once' | 'off'> = getRedis(),
+): Promise<boolean> {
+  if (client.status === 'ready') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const onReady = (): void => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      client.off('ready', onReady);
+      resolve(false);
+    }, timeoutMs);
+    client.once('ready', onReady);
+  });
 }
 
 export async function disconnectRedis(): Promise<void> {

@@ -122,7 +122,7 @@ The app keeps serving, but while Redis is unreachable:
 
 `/api/v1/health` reports `degraded`; admins see that it is Redis at `/api/v1/admin/health`. Everything returns on its own when Redis is back; permanent blocks are re-loaded from the database on reconnect.
 
-A missing `REDIS_URL` is different from an outage: in production the server refuses to start without it, because it would otherwise run with every protection above switched off while its health check still passes. Outside production it defaults to `redis://localhost:6379`.
+A missing or unreachable `REDIS_URL` at boot is different from an outage: in production the server refuses to start without it, and also when it cannot reach Redis within 10 s of starting (a wrong host or password), because it would otherwise run with every protection above switched off while its health check still passes. On Coolify that failed start never becomes healthy, so a rolling deploy keeps the old container serving. Outside production it defaults to `redis://localhost:6379` and starts without Redis.
 
 ## Behind Cloudflare
 

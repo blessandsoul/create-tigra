@@ -7,9 +7,12 @@ initSentry();
 import { env } from '@config/env.js';
 import { logger } from '@libs/logger.js';
 import { testDatabaseConnection, disconnectPrisma } from '@libs/prisma.js';
-import { connectRedis, disconnectRedis } from '@libs/redis.js';
+import { connectRedis, disconnectRedis, waitForRedisReady } from '@libs/redis.js';
 import { createShutdown } from '@libs/shutdown.js';
 import { buildApp } from './app.js';
+
+/** How long a production start waits for Redis before refusing (see start()). */
+const REDIS_BOOT_WAIT_MS = 10_000;
 
 async function start(): Promise<void> {
   let app: Awaited<ReturnType<typeof buildApp>> | null = null;
@@ -42,9 +45,31 @@ async function start(): Promise<void> {
   });
 
   try {
-    // Test external connections (non-fatal)
+    // The database check is only logged here: the Docker CMD already ran
+    // `prisma migrate deploy`, which fails the start when the database cannot
+    // be reached.
     await testDatabaseConnection();
-    await connectRedis();
+
+    // Redis at boot. In production an unreachable Redis stops the start (exit
+    // 1): it is almost always a wrong REDIS_URL, and the app would otherwise
+    // run with rate limits, login lockout and IP blocks silently off. On
+    // Coolify the failed container never becomes healthy, so a rolling deploy
+    // keeps the old one serving. It may be just starting too (a server
+    // reboot), hence the wait. After boot, outages stay non-fatal
+    // (libs/redis.ts). Outside production the server starts without it.
+    const redisReady = await connectRedis();
+    if (env.NODE_ENV === 'production' && !redisReady) {
+      logger.info(`[SERVER] Waiting up to ${REDIS_BOOT_WAIT_MS / 1000}s for Redis`);
+      if (!(await waitForRedisReady(REDIS_BOOT_WAIT_MS))) {
+        // Never the URL: it carries the password.
+        logger.fatal(
+          '[SERVER] Redis is not reachable at boot: production refuses to start without it ' +
+            '(rate limits, login lockout and IP blocks would be off). Check REDIS_URL.',
+        );
+        await shutdown('startup-error');
+        return;
+      }
+    }
 
     app = await buildApp();
 
