@@ -3,8 +3,9 @@
  * Redis: who may call it (401 anonymous, 403 the wrong user or role), what
  * wrong input answers (422 VALIDATION_FAILED with the field list), and its
  * success answer. The deeper guarantees of each area live in that area's own
- * integration file; this one makes sure no route is forgotten. Add a row here
- * for every new route. Health probes: libs/__tests__/health*.integration.test.ts.
+ * integration file. Add rows here for every new route: the last test fails,
+ * naming the route, when a registered route is never called in this file and is
+ * not in COVERED_ELSEWHERE (routes another file tests, with that file's name).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +20,7 @@ import {
   multipartFile,
   registerAdmin,
   registerUser,
+  routeCoverage,
   signIn,
   startEmailStub,
   tokenOf,
@@ -67,6 +69,23 @@ const SIGNED_IN_ROUTES: [Method, string][] = [
   ...ADMIN_ROUTES,
 ];
 
+/**
+ * Routes whose contract lives in another file, with that file. Only the routes
+ * this file does not call belong here. The email-verification module's routes
+ * exist only in projects that installed it; listing them is harmless elsewhere.
+ */
+const COVERED_ELSEWHERE: Record<string, string> = {
+  'GET /api/v1/health': 'src/libs/__tests__/health.integration.test.ts',
+  'GET /api/v1/ready': 'src/libs/__tests__/health.integration.test.ts',
+  'GET /api/v1/live': 'src/libs/__tests__/health.integration.test.ts',
+  'GET /uploads/*': 'src/modules/files/__tests__/files.integration.test.ts',
+  'POST /api/v1/auth/send-verification': 'src/modules/auth/__tests__/verification.integration.test.ts (email-verification module)',
+  'POST /api/v1/auth/verify-account': 'src/modules/auth/__tests__/verification.integration.test.ts (email-verification module)',
+};
+
+/** Records which routes this file calls (the last test checks it). */
+const coverage = routeCoverage();
+
 let app: FastifyInstance;
 let mail: EmailStub;
 let admin: TestUser;
@@ -74,7 +93,7 @@ let user: TestUser;
 
 beforeAll(async () => {
   mail = await startEmailStub();
-  app = await buildTestApp();
+  app = await buildTestApp({ onRoute: coverage.onRoute });
   admin = await registerAdmin(app, 'contract-admin');
   user = await registerUser(app, 'contract-user');
 });
@@ -242,5 +261,20 @@ describe('admin routes answer', () => {
     const sessionId = list.body?.data?.items?.[0]?.id as string;
     expect((await call(app, 'DELETE', `/admin/sessions/${sessionId}`, { jar: admin.jar })).status).toBe(200);
     expect((await call(app, 'DELETE', `/admin/sessions/${NOBODY}`, { jar: admin.jar })).status).toBe(404);
+  });
+});
+
+/** The parts of a Vitest task this file reads: a suite has `tasks`, a test does not. */
+type TaskLike = { mode: string; tasks?: TaskLike[] };
+const testsIn = (t: TaskLike): TaskLike[] => (t.tasks ? t.tasks.flatMap(testsIn) : [t]);
+
+// Keep this last: it reads what every test above called (tests in a file run in order).
+describe('no route is forgotten', () => {
+  it('every registered route was called above, or is in COVERED_ELSEWHERE', ({ task, skip }) => {
+    // With a name filter (-t) the other tests did not run, so their routes would look uncalled.
+    const self = task as unknown as TaskLike;
+    const others = testsIn(task.file as unknown as TaskLike).filter((t) => t !== self);
+    if (others.some((t) => t.mode === 'skip' || t.mode === 'todo')) skip('needs the whole file to run');
+    expect(coverage.uncalled(COVERED_ELSEWHERE)).toEqual([]);
   });
 });

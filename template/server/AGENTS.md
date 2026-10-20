@@ -27,7 +27,7 @@
 ## Tests
 
 - Integration tests run the real app against MySQL and Redis (see the root `AGENTS.md`, Verification, for what they need). Build them from `src/test/integration-helpers.ts` (`buildTestApp`, `call`, `registerUser`, `registerAdmin`, `startEmailStub`, …) instead of new setup code.
-- Every API route needs its contract in `src/__tests__/routes.integration.test.ts`: who may call it (401 anonymous, 403 the wrong user or role), wrong input (422 `VALIDATION_FAILED`) and its success answer.
+- Every API route needs its contract in `src/__tests__/routes.integration.test.ts`: who may call it (401 anonymous, 403 the wrong user or role), wrong input (422 `VALIDATION_FAILED`) and its success answer. Its last test fails, naming the route, when a registered route is never called there; a route that another file tests goes in its `COVERED_ELSEWHERE` list with that file's name.
 
 ## Mandatory security completion gate
 

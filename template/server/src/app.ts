@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
@@ -35,7 +35,17 @@ import {
 // Import types to register Fastify augmentations
 import type {} from '@shared/types/index.js';
 
-export async function buildApp(): Promise<FastifyInstance> {
+export interface BuildAppOptions {
+  /**
+   * Called for every route as it is registered (Fastify's onRoute hook, added
+   * before any plugin or route, so it sees all of them). Tests only: the route
+   * contract uses it to fail on a route that no test calls
+   * (src/test/integration-helpers.ts, routeCoverage). server.ts never sets it.
+   */
+  onRoute?: (route: RouteOptions) => void;
+}
+
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
     // Request-id correlation: honour an inbound X-Request-Id (set by a reverse
@@ -58,6 +68,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     // Request body size limits (prevent DoS attacks)
     bodyLimit: 1048576, // 1MB default limit (1024 * 1024)
   }).withTypeProvider<ZodTypeProvider>();
+
+  // First, so it runs for every route registered below (plugins included).
+  const { onRoute } = options;
+  if (onRoute) app.addHook('onRoute', (route) => onRoute(route as RouteOptions));
 
   // Set Zod validator and serializer
   app.setValidatorCompiler(validatorCompiler);

@@ -11,7 +11,8 @@
  */
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
+import type { FastifyInstance, LightMyRequestResponse, RouteOptions, onRequestHookHandler } from 'fastify';
+import type { BuildAppOptions } from '@/app.js';
 
 /** The password every helper-made account uses. */
 export const PASSWORD = 'Integration-Passw0rd!';
@@ -30,13 +31,57 @@ export function uniqueEmail(tag: string): string {
  * production), so a file's very first request does not find Redis still
  * connecting, which the Redis-dependent routes answer with 503.
  */
-export async function buildTestApp(): Promise<FastifyInstance> {
+export async function buildTestApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const { connectRedis } = await import('@/libs/redis.js');
   await connectRedis();
   const { buildApp } = await import('@/app.js');
-  const app = await buildApp();
+  const app = await buildApp(options);
   await app.ready();
   return app;
+}
+
+/** "METHOD /path/:param", the way a route is registered (prefix included). */
+type RouteKey = string;
+
+/**
+ * Which registered routes a test file actually called. Pass `onRoute` to
+ * buildTestApp(); then `uncalled(elsewhere)` lists every route that was
+ * registered but never reached by a request in this file, minus the routes
+ * another file tests (`elsewhere`, keyed like "GET /api/v1/live").
+ *
+ * A route counts as called once a request reaches its own hooks, whatever the
+ * answer (a 401 or 422 counts too). The hit is recorded by an onRequest hook put
+ * first on each route as it registers, so it runs before the route's sign-in
+ * and role checks; a request the app-wide hooks stop earlier (an IP block, a
+ * cross-site origin, a rate limit) does not count. HEAD and OPTIONS are skipped:
+ * Fastify adds a HEAD twin to every GET and CORS answers OPTIONS for every path,
+ * so neither is a route anyone wrote.
+ */
+export function routeCoverage(): {
+  onRoute: (route: RouteOptions) => void;
+  uncalled: (elsewhere?: Record<RouteKey, string>) => RouteKey[];
+} {
+  const registered = new Set<RouteKey>();
+  const called = new Set<RouteKey>();
+  return {
+    onRoute(route): void {
+      const methods = (Array.isArray(route.method) ? route.method : [route.method]).filter(
+        (m) => m !== 'HEAD' && m !== 'OPTIONS',
+      );
+      if (methods.length === 0) return;
+      for (const m of methods) registered.add(`${m} ${route.url}`);
+      const record: onRequestHookHandler = (request, _reply, done) => {
+        called.add(`${request.method} ${route.url}`);
+        done();
+      };
+      // Keep the route's own onRequest hooks (none, one, or a list) and run ours first.
+      const own = route.onRequest;
+      route.onRequest = own === undefined ? [record] : [record, ...(Array.isArray(own) ? own : [own])];
+    },
+    uncalled(elsewhere = {}): RouteKey[] {
+      return [...registered].filter((key) => !called.has(key) && !(key in elsewhere)).sort();
+    },
+  };
 }
 
 /** The app's Prisma client (lazy, see the file header). */
