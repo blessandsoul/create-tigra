@@ -28,6 +28,12 @@ export function Providers({
 }): React.ReactElement {
   // Made once per visitor, never shared between requests (store/index.ts).
   const [store] = useState(() => makeStore({ hasSession }));
+  // The state the server rendered with. react-redux hydrates from it, so a user
+  // who arrives (the "who am I" answer) before part of the page has hydrated
+  // cannot make that part disagree with the server HTML: without this a second
+  // tab hit "Hydration failed: signed out vs signed in" (seen live). After
+  // hydration the components re-render with the real state.
+  const [serverState] = useState(() => store.getState());
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -50,7 +56,7 @@ export function Providers({
   );
 
   return (
-    <ReduxProvider store={store}>
+    <ReduxProvider store={store} serverState={serverState}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider
           attribute="class"
