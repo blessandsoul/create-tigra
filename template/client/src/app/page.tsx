@@ -53,7 +53,7 @@ export default function WelcomePage(): React.ReactElement {
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:gap-4">
           <a
-            href="https://github.com/BehzodKarimov/create-tigra"
+            href="https://github.com/blessandsoul/create-tigra"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 md:hover:brightness-110"
@@ -61,7 +61,7 @@ export default function WelcomePage(): React.ReactElement {
             Documentation
           </a>
           <a
-            href="https://github.com/BehzodKarimov/create-tigra/issues"
+            href="https://github.com/blessandsoul/create-tigra/issues"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground transition-all duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 md:hover:bg-accent"
