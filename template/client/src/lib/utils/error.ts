@@ -36,10 +36,13 @@ export const isErrorCode = (error: unknown, code: string): boolean => {
 // email verification, because verifying cannot lift a ban.
 // RATE_LIMIT_EXCEEDED to IP_BLOCKED are the "wait and retry" answers (server
 // docs/rate-limits.md). VALIDATION_FAILED is wrong input (see getFieldErrors).
+// REFRESH_TOKEN_ROTATED: this tab lost a refresh race with another tab, which
+// already set fresh cookies; not a dead session (lib/api/axios.config.ts).
 // Keep this an object literal: the email-verification patcher appends to it.
 export const ERROR_CODES = {
   ACCOUNT_DEACTIVATED: 'ACCOUNT_DEACTIVATED',
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  REFRESH_TOKEN_ROTATED: 'REFRESH_TOKEN_ROTATED',
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   LOGIN_LOCKED: 'LOGIN_LOCKED',
   EMAIL_RATE_LIMITED: 'EMAIL_RATE_LIMITED',

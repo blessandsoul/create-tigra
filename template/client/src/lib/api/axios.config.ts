@@ -3,10 +3,12 @@ import { toast } from 'sonner';
 
 import type { InternalAxiosRequestConfig } from 'axios';
 
+import { hardRedirect } from '@/lib/api/hard-redirect';
+import { emitSessionEnded } from '@/lib/api/session-events';
 import { API_ENDPOINTS } from '@/lib/constants/api-endpoints';
 import { ROUTES } from '@/lib/constants/routes';
 import { env } from '@/lib/env';
-import { getLimitInfo, isLimitError } from '@/lib/utils/error';
+import { ERROR_CODES, getLimitInfo, isErrorCode, isLimitError } from '@/lib/utils/error';
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -58,6 +60,44 @@ const resetRefreshState = (): void => {
   refreshTimestamp = 0;
 };
 
+// Calls that do not carry a session, so their 401 or 403 says nothing about one:
+// a 401 there is wrong credentials or a bad token, and sign-in answers a banned
+// account with 403 ACCOUNT_DEACTIVATED (the forms show that). Logout is here so
+// ending a session never re-enters the session rules below.
+const SESSIONLESS_ENDPOINTS: string[] = [
+  API_ENDPOINTS.AUTH.LOGIN,
+  API_ENDPOINTS.AUTH.REGISTER,
+  API_ENDPOINTS.AUTH.REFRESH,
+  API_ENDPOINTS.AUTH.RESET_PASSWORD,
+  API_ENDPOINTS.AUTH.LOGOUT,
+];
+
+// One logout for a burst of calls that all found the account banned.
+let endingDeactivatedSession: Promise<void> | null = null;
+
+/**
+ * The account was banned while signed in: every authenticated call now answers
+ * 403 ACCOUNT_DEACTIVATED, and so would a refresh. End the session the way a
+ * logout does (the server clears the cookies, auth_session with its cookie
+ * domain included), then tell the app, which clears the user and says why.
+ * Best effort: the user is signed out locally even if the logout call fails.
+ */
+const endDeactivatedSession = (): Promise<void> => {
+  endingDeactivatedSession ??= apiClient
+    .post(API_ENDPOINTS.AUTH.LOGOUT)
+    .then(
+      () => undefined,
+      () => undefined
+    )
+    .then(() => {
+      emitSessionEnded('deactivated');
+    })
+    .finally(() => {
+      endingDeactivatedSession = null;
+    });
+  return endingDeactivatedSession;
+};
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -74,6 +114,17 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    const isSessionless = SESSIONLESS_ENDPOINTS.includes(originalRequest?.url ?? '');
+
+    if (
+      error.response?.status === 403 &&
+      isErrorCode(error, ERROR_CODES.ACCOUNT_DEACTIVATED) &&
+      !isSessionless
+    ) {
+      await endDeactivatedSession();
+      return Promise.reject(error);
+    }
+
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
@@ -86,13 +137,7 @@ apiClient.interceptors.response.use(
 
     // Don't retry auth endpoints that don't use tokens —
     // a 401 here means wrong credentials, not an expired token.
-    const noRetryEndpoints: string[] = [
-      API_ENDPOINTS.AUTH.LOGIN,
-      API_ENDPOINTS.AUTH.REGISTER,
-      API_ENDPOINTS.AUTH.REFRESH,
-      API_ENDPOINTS.AUTH.RESET_PASSWORD,
-    ];
-    if (noRetryEndpoints.includes(originalRequest.url ?? '')) {
+    if (isSessionless) {
       return Promise.reject(error);
     }
 
@@ -123,6 +168,17 @@ apiClient.interceptors.response.use(
       // Retry original request — new cookie is set automatically
       return apiClient(originalRequest);
     } catch (refreshError) {
+      // Lost a race with another tab: both refreshed at once with the same
+      // token, the other one won, and the server kept the cookies, so this
+      // browser already holds the winner's fresh ones (401
+      // REFRESH_TOKEN_ROTATED, server auth.controller.ts). Not a dead session:
+      // release the queue and replay the request once with the new cookies.
+      // `_retry` is already set, so a second 401 is rejected, never looped.
+      if (isErrorCode(refreshError, ERROR_CODES.REFRESH_TOKEN_ROTATED)) {
+        processQueue(null);
+        return apiClient(originalRequest);
+      }
+
       processQueue(refreshError);
 
       // Only logout on definitive auth failures (server responded with 4xx).
@@ -156,15 +212,16 @@ apiClient.interceptors.response.use(
           isSessionDead = true;
         }
 
-        const { logout } = await import('@/features/auth/store/authSlice');
-        const { store } = await import('@/store');
-        store.dispatch(logout());
+        // AuthInitializer clears the signed-in user on this event.
+        emitSessionEnded(isBootstrapProbe ? 'signed-out' : 'expired');
 
         if (!isBootstrapProbe && typeof window !== 'undefined') {
-          // Clear session indicator so middleware won't let user through
-          // to protected pages — prevents redirect loops
+          // Clear the session marker so the proxy won't let the user through to
+          // protected pages (prevents redirect loops). The server already
+          // cleared it, with its cookie domain, when it refused the refresh;
+          // this covers a host-only marker too.
           document.cookie = 'auth_session=; Max-Age=0; path=/; SameSite=Strict';
-          window.location.href = ROUTES.LOGIN;
+          hardRedirect(ROUTES.LOGIN);
         }
       }
 

@@ -7,11 +7,17 @@ import { usePathname } from 'next/navigation';
 
 import { toast } from 'sonner';
 
-import { useAppSelector } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { onSessionEnded } from '@/lib/api/session-events';
 import { ROUTES } from '@/lib/constants/routes';
 import { isErrorCode, isLimitError, ERROR_CODES } from '@/lib/utils/error';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { logout } from '../store/authSlice';
+
+const DEACTIVATED_MESSAGE = 'This account has been deactivated. Contact support if you think this is a mistake.';
+// One toast however many places notice the ban at once.
+const DEACTIVATED_TOAST_ID = 'account-deactivated';
 
 const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE, '/admin'];
 
@@ -39,7 +45,20 @@ interface HttpLikeError {
 export const AuthInitializer = ({ children }: AuthInitializerProps): React.ReactElement => {
   const pathname = usePathname();
   const router = useAppRouter();
+  const dispatch = useAppDispatch();
   const { isLoggingOut } = useAppSelector((state) => state.auth);
+
+  // The API client reports a session that ended (expired, absent at start-up,
+  // or the account banned mid-session; lib/api/session-events.ts). Clear the
+  // signed-in user so every screen shows the signed-out state at once.
+  useEffect(
+    () =>
+      onSessionEnded((reason) => {
+        dispatch(logout());
+        if (reason === 'deactivated') toast.error(DEACTIVATED_MESSAGE, { id: DEACTIVATED_TOAST_ID });
+      }),
+    [dispatch]
+  );
 
   // Skip getMe() on auth pages and during logout.
   // React Query handles deduping, refetch-on-focus, and invalidation —
@@ -61,7 +80,7 @@ export const AuthInitializer = ({ children }: AuthInitializerProps): React.React
     const status = (error as HttpLikeError)?.response?.status;
     if (status === 401 || status === 403) {
       if (isErrorCode(error, ERROR_CODES.ACCOUNT_DEACTIVATED)) {
-        toast.error('This account has been deactivated. Contact support if you think this is a mistake.');
+        toast.error(DEACTIVATED_MESSAGE, { id: DEACTIVATED_TOAST_ID });
       } else if (isErrorCode(error, ERROR_CODES.EMAIL_NOT_VERIFIED)) {
         toast.error('Please verify your email address before signing in.');
       }
