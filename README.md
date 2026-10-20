@@ -103,8 +103,9 @@ New projects ship with GitHub workflows in `.github/`:
 - `ci.yml`, on every push and pull request: typecheck, lint, unit tests with coverage, the server build, the
   integration tests (Testcontainers on GitHub's runners) and the client build. It never deploys.
 - `audit.yml`, weekly: `npm audit` of what production installs, red on a critical advisory. It does not block merges.
-- `dependabot.yml`: security-update pull requests only. Turn them on once in the repository's Settings → Advanced
-  Security → Dependabot security updates.
+- `dependabot.yml`: security-update pull requests for npm packages and Actions (turn them on once in the
+  repository's Settings → Advanced Security → Dependabot security updates), and a monthly pull request that
+  refreshes the pinned `node:24-alpine` base image of both Dockerfiles (merge the two together).
 
 ## Deploying to Coolify
 

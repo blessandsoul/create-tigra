@@ -1,8 +1,17 @@
-# Dependabot for create-tigra itself, security updates only: a pull request
-# when a dependency of the CLI or of the template's apps has a known
-# vulnerability with a fix; no routine version bumps (open-pull-requests-limit: 0
-# turns those off). Turned on in the repository's Settings -> Advanced
-# Security -> Dependabot security updates.
+# Dependabot for create-tigra itself.
+#
+# npm (the CLI and both template apps) and GitHub Actions: security updates
+# only, a pull request when a dependency has a known vulnerability with a fix;
+# no routine version bumps (open-pull-requests-limit: 0 turns those off).
+# Turned on in the repository's Settings -> Advanced Security -> Dependabot
+# security updates.
+#
+# The template's Docker base images: monthly version updates (Dependabot has
+# no security updates for Docker). node:24-alpine is pinned by digest in both
+# template Dockerfiles and a digest never changes by itself, so every project
+# made from the template would otherwise ship a stale Node/Alpine. Node major
+# versions are left out on purpose. Merge the server and client pull requests
+# together: both Dockerfiles must keep the same digest.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -25,3 +34,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+  - package-ecosystem: docker
+    directory: /template/server
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: docker
+    directory: /template/client
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']

@@ -1,10 +1,17 @@
-# Dependabot, security updates only: a pull request when a dependency has a
-# known vulnerability with a fix, and no routine version-bump pull requests
-# (open-pull-requests-limit: 0 turns those off; security updates have their
-# own limit).
+# Dependabot.
 #
-# Turn it on once per repository: Settings → Advanced Security → "Dependabot
-# security updates" (this file only says where the apps are and what to skip).
+# npm packages and GitHub Actions: security updates only. A pull request when a
+# dependency has a known vulnerability with a fix, and no routine version-bump
+# pull requests (open-pull-requests-limit: 0 turns those off; security updates
+# have their own limit). Turn them on once per repository: Settings → Advanced
+# Security → "Dependabot security updates".
+#
+# Docker base images: monthly version updates (Dependabot has no security
+# updates for Docker). Both Dockerfiles pin node:24-alpine by digest, and a
+# digest pin never changes by itself: without this the images would never
+# get Node or Alpine security fixes. Node major versions (24 -> 25) are left
+# out on purpose: upgrade those deliberately. Both Dockerfiles must keep the
+# same digest, so merge the server and client pull requests together.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -22,3 +29,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
+  - package-ecosystem: docker
+    directory: /client
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
