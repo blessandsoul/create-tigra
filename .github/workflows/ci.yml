@@ -38,7 +38,7 @@ jobs:
         run: npm run test
 
   client:
-    name: client (typecheck · lint · build)
+    name: client (typecheck · lint · test · build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,6 +54,8 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Unit tests and coverage
+        run: npm run test:coverage
       - name: Build
         run: npm run build
 
@@ -191,9 +193,10 @@ jobs:
         run: |
           cd "$SMOKE_APP/server"
           npm run test:integration
-      - name: Client - typecheck, lint, build
+      - name: Client - typecheck, lint, unit tests with coverage, build
         run: |
           cd "$SMOKE_APP/client"
           npm run typecheck
           npm run lint
+          npm run test:coverage
           npm run build

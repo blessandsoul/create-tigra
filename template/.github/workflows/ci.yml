@@ -57,7 +57,7 @@ jobs:
         run: npm run test:integration
 
   client:
-    name: client (typecheck · lint · build)
+    name: client (typecheck · lint · unit tests + coverage · build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -73,5 +73,7 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Unit tests and coverage
+        run: npm run test:coverage
       - name: Build
         run: npm run build

@@ -39,6 +39,7 @@ coverage
 **/*.spec.ts
 **/*.spec.tsx
 vitest.config.ts
+vitest.config.mts
 jest.config.ts
 
 # Documentation
