@@ -1,6 +1,7 @@
 'use client';
 
 import type React from 'react';
+import { useEffect } from 'react';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,6 +16,7 @@ import { useForgotPassword } from '../hooks/usePasswordReset';
 import { LimitNotice } from './LimitNotice';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
+import { applyFieldErrors } from '@/lib/utils/form';
 
 const forgotPasswordSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -34,10 +36,16 @@ export const ForgotPasswordForm = (): React.ReactElement => {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
   });
+
+  // The server's 422 verdict lands under its field (lib/utils/form.ts).
+  useEffect(() => {
+    applyFieldErrors(error, setError, ['email']);
+  }, [error, setError]);
 
   const onSubmit = (data: ForgotPasswordFormData): void => {
     forgotPassword(data.email);

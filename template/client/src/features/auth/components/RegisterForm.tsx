@@ -1,6 +1,7 @@
 'use client';
 
 import type React from 'react';
+import { useEffect } from 'react';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,18 +16,23 @@ import { useAuth } from '../hooks/useAuth';
 import { LimitNotice } from './LimitNotice';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
+import { applyFieldErrors } from '@/lib/utils/form';
 
+// Mirrors the server's registerSchema (server src/modules/auth/auth.schemas.ts),
+// limits and messages alike: change both together. Whatever the server still
+// refuses comes back as a 422 and lands under its field (applyFieldErrors).
 const registerSchema = z
   .object({
-    firstName: z.string().min(1, 'First name is required').max(50),
-    lastName: z.string().min(1, 'Last name is required').max(50),
+    firstName: z.string().trim().min(2, 'First name must be at least 2 characters').max(100, 'First name must be at most 100 characters'),
+    lastName: z.string().trim().min(2, 'Last name must be at least 2 characters').max(100, 'Last name must be at most 100 characters'),
     email: z.string().min(1, 'Email is required').email('Invalid email address'),
     password: z
       .string()
-      .min(8, 'Min 8 characters')
-      .regex(/[A-Z]/, 'Must contain uppercase')
-      .regex(/[a-z]/, 'Must contain lowercase')
-      .regex(/[0-9]/, 'Must contain number'),
+      .min(8, 'Password must be at least 8 characters')
+      .max(128, 'Password must be at most 128 characters')
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+      .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+      .regex(/[0-9]/, 'Password must contain at least one number'),
     confirmPassword: z.string().min(1, 'Please confirm your password'),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -42,10 +48,16 @@ export const RegisterForm = (): React.ReactElement => {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   });
+
+  // The server's 422 verdict lands under its field (lib/utils/form.ts).
+  useEffect(() => {
+    applyFieldErrors(registerError, setError, ['firstName', 'lastName', 'email', 'password']);
+  }, [registerError, setError]);
 
   const onSubmit = (data: RegisterFormData): void => {
     registerUser({

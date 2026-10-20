@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -17,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { LimitNotice } from './LimitNotice';
 import { ROUTES } from '@/lib/constants/routes';
 import { cn } from '@/lib/utils';
+import { applyFieldErrors } from '@/lib/utils/form';
 import { getSafeRedirectPath } from '@/lib/utils/security';
 
 const loginSchema = z.object({
@@ -37,10 +38,16 @@ const LoginFormInner = (): React.ReactElement => {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  // The server's 422 verdict lands under its field (lib/utils/form.ts).
+  useEffect(() => {
+    applyFieldErrors(loginError, setError, ['email', 'password']);
+  }, [loginError, setError]);
 
   const onSubmit = (data: LoginFormData): void => {
     login(data, redirectTo);
