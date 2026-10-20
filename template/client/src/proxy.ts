@@ -1,8 +1,16 @@
+/**
+ * Next.js proxy (the file convention formerly called middleware; renamed in
+ * Next 16, which runs it on the Node.js runtime). It runs before every page
+ * request except static assets and /healthz (see `config` below): it mints the
+ * per-request CSP nonce, sets the security headers, and sends visitors without
+ * a session marker away from protected pages.
+ */
 import { NextResponse } from 'next/server';
 
 import type { NextRequest } from 'next/server';
 
-const protectedPaths = ['/dashboard', '/profile', '/admin'];
+import { isProtectedPath } from '@/lib/utils/paths';
+import { SESSION_MARKER_COOKIE } from '@/lib/utils/session-marker';
 
 function isTokenExpired(token: string): boolean {
   try {
@@ -35,7 +43,7 @@ const sentryOrigin = toOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
 
 /**
  * Build the per-request Content-Security-Policy. A fresh nonce is minted for
- * every request and threaded onto Next's own scripts (see middleware below), so
+ * every request and threaded onto Next's own scripts (see proxy below), so
  * 'strict-dynamic' can trust them while refusing any attacker-injected inline
  * script that lacks the nonce.
  *
@@ -84,7 +92,7 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
   const isProd = process.env.NODE_ENV === 'production';
@@ -102,18 +110,22 @@ export function middleware(request: NextRequest): NextResponse {
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('content-security-policy', cspHeader);
 
-  // NOTE: This middleware only checks COOKIE PRESENCE (and a best-effort,
+  // NOTE: This proxy only checks COOKIE PRESENCE (and a best-effort,
   // unverified exp claim) for UX-level routing — redirecting users who are
   // obviously logged out away from protected pages. It does NOT verify the
   // JWT signature and is NOT a security boundary. Real authorization happens
-  // server-side on every API call; a forged cookie gets past this middleware
+  // server-side on every API call; a forged cookie gets past this proxy
   // but every API request it makes will be rejected with 401/403.
+  // access_token is host-only on the API host, so in a split deployment only
+  // the session marker (shared through COOKIE_DOMAIN) is visible here.
   const accessToken = request.cookies.get('access_token')?.value;
-  const authSession = request.cookies.get('auth_session')?.value;
+  const authSession = request.cookies.get(SESSION_MARKER_COOKIE)?.value;
 
-  const isProtectedPath = protectedPaths.some((path) => pathname.startsWith(path));
+  // Whole path segments (lib/utils/paths.ts): /admin/users is protected,
+  // /administrator is not.
+  const isProtected = isProtectedPath(pathname);
 
-  if (isProtectedPath) {
+  if (isProtected) {
     // No access_token AND no auth_session — truly unauthenticated.
     if (!accessToken && !authSession) {
       const loginUrl = new URL('/login', request.url);
@@ -130,7 +142,7 @@ export function middleware(request: NextRequest): NextResponse {
   response.headers.set('content-security-policy', cspHeader);
   applySecurityHeaders(response);
 
-  if (isProtectedPath) {
+  if (isProtected) {
     // No access_token BUT auth_session exists — session is alive, let through
     // so client-side can do getMe() → 401 → refresh → retry.
     // (response already passes through; nothing extra needed here.)
@@ -148,6 +160,6 @@ export const config = {
   // Apply security headers site-wide, but skip Next's static assets and the
   // favicon (no CSP needed on immutable static files / images), and the
   // container health check /healthz (src/app/healthz/route.ts), which must
-  // answer 200 whatever this middleware decides for pages.
+  // answer 200 whatever this proxy decides for pages.
   matcher: ['/((?!_next/static|_next/image|favicon.ico|healthz).*)'],
 };

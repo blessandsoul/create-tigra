@@ -12,6 +12,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { onSessionEnded } from '@/lib/api/session-events';
 import { ROUTES } from '@/lib/constants/routes';
 import { isErrorCode, isLimitError, ERROR_CODES } from '@/lib/utils/error';
+import { isAuthPath, isProtectedPath } from '@/lib/utils/paths';
 import { hasSessionMarker } from '@/lib/utils/session-marker';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { logout } from '../store/authSlice';
@@ -20,23 +21,13 @@ const DEACTIVATED_MESSAGE = 'This account has been deactivated. Contact support 
 // One toast however many places notice the ban at once.
 const DEACTIVATED_TOAST_ID = 'account-deactivated';
 
-const PROTECTED_PATHS: string[] = [ROUTES.DASHBOARD, ROUTES.PROFILE, '/admin'];
-
-// Auth pages where getMe() should never fire — there is no session to hydrate
-// on login/register/reset-password, and calling getMe() here would trigger the
-// 401 → refresh → fail → redirect chain for no reason.
-const AUTH_PATHS: string[] = [ROUTES.LOGIN, ROUTES.REGISTER, ROUTES.RESET_PASSWORD, ROUTES.VERIFY_ACCOUNT];
+// Protected pages and sign-in pages: one list each, shared with the proxy
+// (lib/constants/routes.ts), matched by whole path segments (lib/utils/paths.ts).
+// On sign-in pages getMe() never fires: there is no session to hydrate yet, and
+// it would only start the 401 → refresh → fail chain.
 
 interface AuthInitializerProps {
   children: React.ReactNode;
-}
-
-function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PATHS.some((path) => pathname.startsWith(path));
-}
-
-function isAuthPage(pathname: string): boolean {
-  return AUTH_PATHS.some((path) => pathname.startsWith(path));
 }
 
 interface HttpLikeError {
@@ -70,7 +61,7 @@ export const AuthInitializer = ({ children }: AuthInitializerProps): React.React
   // avatar upload, email verification) should call:
   //   queryClient.invalidateQueries({ queryKey: authKeys.me() })
   // to refresh Redux state automatically.
-  const enabled = !isAuthPage(pathname) && !isLoggingOut && hasSessionMarker();
+  const enabled = !isAuthPath(pathname) && !isLoggingOut && hasSessionMarker();
 
   const { error } = useCurrentUser({ enabled });
 

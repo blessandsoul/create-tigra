@@ -33,7 +33,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>): Promise<React.ReactElement> {
-  // Read the per-request nonce set by middleware. next-themes injects an inline
+  // Read the per-request nonce set by the proxy (src/proxy.ts). next-themes injects an inline
   // anti-FOUC <script> via dangerouslySetInnerHTML that Next does NOT auto-nonce,
   // so under our 'strict-dynamic' CSP it must be passed the nonce explicitly or
   // the browser refuses it (causing a flash / hydration mismatch).

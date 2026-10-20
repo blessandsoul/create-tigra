@@ -13,7 +13,7 @@
 - `src/lib/constants/routes.ts` and `api-endpoints.ts` own application and API paths.
 - `src/styles/themes/default.css` owns color values. Components use semantic Tailwind tokens; do not hardcode palette values or create competing theme variables.
 - If a `next/font` CSS variable is referenced by a token declared on `:root`, apply that font's generated variable class to `<html>`. Never attach it only to `<body>`, where it cannot resolve the root-scoped token.
-- `src/middleware.ts` is the single source of truth for security headers and nonce-based CSP. Do not add a second CSP in `next.config.ts`.
+- `src/proxy.ts` (Next 16's name for middleware) is the single source of truth for security headers and nonce-based CSP. Do not add a second CSP in `next.config.ts`.
 
 ## Security and deployment
 
@@ -21,4 +21,4 @@
 - Use the shared credentialed API client. Auth tokens remain in httpOnly cookies and must never enter browser storage or Redux.
 - Sanitize any intentionally rendered HTML and untrusted URLs. Never log passwords, tokens, credentials, or complete sensitive user objects.
 - Preserve `output: "standalone"`, the non-root container, and the `/healthz` health check (`src/app/healthz/route.ts`, used by the Dockerfile HEALTHCHECK; keep it answering 200 without rendering a page). Add every new public environment variable to the Docker builder as `ARG` + `ENV`; public variables are compiled into the bundle. The build stops when `NEXT_PUBLIC_API_BASE_URL` is empty (in Coolify it needs "Available at Buildtime").
-- Changes to `src/middleware.ts`, the sign-in flow and its redirects (`src/features/auth/`), the shared API client (`src/lib/api/axios.config.ts`), or anything that renders HTML or untrusted URLs go through the root `AGENTS.md` security workflow.
+- Changes to `src/proxy.ts`, the sign-in flow and its redirects (`src/features/auth/`), the shared API client (`src/lib/api/axios.config.ts`), or anything that renders HTML or untrusted URLs go through the root `AGENTS.md` security workflow.

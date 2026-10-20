@@ -18,7 +18,7 @@ export function Providers({
   nonce,
 }: {
   children: React.ReactNode;
-  // Per-request CSP nonce from middleware (via the root layout). Forwarded to
+  // Per-request CSP nonce from the proxy (src/proxy.ts, via the root layout). Forwarded to
   // next-themes so its inline anti-FOUC script is allowed under 'strict-dynamic'.
   nonce?: string;
 }): React.ReactElement {

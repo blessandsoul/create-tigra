@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 // SECURITY HEADERS / CSP NOTE:
 // All security headers — including the Content-Security-Policy — are set in
-// src/middleware.ts, which is the SINGLE SOURCE OF TRUTH for them. The CSP is
+// src/proxy.ts, which is the SINGLE SOURCE OF TRUTH for them. The CSP is
 // per-request and nonce-based ('strict-dynamic'), which a static headers() block
 // here cannot express, and emitting a CSP from both places would produce a
 // conflicting duplicate Content-Security-Policy header. Do NOT add a headers()

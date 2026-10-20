@@ -40,8 +40,9 @@ export function resetPlainHttpWarningForTests(): void {
  *  - Token cookies: Strict. Only the client's own same-site fetches to the API
  *    need them, and Strict keeps every other website's requests bare.
  *  - auth_session: Lax. It is only a "signed in" marker read by the Next.js
- *    middleware; Lax lets a link from another site (an email, a search result)
- *    carry it, so signed-in users are not bounced to /login on arrival.
+ *    proxy (client src/proxy.ts, formerly middleware); Lax lets a link from
+ *    another site (an email, a search result) carry it, so signed-in users
+ *    are not bounced to /login on arrival.
  */
 const TOKEN_SAME_SITE = 'strict' as const;
 const SESSION_SAME_SITE = 'lax' as const;
@@ -55,7 +56,7 @@ const SESSION_SAME_SITE = 'lax' as const;
  *    only leak live logins to hosts that don't need them (a CNAME'd help desk,
  *    another app on the same domain, a compromised subdomain).
  *  - auth_session ("1", no secret) is the one cookie that must be visible to
- *    the client host's Next.js middleware, so it alone uses COOKIE_DOMAIN
+ *    the client host's Next.js proxy and JavaScript, so it alone uses COOKIE_DOMAIN
  *    (e.g. ".example.com" covers app.example.com + api.example.com).
  */
 const sessionIndicatorDomain = env.COOKIE_DOMAIN || undefined;
@@ -104,8 +105,8 @@ export function setAuthCookies(
     maxAge: Math.floor(REFRESH_TOKEN_MAX_AGE_MS / 1000),
   });
 
-  // Non-sensitive session indicator visible to Next.js middleware and client JS.
-  // Lets middleware distinguish "never logged in" from "access token expired but session alive."
+  // Non-sensitive session indicator visible to the Next.js proxy and client JS.
+  // Lets the proxy distinguish "never logged in" from "access token expired but session alive."
   reply.setCookie('auth_session', '1', {
     httpOnly: false,
     secure: isProduction,
