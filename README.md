@@ -111,6 +111,34 @@ New projects ship with GitHub workflows in `.github/`:
 
 Server and client deploy as two separate Coolify applications, each from its own Dockerfile (`server/Dockerfile`, `client/Dockerfile`).
 
+**Coolify checklist.** One Coolify project with two applications (from the same Git repository), a MySQL and a Redis:
+
+| Setting | Server application | Client application |
+|---|---|---|
+| Build Pack | Dockerfile | Dockerfile |
+| Base Directory | `/server` | `/client` |
+| Ports Exposes | `8000` | `3000` |
+| Domain | your API domain, e.g. `https://api.example.com` | your site, e.g. `https://example.com` |
+| Health check | nothing to set: Coolify uses the Dockerfile's (`/api/v1/live`) | nothing to set: the Dockerfile's (`/healthz`) |
+| Environment variables | from `server/.env.example.production`, runtime only: never tick "Available at Buildtime" | `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_APP_NAME` with "Available at Buildtime" ticked: the build stops without the API address |
+| Storage | a volume at `/app/uploads` (below) | none |
+
+How the domains map to the variables:
+- `NEXT_PUBLIC_API_BASE_URL` (client) = the API domain + `/api/v1`, e.g. `https://api.example.com/api/v1`.
+- `CORS_ORIGIN` (server) = the site's origin exactly, e.g. `https://example.com` (no path, no trailing slash).
+- `CLIENT_URL` (server) = the site's address, used in the links of emails.
+- `COOKIE_DOMAIN` (server) = `.example.com` when site and API are sibling subdomains; unset when they share one host.
+- `DATABASE_URL` and `REDIS_URL` (server) = the internal URLs shown on the MySQL and Redis pages in Coolify, with
+  `?connection_limit=5` on the database URL. A wrong database URL fails the deploy at its migration step, and
+  production refuses to start when it cannot reach Redis within 10 s.
+
+Deploy the server first (it applies the migrations), then the client. Afterwards sign in as an admin and open
+`/api/v1/admin/health`: every check should be up. Coolify switches traffic to a new container only once its Dockerfile
+health check passes, so a container that cannot start keeps the old one serving. Migrations run while the old
+container still serves; before one that drops or renames anything, read `server/docs/deployment.md` (in this repo:
+[template/server/docs/deployment.md](template/server/docs/deployment.md)), which also explains why every build
+compiles libvips for a few minutes.
+
 **The server needs a persistent volume for uploads.** Avatars (and any other uploaded files) are written to `/app/uploads` inside the container, and every deploy starts a fresh container. Without a volume, all uploaded files are lost on each redeploy. In the server application: **Storages → Add Volume Mount**, leave *Source Path* empty (Coolify manages the volume), *Destination Path* `/app/uploads`. The server warns at boot (`[STORAGE] … is not on a mounted volume`) when it runs in production without one. Details: `server/.env.example.production`, section FILE UPLOAD.
 
 **First admin.** Sign up in the app with the account that should be the admin (your own password; verify the email if the email module is on). Then open the server application's **Terminal** in Coolify and run `node dist/scripts/make-admin.js you@example.com`. It only changes that account's role and marks its email verified: no password is asked for or printed. Locally: `cd server && npm run make-admin -- you@example.com`. The same command recovers a project whose last admin was demoted or banned by mistake.
