@@ -136,8 +136,8 @@ Deploy the server first (it applies the migrations), then the client. Afterwards
 `/api/v1/admin/health`: every check should be up. Coolify switches traffic to a new container only once its Dockerfile
 health check passes, so a container that cannot start keeps the old one serving. Migrations run while the old
 container still serves; before one that drops or renames anything, read `server/docs/deployment.md` (in this repo:
-[template/server/docs/deployment.md](template/server/docs/deployment.md)), which also explains why every build
-compiles libvips for a few minutes.
+[template/server/docs/deployment.md](template/server/docs/deployment.md)), which also explains why a build without
+Docker's cache takes about 6 to 7 minutes longer (it compiles libvips).
 
 **The server needs a persistent volume for uploads.** Avatars (and any other uploaded files) are written to `/app/uploads` inside the container, and every deploy starts a fresh container. Without a volume, all uploaded files are lost on each redeploy. In the server application: **Storages → Add Volume Mount**, leave *Source Path* empty (Coolify manages the volume), *Destination Path* `/app/uploads`. The server warns at boot (`[STORAGE] … is not on a mounted volume`) when it runs in production without one. Details: `server/.env.example.production`, section FILE UPLOAD.
 

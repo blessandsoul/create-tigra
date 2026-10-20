@@ -29,10 +29,11 @@
 #
 # KEEP THIS STAGE BYTE-IDENTICAL in server/Dockerfile and client/Dockerfile,
 # so one rule set builds both images. Identical text also lets a plain
-# `docker build` host reuse the compiled layer across the two apps. Coolify
-# usually cannot: it passes an --add-host entry for every container on its
-# network, which is part of the cache key, so expect each Coolify deploy to
-# compile libvips again (measured 2.5-5 min on small VPSes).
+# `docker build` host reuse the compiled layer across the two apps. On
+# Coolify (measured): redeploys of the same app on the same server reused it,
+# but the two apps did not share it, and a change to a build-time variable
+# compiled it again (Coolify passes those into the build). An uncached
+# compile takes about 6-7 min on a small shared VPS.
 #
 # Version coupling: every sharp release needs a minimum libvips (the
 # "config.libvips" range in sharp's package.json, e.g. ">=8.18.7" for sharp

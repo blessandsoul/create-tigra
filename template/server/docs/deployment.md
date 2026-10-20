@@ -48,13 +48,16 @@ still suits the old code, which is what expand / deploy / contract guarantees.
 
 ## Build time: libvips
 
-Every deploy compiles libvips, the image library behind sharp, from source: about 2 to 5 minutes of the server's CPU
-per application, during which other apps on the same server can slow down. Why:
+Both images compile libvips, the image library behind sharp, from source. sharp's prebuilt binaries need x86-64-v2
+CPU features that some VPS CPUs lack; the images build libvips for baseline x86-64, so they run on any x86-64 server.
 
-- sharp's prebuilt binaries need x86-64-v2 CPU features that some VPS CPUs lack. The images build libvips for
-  baseline x86-64, so they run on any x86-64 server;
-- Coolify passes a per-build host list to Docker, which is part of Docker's build cache key, so the compiled stage
-  is never reused between deploys.
+Uncached, the compile takes about 6 to 7 minutes of the server's CPU per application (measured on a shared VPS:
+6.2 to 6.6 minutes, about 8.5 minutes for the whole server deploy), and other apps on the same server can slow down
+meanwhile. Docker keeps the compiled stage in that server's build cache, and a later deploy that reuses it finishes
+in 1 to 2 minutes. Expect the long build on the first deploy of each application to a server (the two do not share
+it on Coolify), after a change to a build-time variable (the client's `NEXT_PUBLIC_*` values), after the server's
+build cache was cleaned up, and when the base image or `LIBVIPS_VERSION` changes. Other deploys may hit the cache,
+but do not count on it.
 
 The fix for later: build the libvips stage once into a base image in a registry (it needs CI to publish it) and
 start both Dockerfiles from it. Until then, deploy when the server is quiet if its other apps are sensitive to load.
