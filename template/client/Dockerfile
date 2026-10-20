@@ -177,6 +177,19 @@ ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 # Disable Next.js telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# The API address must be known now. src/lib/env.ts falls back to
+# http://localhost:8000/api/v1 when it is unset (handy for local builds and
+# CI), so without this check an image built without the value builds green
+# and every visitor's browser then calls its own machine: a client that looks
+# deployed but cannot reach its API. A localhost value only warns, because a
+# local docker test may mean it. (Whitespace-only counts as empty.)
+RUN set -eu; \
+    url="$(printf '%s' "${NEXT_PUBLIC_API_BASE_URL:-}" | tr -d '[:space:]')"; \
+    case "$url" in \
+      "") echo "ERROR: NEXT_PUBLIC_API_BASE_URL is empty at build time. NEXT_PUBLIC_* values are baked into the client's JavaScript: in Coolify, set it on the client app and tick 'Available at Buildtime'." >&2; exit 1 ;; \
+      *://localhost*|*://127.0.0.1*) echo "WARNING: NEXT_PUBLIC_API_BASE_URL is $url: visitors' browsers would call their own machine. Fine for a local test, wrong for a deployed client." >&2 ;; \
+    esac
+
 # Build the application (outputs to .next/standalone)
 # NOTE: a `--mount=type=cache,target=/app/.next/cache` was tested here and REMOVED —
 # it measured SLOWER (next build 29s→58s on a real create-tigra client), because Next's
