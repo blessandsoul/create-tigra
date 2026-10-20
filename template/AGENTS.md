@@ -1,4 +1,6 @@
-# Tigra Codex instructions
+# Agent instructions
+
+**Read the scoped file first.** Before changing anything in `server/`, read `server/AGENTS.md`; before changing anything in `client/`, read `client/AGENTS.md`. Claude Code loads them by itself when it opens files there. Codex does not: it loads only the AGENTS.md files from the project root down to the folder it was started in, so started here it never sees them.
 
 ## MUST FOLLOW — comment important code
 
@@ -33,7 +35,7 @@ Every implementation change MUST include a human-readability pass. Add or update
 
 - Use functional kebab-case for project names and anything surfaced in CLIs, logs, queues, jobs, or worker/process names.
 - Use camelCase for TypeScript values/functions, PascalCase for components/types/classes, and UPPER_SNAKE_CASE for true constants.
-- Keep domain folders and route paths lowercase and functional; follow the scoped client/server naming rules below.
+- Keep domain folders and route paths lowercase and functional; the file naming rules of each app are in `server/AGENTS.md` and `client/AGENTS.md`.
 
 ## Deployment boundaries
 

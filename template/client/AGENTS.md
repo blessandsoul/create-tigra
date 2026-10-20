@@ -1,4 +1,4 @@
-# Client Codex instructions
+# Client agent instructions
 
 ## Architecture and naming
 

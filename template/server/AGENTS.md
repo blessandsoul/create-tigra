@@ -1,4 +1,4 @@
-# Server Codex instructions
+# Server agent instructions
 
 ## Architecture and naming
 
