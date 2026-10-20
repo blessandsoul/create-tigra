@@ -85,12 +85,26 @@ Redis is down or slow (so rate limits and IP blocks are off), or the heap is abo
 
 The public answer never says which check failed. Admins get the full report at
 `GET /api/v1/admin/health`: per check status and timing, memory (heap used and limit, RSS),
-uptime, `checkedAt`, `version` (from `package.json`) and `commit` (`SOURCE_COMMIT`, which
-Coolify sets).
+uptime, `checkedAt`, `version` (from `package.json`) and `commit` (the first 12 characters of
+`SOURCE_COMMIT` when the environment provides it, otherwise `null`).
 
 The database and Redis are checked at most once per 5 s; every probe in between gets the same
 answer (`checkedAt` says when it was taken). A failing check logs the error at `error`
 (database) or `warn` (Redis).
+
+## Secrets never reach the logs
+
+Pino's redaction (`src/libs/logger.ts`) removes these keys wherever they appear in a logged object, up to three
+levels deep, and the secret headers of a logged request:
+
+```text
+keys     password  newPassword  currentPassword  passwordHash  token  accessToken  refreshToken
+         access_token  refresh_token  secret  clientSecret  apiKey  api_key  authorization  cookie
+headers  authorization  cookie  set-cookie  proxy-authorization  x-api-key  x-origin-verify
+```
+
+Request lines never contain the query string, outbound request logs show URLs without keys or `user:password@`,
+and email addresses in email logs are masked. Logging a secret under another name is still on you: name it plainly.
 
 ## Configuration
 

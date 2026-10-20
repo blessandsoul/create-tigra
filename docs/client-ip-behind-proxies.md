@@ -1,6 +1,6 @@
 # Client IP behind proxies and Cloudflare
 
-Rate limits, the login lockout (email + IP), the IP auto-block and the manual block list all key on the visitor's address. From the release after 3.3.0, the server finds that address by **verifying before believing**. No setting is needed, and it works behind Cloudflare, behind Coolify's Traefik alone, and for direct visitors.
+Rate limits, the login lockout (email + IP), the IP auto-block and the manual block list all key on the visitor's address. From 4.0.0, the server finds that address by **verifying before believing**. No setting is needed, and it works behind Cloudflare, behind Coolify's Traefik alone, and for direct visitors.
 
 ## How the address is chosen
 

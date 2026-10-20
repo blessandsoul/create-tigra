@@ -10,7 +10,8 @@
     "bin",
     "lib",
     "modules",
-    "template"
+    "template",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=22.12.0"

@@ -1,6 +1,6 @@
 # Testing
 
-Two suites, both Vitest:
+The server has two suites, both Vitest (the client's unit tests are at the end):
 
 | Suite | Command | Needs | What it proves |
 |---|---|---|---|
@@ -42,6 +42,15 @@ applies, so a migration that does not match the code fails here first.
   `uploadAvatar()`, and `startEmailStub()`, a local stand-in for Resend that catches every email (nothing is sent).
 - Every new route gets a row in `src/__tests__/routes.integration.test.ts`: who may call it (401/403), what wrong
   input answers (422) and its success answer. Deeper behaviour goes in the area's own integration file.
+- That file checks itself: its last test fails, naming the route, when a registered route is never called in it.
+  A route another file already tests goes in its `COVERED_ELSEWHERE` list with that file's name:
+
+  ```text
+  × every registered route was called above, or is in COVERED_ELSEWHERE
+    + "GET /api/v1/reports/:id"
+  ```
+
+  Run it on its own with `-t` and it skips itself (the other tests did not run).
 - Import the app lazily, inside `beforeAll` (`const { buildApp } = await import('@/app.js')`): the environment is
   set by `src/test/integration.setup.ts` and must be in place before `env.ts` is loaded.
 - All files share one database and Redis and run one after another. Create your own data with unique emails; never
@@ -53,7 +62,7 @@ applies, so a migration that does not match the code fails here first.
 
 `.github/workflows/ci.yml` (project root) runs on every push and pull request: typecheck, lint,
 `npm run test:coverage`, the server build, `npm run test:integration` (Testcontainers on GitHub's Ubuntu runners)
-and the client's typecheck, lint and build. It never deploys.
+and the client's typecheck, lint, `npm run test:coverage` and build. It never deploys.
 
 ## Coverage
 
@@ -61,3 +70,12 @@ and the client's typecheck, lint and build. It never deploys.
 thresholds in `vitest.config.ts`. They are a ratchet: the real numbers when they were set, rounded down. Raise them
 when you add tests; never lower them to make a change pass. Routes and controllers are tested by the integration
 suite, which the coverage gate does not count.
+
+## Client tests
+
+`client/` has its own Vitest unit suite (`npm test`, `npm run test:coverage` with its floor in
+`client/vitest.config.mts`). It covers the logic under the screens: the API client's session rules (one refresh for
+parallel 401s, a refresh race lost to another tab, a ban mid-session), the proxy's CSP and redirects, redirect
+safety, path matching, the session marker, error and field-error parsing, and the store. The template ships no pages;
+when you add them, keep their logic in functions under `client/src/lib/` and test it there.
+
