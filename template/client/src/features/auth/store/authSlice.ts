@@ -3,7 +3,12 @@ import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { IAuthState, IUser } from '../types/auth.types';
 
-const initialState: IAuthState = {
+/**
+ * The state before anything is known. `isInitializing` is true until the
+ * start-up "who am I" check answers; makeStore (store/index.ts) starts it as
+ * false when the visitor holds no session marker, since then nothing is asked.
+ */
+export const initialAuthState: IAuthState = {
   user: null,
   isAuthenticated: false,
   isInitializing: true,
@@ -12,7 +17,7 @@ const initialState: IAuthState = {
 
 const authSlice = createSlice({
   name: 'auth',
-  initialState,
+  initialState: initialAuthState,
   reducers: {
     setUser: (state, action: PayloadAction<IUser>) => {
       state.user = action.payload;

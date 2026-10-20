@@ -15,7 +15,11 @@ import { ROUTES } from '@/lib/constants/routes';
 
 export const Header = (): React.ReactElement => {
   const { theme, setTheme } = useTheme();
-  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  // While the session is still being read (a session marker is present but the
+  // "who am I" check has not answered), the sign-in area shows nothing: never
+  // the wrong state first. A visitor without a marker is known to be signed out
+  // from the first render, server rendering included (store/index.ts).
+  const { isAuthenticated, isInitializing, user } = useAppSelector((state) => state.auth);
   const { logout, isLoggingOut } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
@@ -58,7 +62,7 @@ export const Header = (): React.ReactElement => {
         </AppLink>
 
         <nav className="hidden items-center gap-2 md:flex">
-          {isAuthenticated ? (
+          {isInitializing ? null : isAuthenticated ? (
             <>
               <Button variant="ghost" size="sm" asChild>
                 <AppLink href={ROUTES.DASHBOARD}>Dashboard</AppLink>
@@ -131,7 +135,7 @@ export const Header = (): React.ReactElement => {
       {isMobileMenuOpen && (
         <div id="mobile-menu" className="border-t border-border/50 bg-background px-4 py-4 md:hidden">
           <nav className="flex flex-col gap-2">
-            {isAuthenticated ? (
+            {isInitializing ? null : isAuthenticated ? (
               <>
                 <Button variant="ghost" className="w-full justify-start" asChild>
                   <AppLink href={ROUTES.DASHBOARD} onClick={closeMobileMenu}>

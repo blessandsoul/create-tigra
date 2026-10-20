@@ -9,19 +9,25 @@ import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 
 import { SmoothNavigationProvider } from '@/components/common/SmoothNavigationProvider';
-import { store } from '@/store';
+import { makeStore } from '@/store';
 import { AuthInitializer } from '@/features/auth/components/AuthInitializer';
 import { ERROR_CODES, isErrorCode, isLimitError } from '@/lib/utils/error';
 
 export function Providers({
   children,
   nonce,
+  hasSession = false,
 }: {
   children: React.ReactNode;
   // Per-request CSP nonce from the proxy (src/proxy.ts, via the root layout). Forwarded to
   // next-themes so its inline anti-FOUC script is allowed under 'strict-dynamic'.
   nonce?: string;
+  // The request carried the session marker (read by the root layout): seeds the
+  // store so the first render, on the server too, is right (store/index.ts).
+  hasSession?: boolean;
 }): React.ReactElement {
+  // Made once per visitor, never shared between requests (store/index.ts).
+  const [store] = useState(() => makeStore({ hasSession }));
   const [queryClient] = useState(
     () =>
       new QueryClient({

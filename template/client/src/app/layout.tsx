@@ -1,10 +1,11 @@
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import type { Metadata, Viewport } from 'next';
 import type React from 'react';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
 import { Providers } from './providers';
 import { APP_NAME } from '@/lib/constants/app.constants';
+import { SESSION_MARKER_COOKIE } from '@/lib/utils/session-marker';
 import './globals.css';
 
 const inter = Inter({
@@ -38,6 +39,11 @@ export default async function RootLayout({
   // so under our 'strict-dynamic' CSP it must be passed the nonce explicitly or
   // the browser refuses it (causing a flash / hydration mismatch).
   const nonce = (await headers()).get('x-nonce') ?? undefined;
+  // Whether this request carries the server's session marker, so the first
+  // render already knows "signed out" from "not known yet" (store/index.ts).
+  // Every page is already rendered per request (the nonce above), so reading a
+  // cookie here changes no caching.
+  const hasSession = Boolean((await cookies()).get(SESSION_MARKER_COOKIE)?.value);
 
   return (
     // The font preset consumes these next/font variables from :root. Keep the
@@ -49,7 +55,7 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased">
-        <Providers nonce={nonce}>{children}</Providers>
+        <Providers nonce={nonce} hasSession={hasSession}>{children}</Providers>
       </body>
     </html>
   );
