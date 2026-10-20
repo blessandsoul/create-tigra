@@ -22,6 +22,7 @@ npx create-tigra my-app
 | Auth UI | Login, register and forgot-password form components (no pages: add your own `/login` and `/register` pages. The proxy, `src/proxy.ts`, sends signed-out visitors of `/dashboard`, `/profile` and `/admin` to `/login`) |
 | Components | Header, Footer, Loading, Error, Empty states |
 | Theme | Light/Dark mode with next-themes |
+| Testing | Vitest unit tests of the client's logic: the API client's session rules (refresh, a lost refresh race between tabs, a ban mid-session), the proxy's CSP and redirects, redirect safety, error and field-error parsing; a coverage floor in CI |
 
 ### Server (Fastify 5)
 

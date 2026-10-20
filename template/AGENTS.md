@@ -65,7 +65,7 @@ Every implementation change MUST include a human-readability pass. Add or update
 
 ## Verification
 
-- Server (`server/`): `npm run lint`, `npm run typecheck`, `npm test` (unit), `npm run test:coverage` (fails below the floor in `vitest.config.ts`; do not lower it to make a change pass), `npm run test:integration`, `npm run build`. Client (`client/`): `npm run lint`, `npm run typecheck`, `npm run build`. Run the ones that cover what you changed.
+- Server (`server/`): `npm run lint`, `npm run typecheck`, `npm test` (unit), `npm run test:coverage` (fails below the floor in `vitest.config.ts`; do not lower it to make a change pass), `npm run test:integration`, `npm run build`. Client (`client/`): `npm run lint`, `npm run typecheck`, `npm test` (unit), `npm run test:coverage` (same floor rule, `vitest.config.mts`), `npm run build`. Run the ones that cover what you changed.
 - `npm run test:integration` needs a real MySQL and Redis: either `INTEGRATION_DATABASE_URL` (a database whose name ends in `_test`) and `INTEGRATION_REDIS_URL` (Redis database 1-15), or Docker for Testcontainers. If neither is available, say that the integration tests did not run instead of reporting the change as tested.
 - Never run `npm run prisma:reset` (`prisma migrate reset`) or `prisma db push` against a database that was not created for the test: they delete or rewrite its data. The integration suite empties its own test database.
 - Database and deployment changes also require migration/Docker compatibility checks.
