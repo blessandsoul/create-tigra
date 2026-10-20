@@ -25,7 +25,7 @@
 
 ## Mandatory security completion gate
 
-- Follow the root `AGENTS.md` security workflow for every meaningful server change: use `security-audit` guidance during implementation and run `codex-security:security-diff-scan` on the resulting patch when the Codex Security plugin is available.
+- Follow the root `AGENTS.md` security workflow for every meaningful server change: use `security-audit` guidance during implementation, then review the resulting patch (`git diff HEAD` plus untracked files) before completion, with `codex-security:security-diff-scan` in Codex or the bundled `security-audit` skill in Claude Code. Not `/security-review`: it reviews only commits since `origin/HEAD` and never sees uncommitted work.
 - Review the concrete trust boundary, attacker-controlled input, affected principal/resource, authorization decision, validation point, and observable impact. Missing best practices without a reachable boundary failure are hardening notes, not confirmed vulnerabilities.
 - Add or update focused regression coverage for changed authorization, validation, origin/CORS, cookie/session, upload/path, outbound-request, and data-isolation behavior. Never rely on client checks as security evidence.
 - If a required security check cannot run, state the exact blocker and safe follow-up instead of reporting the server change as fully verified.
